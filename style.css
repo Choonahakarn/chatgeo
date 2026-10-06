@@ -111,6 +111,7 @@ h1, h2, h3 { text-wrap: balance; }
   white-space: nowrap; border-bottom: 1px dotted var(--line2); line-height: 1.4;
 }
 .m-points .src-link { margin-left: 6px; }
+.pt-sub { display: block; margin-top: 3px; font-size: 13px; line-height: 1.5; color: var(--ink2); }
 .src-link:hover { color: var(--ink); border-bottom-color: var(--ink2); }
 .src-btn {
   display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; min-height: 38px; padding: 0 12px;

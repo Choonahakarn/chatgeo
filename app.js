@@ -71,6 +71,13 @@
   D.PLACES.forEach(function (p) { byId[p.id] = p; kids[p.id] = []; });
   D.PLACES.forEach(function (p) { if (p.parent) kids[p.parent].push(p); });
   var SHORT = { sea: 'อาเซียน', 'th-ne': 'ภาคอีสาน', aya: 'อยุธยา', nst: 'นครศรีฯ', sni: 'สุราษฎร์ฯ', ubn: 'อุบลฯ' };
+  // ชื่อเรียกอื่นที่คนพิมพ์บ่อย ใช้ตอนจับพื้นที่จากคำถามในแชท
+  var ALIAS = {
+    us: ['สหรัฐ', 'อเมริกา'], uk: ['อังกฤษ', 'ลอนดอน'], kr: ['เกาหลี', 'โซล'], 'th-ne': ['อีสาน'], 'th-s': ['ปักษ์ใต้'],
+    bkk: ['กรุงเทพ', 'กทม'], cmi: ['เชียงใหม่'], jp: ['โตเกียว'], cn: ['ปักกิ่ง'], fr: ['ปารีส'], ae: ['ดูไบ'],
+    sg: ['สิงคโปร์'], vn: ['โฮจิมินห์', 'ฮานอย'], ph: ['มะนิลา', 'มินดาเนา'], mm: ['พม่า'], kh: ['เขมร'],
+    nma: ['โคราช'], skh: ['หาดใหญ่'], cbi: ['พัทยา'], sni: ['สมุย'], scs: ['สแปรตลี'], me: ['ฮอร์มุซ', 'อ่าวเปอร์เซีย']
+  };
 
   function pathOf(id) {
     var out = [], cur = byId[id];
@@ -719,17 +726,153 @@
       pick: function (s) { return /น้ำมัน|ฮอร์มุซ|พลังงาน|อารัมโก|ก๊าซ|opec/i.test(s.title + s.summary); } },
     ai: { title: 'ข่าวเทคโนโลยีและ AI', place: 'world', layers: ['ai', 'biz'], pick: function (s) { return s.layer === 'ai'; } },
     market: { title: 'เศรษฐกิจและตลาด', place: 'world', layers: ['market', 'biz'], extra: 'markets',
-      pick: function (s) { return s.layer === 'market' || s.layer === 'biz'; } }
+      pick: function (s) { return s.layer === 'market' || s.layer === 'biz'; } },
+    politics: { title: 'การเมืองและความมั่นคง', place: 'world', layers: ['conflict'], pick: function (s) { return s.layer === 'conflict'; } },
+    biz: { title: 'ธุรกิจและการลงทุน', place: 'world', layers: ['biz', 'market'], pick: function (s) { return s.layer === 'biz'; } },
+    society: { title: 'สังคมและสิ่งแวดล้อม', place: 'world', layers: ['area', 'news'], pick: function (s) { return s.layer === 'area' || s.layer === 'news'; } }
   };
-  function matchKey(t) {
-    if (/น้ำมัน|ฮอร์มุซ|opec|oil|อารัมโก|พลังงาน/i.test(t)) return 'topic:oil';
-    if (/น้ำท่วม|ฝน|พายุ|อากาศ|เยียวยา|อุทกภัย|มรสุม/.test(t)) return 'topic:flood';
-    if (/\bai\b|เอไอ|ปัญญาประดิษฐ์|ไซเบอร์|ศูนย์ข้อมูล|เทคโนโลยี/i.test(t)) return 'topic:ai';
-    if (/หุ้น|ตลาด|ดอกเบี้ย|เฟด|ทอง|ค่าเงิน|บาท|เศรษฐกิจ|set\b/i.test(t)) return 'topic:market';
-    var pl = findPlace(t);
-    if (pl && pl.id !== 'world') return 'place:' + pl.id;
-    if (/สรุป|ข่าว|โลก|เช้านี้|วันนี้/.test(t)) return 'topic:world';
-    return 'unknown';
+  // คำในคำถาม → หมวดข่าว (เรียงจากเจาะจงไปกว้าง)
+  var TOPIC_RE = [
+    ['oil', /น้ำมัน|ฮอร์มุซ|opec|\boil\b|อารัมโก|พลังงาน|ก๊าซ/i],
+    ['flood', /น้ำท่วม|ฝน|พายุ|อากาศ|เยียวยา|อุทกภัย|มรสุม|น้ำป่า|ภัยพิบัติ|แผ่นดินไหว|ดินถล่ม|weather|flood/i],
+    ['ai', /\bai\b|เอไอ|ปัญญาประดิษฐ์|ไซเบอร์|ศูนย์ข้อมูล|เทคโนโลยี|ดิจิทัล|ชิป/i],
+    ['market', /หุ้น|ตลาด|ดอกเบี้ย|เฟด|ทองคำ|ราคาทอง|ค่าเงิน|ค่าบาท|เงินบาท|เศรษฐกิจ|เงินเฟ้อ|จีดีพี|\bgdp\b|\bset\b/i],
+    ['politics', /การเมือง|ความมั่นคง|รัฐบาล|เลือกตั้ง|รัฐสภา|นายกฯ|นายกรัฐมนตรี|ทหาร|สงคราม|ขัดแย้ง|ชายแดน|politic/i],
+    ['biz', /ธุรกิจ|บริษัท|ลงทุน|ซื้อกิจการ|ควบรวม|สตาร์ทอัพ|ค้าปลีก|ส่งออก|การค้า|business/i],
+    ['society', /สังคม|ประวัติศาสตร์|สิ่งแวดล้อม|สุขภาพ|การศึกษา|รำลึก/]
+  ];
+  var IMPACT_RE = /กระทบ(คน)?ไทย|ผลต่อ(คน)?ไทย|เกี่ยวกับคนไทย|กระทบ.*มากที่สุด|สำคัญที่สุด|ควรรู้/;
+  var GENERIC_RE = /สรุป|เช้านี้|วันนี้มีอะไร|ข่าวเด่น|ข่าวสำคัญ|^ข่าว|headline/i;
+  var FOREIGN_RE = /ต่างประเทศ|ทั่วโลก|นานาชาติ/;
+  function topicOf(t) {
+    for (var i = 0; i < TOPIC_RE.length; i++) if (TOPIC_RE[i][1].test(t)) return TOPIC_RE[i][0];
+    return null;
+  }
+  // คำถาม/คำลงท้ายที่ไม่ใช่สาระ ตัดทิ้งก่อนค้นในข่าว
+  var STOP = ('ข่าว เรื่อง วันนี้ เช้านี้ ตอนนี้ ล่าสุด มี มั้ย ไหม ไหน อะไร บ้าง ยังไง อย่างไร เป็น แค่ไหน เท่าไร เท่าไหร่ หน่อย ' +
+    'ครับ คับ ค่ะ คะ นะ จ้า ขอ อยาก รู้ เกี่ยวกับ ของ ที่ ใน กับ และ หรือ จาก ให้ ได้ ไป มา คือ การ ความ สรุป บอก เล่า ช่วย ' +
+    'ทำไม ใคร เมื่อ จะ แล้ว ว่า นี้ นั้น อย่าง ยัง ตอน เกิด ขึ้น สถานการณ์ กระทบ ผล ต่อ คน มาก ที่สุด สุด สำคัญ ควร ' +
+    'เช้า วัน เรา ผม ฉัน หนู มัน เขา the a an of in on to is are was what how why news today about').split(' ');
+  var SEG = null;
+  try { if (typeof Intl !== 'undefined' && Intl.Segmenter) SEG = new Intl.Segmenter('th', { granularity: 'word' }); } catch (e) { SEG = null; }
+  function wordsOf(t) {
+    t = String(t || '').toLowerCase();
+    var out = [];
+    if (SEG) {
+      Array.from(SEG.segment(t)).forEach(function (s) { if (s.isWordLike) out.push(s.segment); });
+    } else {
+      out = t.split(/[\s,.;:!?()"'“”‘’\-–—\/]+/);
+    }
+    return out.filter(function (w, i) {
+      return w.length >= 2 && STOP.indexOf(w) < 0 && !/^\d{1,2}$/.test(w) && out.indexOf(w) === i;
+    });
+  }
+  function hayOf(s) {
+    if (!s._hay) s._hay = (s.title + ' ' + s.summary + ' ' + s.place + ' ' + s.thai + ' ' + s.source).toLowerCase();
+    return s._hay;
+  }
+  // ค้นข่าวด้วยคำสำคัญ: คำที่เจอในข่าวน้อยเรื่องได้น้ำหนักมาก เจอในหัวข้อได้คะแนนเพิ่ม
+  function rankByTerms(terms, pool) {
+    var all = D.STORIES, n = all.length, weight = {};
+    terms.forEach(function (w) {
+      var df = all.filter(function (s) { return hayOf(s).indexOf(w) >= 0; }).length;
+      weight[w] = df && df <= Math.max(2, n * 0.6) ? Math.log(1 + n / df) * Math.min(1, w.length / 3) : 0;
+    });
+    return pool.map(function (s) {
+      var h = hayOf(s), title = s.title.toLowerCase(), sc = 0;
+      terms.forEach(function (w) { if (weight[w] && h.indexOf(w) >= 0) sc += weight[w] * (title.indexOf(w) >= 0 ? 1.5 : 1); });
+      return { s: s, sc: sc };
+    }).sort(function (a, b) { return b.sc - a.sc || a.s.rank - b.s.rank; });
+  }
+  function hitsOf(ranked) {
+    var best = ranked.length ? ranked[0].sc : 0;
+    if (!best) return [];
+    return ranked.filter(function (x) { return x.sc >= best * 0.5; }).slice(0, 5).map(function (x) { return x.s; });
+  }
+  function byRank(a, b) { return a.rank - b.rank; }
+  // พื้นที่เล็กที่สุดที่ครอบข่าวทุกเรื่องในรายการ
+  function commonPlace(list) {
+    if (!list.length) return byId.world;
+    var path = pathOf(deepestPlace(list[0].lon, list[0].lat).id).reverse();
+    for (var i = 0; i < path.length; i++) {
+      var p = path[i];
+      if (list.every(function (s) { return inPlace(p, s.lon, s.lat); })) return p;
+    }
+    return byId.world;
+  }
+  // แปลคำถามเป็นคำตอบจากข่าวในสรุปที่เปิดอยู่ (ไม่ใช้ AI)
+  function resolveQuery(raw) {
+    var t = String(raw || '').trim();
+    var impact = IMPACT_RE.test(t);
+    var tp = impact ? t.replace(/(คน|ประเทศ)?ไทย/g, ' ') : t;
+    var place = findPlace(tp);
+    if (place && place.id === 'world') place = null;
+    var topic = topicOf(t);
+    var rest = tp;
+    if (place) {
+      [place.name, SHORT[place.id]].concat(ALIAS[place.id] || []).forEach(function (nm) { if (nm) rest = rest.split(nm).join(' '); });
+    }
+    var terms = wordsOf(rest.replace(FOREIGN_RE, ' ').replace(/ประเทศ/g, ' '));
+    var r = { q: t, place: place, topic: topic, impact: impact, list: [], missing: '', prefix: '', label: '' };
+
+    var pool = D.STORIES.slice().sort(byRank), scope = null;
+    if (place) {
+      var inP = storiesIn(place).sort(byRank);
+      if (inP.length) { pool = inP; scope = place; }
+      else { r.missing = place.name; r.prefix = 'เช้านี้ยังไม่มีข่าวใน' + place.name + ' แต่ในข่าวทั้งหมด'; }
+    }
+    if (FOREIGN_RE.test(t) && !scope) {
+      var fr = pool.filter(function (s) { return s.region === 'world'; });
+      if (fr.length) { pool = fr; r.label = 'ข่าวต่างประเทศ'; }
+    }
+    if (topic) {
+      var def = TOPIC_DEF[topic];
+      var tp2 = pool.filter(def.pick);
+      if (!tp2.length && scope) {
+        tp2 = D.STORIES.filter(def.pick).sort(byRank);
+        if (tp2.length) r.prefix = 'เช้านี้ยังไม่มีข่าว' + def.title + 'ใน' + place.name + ' แต่ในภาพรวม';
+        scope = null;
+      }
+      // ในหมวดเดียวกัน เรียงเรื่องที่ตรงคำถามขึ้นก่อน
+      r.list = rankByTerms(terms, tp2).map(function (x) { return x.s; }).slice(0, 5);
+      r.label = def.title + (scope ? ' · ' + scope.name : '');
+      r.extra = def.extra;
+    } else if (impact && !scope) {
+      var direct = D.STORIES.filter(function (s) { return s.why === 'ผลต่อไทย'; }).sort(byRank);
+      r.list = (direct.length ? direct : D.STORIES.slice().sort(byRank)).slice(0, 4);
+      r.label = 'เรื่องที่กระทบคนไทยมากที่สุดเช้านี้';
+      r.impact = true;
+    } else {
+      var hits = hitsOf(rankByTerms(terms, pool));
+      if (hits.length) r.list = hits;
+      else if (scope) r.list = pool.slice(0, 6);
+      else if (r.label) r.list = pool.slice(0, 5);
+      else if (GENERIC_RE.test(t) && !r.missing) {
+        r.list = D.STORIES.slice().sort(byRank).slice(0, 5); r.label = 'สรุปข่าวเช้านี้ · ' + (D.META.dateShort || ''); r.cta = true;
+        r.lead = 'เช้านี้มีข่าว ' + D.STORIES.length + ' เรื่องจาก ' + D.META.sources + ' สำนักข่าว 5 เรื่องที่ควรรู้ก่อนคือ';
+      }
+      if (!r.label) r.label = scope ? scope.name : '';
+    }
+    r.scope = scope;
+    return r;
+  }
+  // ขยับแผนที่ไปยังข่าวที่ใช้ตอบ: เรื่องเดียวเปิดหมุด หลายเรื่องซูมให้เห็นทั้งหมด
+  function showQueryOnMap(r) {
+    var list = r.list;
+    if (!list.length) { if (r.place) goTo(r.place.id); return; }
+    var def = r.topic ? TOPIC_DEF[r.topic] : null;
+    D.LAYERS.forEach(function (l) {
+      state.layers[l.id] = !def || !def.layers || def.layers.indexOf(l.id) >= 0 ||
+        list.some(function (s) { return s.layer === l.id; });
+    });
+    renderChips();
+    if (list.length === 1 && !r.impact) {
+      var s = list[0];
+      goTo(deepestPlace(s.lon, s.lat).id);
+      state.selPin = s.id; renderPinCard(); refreshView(views.chat);
+      return;
+    }
+    goTo((r.scope || commonPlace(list)).id);
   }
   // หาพื้นที่จากข้อความ (ไทยหรืออังกฤษ) ชื่อยาวก่อน
   function findPlace(t) {
@@ -740,8 +883,17 @@
     var places = D.PLACES.slice().sort(function (a, b) { return b.name.length - a.name.length; });
     for (var i = 0; i < places.length; i++) {
       var p = places[i];
-      if (t.indexOf(p.name) >= 0 || (SHORT[p.id] && t.indexOf(SHORT[p.id]) >= 0)) return p;
+      if (t.indexOf(p.name) >= 0 || (SHORT[p.id] && t.indexOf(SHORT[p.id]) >= 0)) {
+        // "ไทย" มักเป็นคำขยาย (คนไทย ราคาน้ำมันไทย) ถ้ามีพื้นที่อื่นในประโยคให้ใช้พื้นที่นั้น
+        if (p.id === 'th') { var other = findPlace(t.split('ไทย').join(' ')); if (other) return other; }
+        return p;
+      }
     }
+    var aliasHit = null, aliasLen = 0;
+    Object.keys(ALIAS).forEach(function (id) {
+      ALIAS[id].forEach(function (a) { if (byId[id] && a.length > aliasLen && t.indexOf(a) >= 0) { aliasHit = byId[id]; aliasLen = a.length; } });
+    });
+    if (aliasHit) return aliasHit;
     for (var j = 0; j < places.length; j++) {
       var en = EN[places[j].id];
       if (en && en.split(' ').length && (tl.indexOf(en) >= 0 || en.indexOf(tl) === 0)) return places[j];
@@ -777,21 +929,56 @@
         text: found.length
           ? 'ในสรุปเช้านี้มีข่าวเกี่ยวกับ' + place.name + ' ' + found.length + ' เรื่อง'
           : 'ในสรุปเช้านี้ยังไม่มีข่าวเกี่ยวกับ' + place.name + ' ลองซูมดูสถานที่บนแผนที่ได้เลย',
-        points: pointsOf(found.slice(0, 4)),
-        follow: found.length ? 'อยากให้ผมเฝ้า' + place.name + ' แล้วแจ้งเตือนเมื่อมีข่าวใหม่ไหมครับ' : ''
+        points: pointsOf(found.slice(0, 4))
       };
     }
     if (m.key === 'story') {
       var s = storyById(m.story);
       if (!s) return { text: 'ข่าวนี้ไม่อยู่ในสรุปที่เปิดอยู่แล้ว' };
-      return {
-        title: s.place + ' · ' + s.date, text: s.summary,
-        why: s.why + ': ' + s.thai,
-        points: pointsOf([s]), linkOnly: true,
-        follow: 'อยากให้ผมเฝ้าเรื่องนี้ แล้วแจ้งเตือนเมื่อมีความคืบหน้าไหมครับ'
-      };
+      return storyAnswer(s);
     }
-    return { text: D.UNKNOWN || 'ต้นแบบนี้ยังตอบได้เฉพาะข่าวในสรุปเช้านี้ ลองถามเรื่อง น้ำท่วม น้ำมัน AI หรือหุ้น หรือพิมพ์ชื่อพื้นที่' };
+    if (m.key === 'q') return queryAnswer(resolveQuery(m.q));
+    return { text: unknownText('') };
+  }
+  function storyAnswer(s, lead) {
+    return {
+      title: s.place + ' · ' + s.date, text: (lead ? lead + ' ' : '') + s.summary,
+      why: s.why + ': ' + s.thai,
+      points: pointsOf([s]), linkOnly: true
+    };
+  }
+  function shortText(t, n) {
+    t = String(t || '');
+    return t.length > n ? t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : t;
+  }
+  function unknownText(q) {
+    var eg = [];
+    D.STORIES.slice().sort(byRank).forEach(function (s) {
+      var pl = deepestPlace(s.lon, s.lat);
+      if (eg.length < 3 && pl.id !== 'world' && eg.indexOf(pl.name) < 0) eg.push(pl.name);
+    });
+    return (q ? 'ยังไม่เจอเรื่อง "' + shortText(q, 40) + '" ในสรุปเช้านี้ครับ ' : '') +
+      'ตอนนี้ ChatGeo ตอบจากข่าว ' + D.STORIES.length + ' เรื่องของเช้านี้เท่านั้น ลองพิมพ์ชื่อพื้นที่ เช่น ' + eg.join(' ') +
+      ' หรือหมวดข่าว เช่น การเมือง เศรษฐกิจ อากาศ หรือคำสำคัญที่อยู่ในข่าว';
+  }
+  function queryAnswer(r) {
+    var list = r.list;
+    if (!list.length) {
+      return { title: r.label || '', text: r.missing ? 'เช้านี้ยังไม่มีข่าวใน' + r.missing + ' ลองซูมดูพื้นที่บนแผนที่ หรือถามเรื่องอื่นได้ครับ' : unknownText(r.q) };
+    }
+    if (list.length === 1 && !r.impact) {
+      var a = storyAnswer(list[0], r.prefix ? r.prefix + 'มี 1 เรื่อง:' : '');
+      a.extra = r.extra;
+      return a;
+    }
+    var points = list.map(function (s) {
+      return { layer: s.layer, text: s.title, url: s.url, source: s.source, story: s.id,
+        sub: r.impact ? s.thai : shortText(s.summary, 110) };
+    });
+    var lead = r.lead || r.impact
+      ? r.lead || 'เลือกจากข่าวที่มีผลต่อคนไทยโดยตรง เรียงตามความสำคัญ'
+      : (r.prefix ? r.prefix + 'มี ' : 'ในสรุปเช้านี้มี ') + list.length + ' เรื่องที่เกี่ยวข้อง กดหัวข้อเพื่อดูบนแผนที่';
+    return { title: r.label || 'จากข่าวเช้านี้', text: lead, points: points, extra: r.extra, cta: r.cta };
   }
 
   function extraHtml(kind) {
@@ -847,7 +1034,8 @@
     if (a.points && a.points.length && !a.linkOnly) {
       h += '<ul class="m-points">' + a.points.map(function (pt) {
         return '<li><span class="dot" style="background:' + p[pt.layer] + '"></span><div><button type="button" class="pt-title" data-story="' + pt.story + '" title="ดูบนแผนที่">' + esc(pt.text) + '</button>' +
-          '<a class="src-link" href="' + esc(pt.url) + '" target="_blank" rel="noopener">' + esc(pt.source) + ICO.ext + '</a></div></li>';
+          '<a class="src-link" href="' + esc(pt.url) + '" target="_blank" rel="noopener">' + esc(pt.source) + ICO.ext + '</a>' +
+          (pt.sub ? '<span class="pt-sub">' + esc(pt.sub) + '</span>' : '') + '</div></li>';
       }).join('') + '</ul>';
     }
     if (a.linkOnly && a.points.length) {
@@ -942,7 +1130,7 @@
   function setAskHint() {
     $('askHint').textContent = ai.enabled
       ? 'ตอบโดย Claude จากข่าวในสรุปเช้านี้ · ใช้โควตา Claude ของคนที่เปิดดู'
-      : 'โหมดออฟไลน์: คำตอบสร้างจากข่าวในสรุปเช้านี้ ยังไม่ได้ต่อ AI (เปิดในแอป Claude เพื่อใช้ AI จริง)';
+      : 'ตอบจากข่าวในสรุปเช้านี้ (ยังไม่ใช้ AI) · พิมพ์ชื่อพื้นที่ หมวดข่าว หรือคำสำคัญได้เลย';
   }
   function aiRules() {
     var stories = D.STORIES.map(function (s) {
@@ -1041,7 +1229,7 @@
         else {
           ai.enabled = false; setAskHint();
           var i = state.messages.indexOf(m); if (i >= 0) state.messages.splice(i, 1);
-          offlineAnswer(storyId ? 'story:' + storyId : matchKey(text));
+          offlineAnswer(storyId ? 'story:' + storyId : 'q:' + text);
           toast('ไม่ได้อนุญาตให้ใช้ Claude ในหน้านี้ เลยตอบจากข่าวแบบออฟไลน์แทน');
         }
       } else {
@@ -1059,7 +1247,7 @@
   function submitQuestion(text) {
     if (!text || state.typing || ai.busy) return;
     if (ai.enabled) { askAI(text); return; }
-    ask(matchKey(text), text);
+    ask('q:' + text, text);
   }
   var askTimer = null;
   // ตอบแบบออฟไลน์ (ไม่มี AI): ใส่ข้อความตอบ แล้วขยับแผนที่ตามหัวข้อ
@@ -1075,6 +1263,13 @@
       state.messages.push({ role: 'bot', key: 'story', story: key.slice(6) });
       renderMsgs();
       if (s) { goTo(deepestPlace(s.lon, s.lat).id); state.selPin = s.id; renderPinCard(); refreshView(views.chat); }
+      return;
+    }
+    if (key.indexOf('q:') === 0) {
+      var q = key.slice(2);
+      state.messages.push({ role: 'bot', key: 'q', q: q });
+      renderMsgs();
+      showQueryOnMap(resolveQuery(q));
       return;
     }
     state.messages.push({ role: 'bot', key: key });
