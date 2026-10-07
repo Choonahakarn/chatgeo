@@ -542,3 +542,69 @@ kbd {
   border: 1px solid var(--line2); border-radius: 6px; padding: 2px 6px; cursor: pointer;
 }
 @media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; } }
+
+/* ---------- ชั้นข้อมูลสาธารณะ (น้ำ ฝน พยากรณ์ ดาวเทียม) ---------- */
+.filter-pop { max-height: min(72vh, 600px); overflow-y: auto; overscroll-behavior: contain; }
+.fp-sub { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.fp-list .fp-switch { margin-top: 0; border-top: 0; border-radius: 8px; padding-top: 0; min-height: 46px; }
+.fp-two { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.fp-two small { font-size: 11.5px; color: var(--muted); }
+.wl-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 6px 8px 4px; font-size: 11.5px; color: var(--ink2); }
+.wl-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.wl-legend i, .lv-sum i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+.fc-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px 3px 7px; border-radius: 999px;
+  border: 1px solid var(--line2); background: color-mix(in srgb, var(--panel) 92%, transparent); color: var(--ink);
+  font: inherit; font-size: 11.5px; line-height: 1.3; white-space: nowrap; cursor: pointer; box-shadow: var(--shadow);
+}
+.fc-chip b { font-weight: 600; margin-right: 2px; }
+.fc-chip .drop { color: #4FA3FF; }
+.fc-chip .t { color: var(--ink2); font-variant-numeric: tabular-nums; }
+.fc-chip:hover { border-color: var(--ink2); }
+.fc-chip.off { display: none; }
+
+.pop-stat { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
+.pop-stat .dot { width: 9px; height: 9px; }
+.pop-sub { margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.pop-sub a { color: var(--ink2); }
+
+.lv-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12.5px; }
+.lv-sum span { display: inline-flex; align-items: center; gap: 5px; }
+.lv-sum b { font-size: 14px; }
+.lv-sum .muted { color: var(--muted); font-size: 11.5px; }
+.live-sub { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.live-row {
+  display: grid; grid-template-columns: 12px 1fr auto; align-items: center; gap: 8px; width: calc(100% + 8px); margin: 0 -4px;
+  padding: 7px 4px; border: 0; border-top: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--ink);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.live-row:hover { background: var(--chip); }
+.live-row .drop { color: #4FA3FF; }
+.lr-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lr-name small { color: var(--muted); font-size: 11.5px; }
+.lr-val { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.live-map { align-self: flex-start; margin-top: 4px; }
+
+.fc-row {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "city today" "city next"; column-gap: 10px; row-gap: 1px;
+  width: calc(100% + 8px); margin: 0 -4px; padding: 8px 4px; border: 0; border-top: 1px solid var(--line); border-radius: 6px;
+  background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+}
+.fc-row:hover { background: var(--chip); }
+.fc-city { grid-area: city; display: flex; flex-direction: column; justify-content: center; }
+.fc-city b { font-size: 13.5px; font-weight: 600; }
+.fc-city small { font-size: 11.5px; color: var(--muted); }
+.fc-today { grid-area: today; display: inline-flex; align-items: center; gap: 8px; justify-self: end; font-size: 12.5px; }
+.fc-txt { color: var(--ink2); }
+.fc-p { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fc-p .drop { color: #4FA3FF; }
+.fc-t { font-weight: 700; }
+.fc-next { grid-area: next; justify-self: end; font-size: 11.5px; color: var(--muted); }
+.m-row .drop { color: #4FA3FF; transform: translateY(1px); }
+i.tri { display: inline-block; width: 0; height: 0; border-left: 5.5px solid transparent; border-right: 5.5px solid transparent; border-top: 9px solid #888; border-radius: 0; background: none !important; flex: 0 0 auto; }
+.wl-legend i.tri, .lv-sum i.tri { width: 0; height: 0; border-radius: 0; }
+.rain-legend { display: flex; align-items: center; gap: 6px; padding: 2px 8px 6px; font-size: 11.5px; color: var(--ink2); }
+.rain-legend i { width: 72px; height: 8px; border-radius: 999px; display: inline-block; }
+.rain-legend .sp { flex: 1; }
+.live-row i.tri { justify-self: center; }

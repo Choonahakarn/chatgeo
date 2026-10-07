@@ -22,10 +22,10 @@ BRIEFS = os.path.join(ROOT, 'data', 'briefs')
 LATEST = os.path.join(ROOT, 'data', 'latest.json')
 KEEP_DAYS = 30
 MIN_STORIES = 8
-MAX_STORIES = 20
+MAX_STORIES = 24
 
 LAYERS = {'conflict', 'market', 'biz', 'ai', 'weather', 'area', 'news'}
-REGIONS = {'th', 'asean', 'world'}
+REGIONS = {'th', 'asean', 'world', 'ai'}
 LEVELS = {'normal', 'watch', 'warning'}
 DIRS = {'up', 'down', 'flat'}
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
@@ -219,7 +219,7 @@ def main(argv):
     for w in warnings:
         print('คำเตือน:', w)
     n = len(brief['stories'])
-    by_region = {r: sum(1 for s in brief['stories'] if s['region'] == r) for r in ('th', 'asean', 'world')}
+    by_region = {r: sum(1 for s in brief['stories'] if s['region'] == r) for r in ('th', 'ai', 'world', 'asean')}
     if n < MIN_STORIES:
         print('ไม่ลงเว็บ: ข่าวที่ผ่านการตรวจมี %d เรื่อง (ต้องมีอย่างน้อย %d)' % (n, MIN_STORIES))
         return 1

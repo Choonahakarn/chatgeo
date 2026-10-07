@@ -63,7 +63,7 @@
         <div class="filter-wrap">
           <button type="button" class="filter-btn" id="btnFilter" aria-expanded="false" aria-controls="filterPop">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
-            <span class="fb-label">หมวดข่าว</span>
+            <span class="fb-label">ชั้นข้อมูล</span>
             <span class="fb-dots" id="filterDots" aria-hidden="true"></span>
             <span class="fb-count" id="filterCount"></span>
           </button>
@@ -73,6 +73,8 @@
             <button type="button" class="fp-row fp-switch" id="btnLabels" aria-pressed="true">
               <span>ป้ายชื่อภาษาไทยบนแผนที่</span><span class="sw" aria-hidden="true"><i></i></span>
             </button>
+            <div class="fp-head fp-sub"><span>ข้อมูลสาธารณะ</span></div>
+            <div class="fp-list" id="dataChips" role="group" aria-label="ข้อมูลสาธารณะ"></div>
           </div>
         </div>
       </div>
@@ -142,6 +144,16 @@
         </div>
 
         <aside class="bp-aside" aria-label="ข้อมูลประกอบ">
+          <section class="side-card" id="liveCard" hidden>
+            <div class="side-head"><h2>น้ำและฝนตอนนี้</h2><span id="liveAsOf"></span></div>
+            <div id="liveWater"></div>
+            <p class="side-fine">ที่มา: <a class="src-link" href="https://www.thaiwater.net" target="_blank" rel="noopener">คลังข้อมูลน้ำแห่งชาติ ThaiWater (สสน.)</a></p>
+          </section>
+          <section class="side-card" id="fcCard" hidden>
+            <div class="side-head"><h2>พยากรณ์รายภาค</h2><span>3 วัน</span></div>
+            <div id="fcList"></div>
+            <p class="side-fine" id="fcNote"></p>
+          </section>
           <section class="side-card">
             <div class="side-head"><h2>ตลาด</h2><span id="marketsAsOf"></span></div>
             <div id="markets"></div>
@@ -159,7 +171,7 @@
           </section>
         </aside>
       </div>
-      <footer class="bp-foot">ChatGeo ต้นแบบ · ข่าว ตลาด และอากาศรวบรวมจากแหล่งข่าวจริงเมื่อเช้า 6 ต.ค. 2569 สรุปเป็นภาษาไทยโดย Claude และยังไม่อัปเดตอัตโนมัติ ตรวจสอบรายละเอียดกับข่าวต้นฉบับก่อนนำไปใช้</footer>
+      <footer class="bp-foot">ChatGeo ต้นแบบ · ข่าวสรุปเป็นภาษาไทยโดย Claude ทุกเช้าจากสำนักข่าวจริง ตรวจสอบกับข่าวต้นฉบับก่อนนำไปใช้ · ข้อมูลน้ำและฝน: ThaiWater (สสน.) · พยากรณ์: Open-Meteo (CC BY 4.0) · ขอบเขตภาคและจังหวัด: Natural Earth · ภาพดาวเทียม: Sentinel-2 cloudless 2016 โดย EOX (CC BY 4.0)</footer>
     </div>
   </main>
 
@@ -185,6 +197,7 @@
 <script src="data/data.js"></script>
 <script src="data/geo.js"></script>
 <script src="data/countries.js"></script>
+<script src="data/th-regions.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
