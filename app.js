@@ -540,12 +540,13 @@
       map.addSource('cg-flood-prov', { type: 'geojson', data: FLOOD.provFC || emptyFC(), attribution: floodAttr() });
       map.addSource('cg-flood', { type: 'geojson', data: emptyFC() });
       v.floodProvSet = FLOOD.provFC; v.floodKey = null;
-      var provHas = ['>=', ['+', ['get', 'fh'], ['get', 'fl']], 0.1];
+      // ทาสีเฉพาะจังหวัดที่น่าจะท่วมตั้งแต่ 5 ตร.กม. (ปื้นเล็กๆ ที่ไม่แน่ใจไม่นับ) ภาพรวมจะได้ไม่แดงทั้งประเทศ
+      var provHas = ['>=', ['get', 'fh'], FL_PROV_MIN];
       map.addLayer({ id: 'cg-flood-pf', type: 'fill', source: 'cg-flood-prov', maxzoom: FL_DETAIL_Z + 0.5, filter: provHas, layout: { visibility: fvis },
         paint: { 'fill-color': FL_C.flood, 'fill-opacity': ['interpolate', ['linear'], ['zoom'],
-          FL_DETAIL_Z - 0.5, ['interpolate', ['linear'], ['get', 'fh'], 0, 0.1, 1, 0.18, 10, 0.32, 50, 0.48, 150, 0.62],
+          FL_DETAIL_Z - 0.5, ['interpolate', ['linear'], ['get', 'fh'], FL_PROV_MIN, 0.16, 20, 0.28, 50, 0.4, 150, 0.55],
           FL_DETAIL_Z + 0.5, 0] } }, before);
-      map.addLayer({ id: 'cg-flood-pl', type: 'line', source: 'cg-flood-prov', maxzoom: FL_DETAIL_Z, filter: ['>=', ['get', 'fh'], 1], layout: { visibility: fvis },
+      map.addLayer({ id: 'cg-flood-pl', type: 'line', source: 'cg-flood-prov', maxzoom: FL_DETAIL_Z, filter: ['>=', ['get', 'fh'], 20], layout: { visibility: fvis },
         paint: { 'line-color': FL_C.flood, 'line-width': 1, 'line-opacity': 0.7 } }, before);
       map.addLayer({ id: 'cg-flood-s', type: 'fill', source: 'cg-flood', minzoom: FL_DETAIL_Z - 0.5, filter: ['==', ['get', 'kind'], 'seasonal'], layout: { visibility: fvis },
         paint: { 'fill-color': FL_C.seasonal, 'fill-opacity': 0.45 } }, before);
@@ -2384,6 +2385,7 @@
   var FLOOD_BASE = 'https://raw.githubusercontent.com/Choonahakarn/chatgeo/flood-data/';
   var FL_DETAIL_Z = 8;   // ซูมตั้งแต่ระดับนี้ โหลดปื้นน้ำรายกรอบ (ซูมออกเห็นเป็นสีรายจังหวัด)
   var FL_MAX_TILES = 8;  // โหลดพร้อมกันไม่เกินกี่กรอบ
+  var FL_PROV_MIN = 5;   // ซูมออก: ทาสีจังหวัดที่น่าจะท่วมตั้งแต่กี่ ตร.กม.
   var FLOOD = { index: null, tiles: {}, loading: {}, provFC: null, provByName: {} };
   var NB_URL = 'https://github.com/Choonahakarn/chatgeo/blob/main/notebooks/flood_s1.ipynb';
   var PID_BY_NAME = {};
@@ -2539,8 +2541,8 @@
       '<span><i class="sq" style="background:' + FL_C.flood + '"></i>น่าจะท่วม</span>' +
       '<span><i class="sq faint" style="background:' + FL_C.flood + '"></i>ไม่แน่ใจ (ปื้นเล็ก)</span>' +
       '<span><i class="sq" style="background:' + FL_C.seasonal + '"></i>มีน้ำเกือบทุกปี</span></div>' +
-      '<div class="rain-legend" aria-label="สีรายจังหวัด"><span>ซูมออก: สีจังหวัด</span><span class="sp"></span><span>น้อย</span>' +
-      '<i style="background:linear-gradient(90deg,rgba(229,72,77,.12),rgba(229,72,77,.65))"></i><span>มาก</span></div>' +
+      '<div class="rain-legend" aria-label="สีรายจังหวัด"><span>ซูมออก: จังหวัดที่น่าจะท่วม</span><span class="sp"></span><span>' + FL_PROV_MIN + '</span>' +
+      '<i style="background:linear-gradient(90deg,rgba(229,72,77,.16),rgba(229,72,77,.55))"></i><span>150+ ตร.กม.</span></div>' +
       (top.length ? '<div class="fl-areas">' + top.map(function (r) {
         return '<button type="button" class="fl-go" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '">จ.' + esc(r.name) + ' ' + fmtKm2(r.flood_high) + ' ตร.กม.</button>';
       }).join('') + '</div>' : '') +
