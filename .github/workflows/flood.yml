@@ -1,5 +1,7 @@
-# น้ำจากดาวเทียม Sentinel-1: เช็กภาพใหม่วันละ 2 รอบ ถ้ามีจะวิเคราะห์แล้วอัปเดต data/flood/ เอง
-# พื้นที่ที่ตรวจอยู่ใน scripts/flood_areas.json (รายการ "auto")
+# น้ำจากดาวเทียม Sentinel-1 ทั้งประเทศ: แบ่งไทยเป็นกรอบละ 1 องศา (76 กรอบ)
+# วันละ 2 รอบ เช็กว่ากรอบไหนมีภาพใหม่ แล้ววิเคราะห์เฉพาะกรอบนั้น
+# ผลเก็บใน branch "flood-data" (เก็บ commit เดียว เขียนทับทุกครั้ง repo จะได้ไม่บวม)
+# หน้าเว็บอ่านจาก https://raw.githubusercontent.com/<repo>/flood-data/index.json
 # กดรันเองได้ที่แท็บ Actions → "น้ำจากดาวเทียม" → Run workflow
 name: น้ำจากดาวเทียม
 
@@ -9,18 +11,21 @@ on:
     - cron: '17 14 * * *'   # 21:17 น. เวลาไทย
   workflow_dispatch:
     inputs:
-      areas:
-        description: 'ชื่อย่อพื้นที่ คั่นด้วยจุลภาค เช่น ccs,chi (เว้นว่าง = ตามรายการ auto)'
+      tiles:
+        description: 'เฉพาะกรอบ เช่น t100_13,t101_13 (เว้นว่าง = ทุกกรอบที่มีภาพใหม่)'
         required: false
         default: ''
       force:
         description: 'วิเคราะห์ใหม่แม้ไม่มีภาพใหม่'
         type: boolean
         default: false
+      budget:
+        description: 'เวลาสูงสุดที่จะเริ่มกรอบใหม่ (นาที)'
+        required: false
+        default: '300'
 
 permissions:
   contents: write
-  pages: write
 
 concurrency:
   group: flood
@@ -29,11 +34,14 @@ concurrency:
 jobs:
   flood:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 350
     env:
-      AREAS: ${{ inputs.areas }}
+      TILES: ${{ inputs.tiles }}
       FORCE: ${{ inputs.force && '--force' || '' }}
+      BUDGET: ${{ inputs.budget || '300' }}
       OUT: /tmp/chatgeo-flood
+      DATA: /tmp/flood-data
+      REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
     steps:
       - uses: actions/checkout@v4
 
@@ -43,47 +51,44 @@ jobs:
           cache: pip
           cache-dependency-path: scripts/requirements-flood.txt
 
-      - name: เช็กว่ามีภาพใหม่ไหม
+      - name: ดึงผลเดิม (branch flood-data)
+        run: |
+          git clone -q --depth 1 --branch flood-data "$REMOTE" "$DATA" 2>/dev/null || {
+            echo "ยังไม่มี branch flood-data จะสร้างใหม่"
+            mkdir -p "$DATA" && git -C "$DATA" init -q -b flood-data
+          }
+
+      - name: เช็กว่ากรอบไหนมีภาพใหม่
         id: check
         run: |
-          pip install -q pystac-client planetary-computer
-          python scripts/flood_s1.py --check --areas "$AREAS" $FORCE
+          pip install -q pystac-client planetary-computer shapely
+          python scripts/flood_s1.py --grid-check --data "$DATA" --todo "$OUT/todo.txt" --tiles "$TILES" $FORCE
 
       - name: ติดตั้งไลบรารีวิเคราะห์ภาพ
-        if: steps.check.outputs.todo != ''
+        if: steps.check.outputs.count != '0'
         run: pip install -q -r scripts/requirements-flood.txt
 
       - name: วิเคราะห์
-        if: steps.check.outputs.todo != ''
-        run: python scripts/flood_s1.py --areas "${{ steps.check.outputs.todo }}" --out "$OUT"
+        if: steps.check.outputs.count != '0'
+        run: python scripts/flood_s1.py --grid-run --todo "$OUT/todo.txt" --out "$OUT" --budget "$BUDGET"
 
-      - name: ลงเว็บ
-        if: steps.check.outputs.todo != ''
-        run: |
-          shopt -s nullglob
-          for f in "$OUT"/*.geojson; do python scripts/add_flood.py "$f"; done
+      - name: รวมผลและสรุปรายจังหวัด
+        if: steps.check.outputs.count != '0'
+        run: python scripts/add_flood.py --grid "$OUT/tiles" --dest "$DATA"
 
-      - name: commit และ push
-        if: steps.check.outputs.todo != ''
+      - name: เก็บลง branch flood-data
+        if: steps.check.outputs.count != '0'
         run: |
+          cd "$DATA"
           git config user.name "ChatGeo bot"
           git config user.email "chatgeo-bot@users.noreply.github.com"
-          git add data/flood
-          if git diff --cached --quiet; then echo "ไม่มีอะไรเปลี่ยน"; exit 0; fi
+          git checkout -q --orphan snapshot
+          git add -A
           git commit -q -m "น้ำจากดาวเทียม $(TZ=Asia/Bangkok date '+%Y-%m-%d %H:%M')"
-          for i in 1 2 3; do
-            if git pull -q --rebase origin main && git push -q origin HEAD:main; then echo "push แล้ว"; exit 0; fi
-            sleep 15
-          done
-          exit 1
+          git push -q -f "$REMOTE" snapshot:flood-data
+          echo "เก็บแล้ว: $(ls tiles | wc -l) กรอบ"
 
-      - name: สั่งให้ GitHub Pages อัปเดตเว็บ
-        if: steps.check.outputs.todo != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null || echo "สั่งไม่ได้ เว็บจะอัปเดตรอบถัดไปที่มีการ push"
-
-      - name: แจ้งถ้ามีพื้นที่ที่พัง
-        if: steps.check.outputs.todo != ''
+      - name: แจ้งถ้ามีกรอบที่พัง
+        if: steps.check.outputs.count != '0'
         run: |
           if [ -s "$OUT/errors.txt" ]; then cat "$OUT/errors.txt"; exit 1; fi

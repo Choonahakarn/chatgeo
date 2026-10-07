@@ -401,7 +401,7 @@
       if (id) map.setFeatureState({ source: 'cg-thr', id: id }, { hover: true });
     }
     function topLayersAt(pt) {
-      var ids = ['cg-pins-halo', 'cg-water', 'cg-rain', 'cg-flood-f', 'cg-flood-s'].filter(function (l) { return map.getLayer(l); });
+      var ids = ['cg-pins-halo', 'cg-water', 'cg-rain', 'cg-flood-f', 'cg-flood-s', 'cg-flood-pf'].filter(function (l) { return map.getLayer(l); });
       return ids.length ? map.queryRenderedFeatures(pt, { layers: ids }) : [];
     }
     map.on('mousemove', 'cg-thr-fill', function (e) {
@@ -447,6 +447,14 @@
         map.on('mouseenter', lid, function () { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', lid, function () { map.getCanvas().style.cursor = ''; });
       });
+      map.on('click', 'cg-flood-pf', function (e) {
+        var top = ['cg-pins-halo', 'cg-water', 'cg-rain', 'cg-flood-f', 'cg-flood-s'].filter(function (l) { return map.getLayer(l); });
+        if (map.queryRenderedFeatures(e.point, { layers: top }).length) return;
+        var f = e.features && e.features[0];
+        if (f) openFloodProvPopup(v, f.properties, e.lngLat);
+      });
+      map.on('mouseenter', 'cg-flood-pf', function () { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('moveend', function () { updateFloodTiles(v); });
     }
 
     // ป้ายชื่อภาษาไทย
@@ -527,20 +535,25 @@
     map.addLayer({ id: 'cg-country-fill', type: 'fill', source: 'cg-country', paint: { 'fill-color': p.accent, 'fill-opacity': 0.07 } }, before);
     map.addLayer({ id: 'cg-country-line', type: 'line', source: 'cg-country', paint: { 'line-color': p.accent, 'line-width': ['interpolate', ['linear'], ['zoom'], 2, 1.2, 8, 2.4], 'line-opacity': 0.9 } }, before);
     if (v.kind === 'chat') {
-      // น้ำจากดาวเทียม (ทดลอง): อยู่ใต้ป้ายชื่อของแผนที่ แต่อยู่เหนือสีภาค
+      // น้ำจากดาวเทียม (ทดลอง): ซูมออกเห็นสีรายจังหวัด ซูมเข้าเห็นปื้นน้ำ อยู่ใต้ป้ายชื่อของแผนที่
       var fvis = state.data.flood ? 'visible' : 'none';
-      map.addSource('cg-flood', { type: 'geojson', data: FLOOD.fc || emptyFC(), attribution: floodAttr() });
-      map.addSource('cg-flood-aoi', { type: 'geojson', data: floodAoiFC() });
-      v.floodSet = FLOOD.fc; v.floodAoiSet = FLOOD.index;
-      map.addLayer({ id: 'cg-flood-s', type: 'fill', source: 'cg-flood', filter: ['==', ['get', 'kind'], 'seasonal'], layout: { visibility: fvis },
+      map.addSource('cg-flood-prov', { type: 'geojson', data: FLOOD.provFC || emptyFC(), attribution: floodAttr() });
+      map.addSource('cg-flood', { type: 'geojson', data: emptyFC() });
+      v.floodProvSet = FLOOD.provFC; v.floodKey = null;
+      var provHas = ['>=', ['+', ['get', 'fh'], ['get', 'fl']], 0.1];
+      map.addLayer({ id: 'cg-flood-pf', type: 'fill', source: 'cg-flood-prov', maxzoom: FL_DETAIL_Z + 0.5, filter: provHas, layout: { visibility: fvis },
+        paint: { 'fill-color': FL_C.flood, 'fill-opacity': ['interpolate', ['linear'], ['zoom'],
+          FL_DETAIL_Z - 0.5, ['interpolate', ['linear'], ['get', 'fh'], 0, 0.1, 1, 0.18, 10, 0.32, 50, 0.48, 150, 0.62],
+          FL_DETAIL_Z + 0.5, 0] } }, before);
+      map.addLayer({ id: 'cg-flood-pl', type: 'line', source: 'cg-flood-prov', maxzoom: FL_DETAIL_Z, filter: ['>=', ['get', 'fh'], 1], layout: { visibility: fvis },
+        paint: { 'line-color': FL_C.flood, 'line-width': 1, 'line-opacity': 0.7 } }, before);
+      map.addLayer({ id: 'cg-flood-s', type: 'fill', source: 'cg-flood', minzoom: FL_DETAIL_Z - 0.5, filter: ['==', ['get', 'kind'], 'seasonal'], layout: { visibility: fvis },
         paint: { 'fill-color': FL_C.seasonal, 'fill-opacity': 0.45 } }, before);
-      map.addLayer({ id: 'cg-flood-f', type: 'fill', source: 'cg-flood', filter: ['==', ['get', 'kind'], 'flood'], layout: { visibility: fvis },
+      map.addLayer({ id: 'cg-flood-f', type: 'fill', source: 'cg-flood', minzoom: FL_DETAIL_Z - 0.5, filter: ['==', ['get', 'kind'], 'flood'], layout: { visibility: fvis },
         paint: { 'fill-color': FL_C.flood, 'fill-opacity': ['case', ['==', ['get', 'conf'], 'low'], 0.26, 0.66] } }, before);
-      map.addLayer({ id: 'cg-flood-l', type: 'line', source: 'cg-flood', minzoom: 8,
+      map.addLayer({ id: 'cg-flood-l', type: 'line', source: 'cg-flood', minzoom: 9,
         filter: ['all', ['==', ['get', 'kind'], 'flood'], ['!=', ['get', 'conf'], 'low']], layout: { visibility: fvis },
         paint: { 'line-color': FL_C.flood, 'line-width': 0.8, 'line-opacity': 0.9 } }, before);
-      map.addLayer({ id: 'cg-flood-aoi', type: 'line', source: 'cg-flood-aoi', layout: { visibility: fvis },
-        paint: { 'line-color': dark ? '#E8EEF7' : '#33415C', 'line-opacity': 0.75, 'line-width': 1.2, 'line-dasharray': [3, 2] } }, before);
       // ข้อมูลสาธารณะ: ฝน 24 ชม. และระดับน้ำ (ThaiWater) อยู่ใต้หมุดข่าว
       map.addSource('cg-rain', { type: 'geojson', data: emptyFC(), attribution: TW_ATTR });
       map.addLayer({ id: 'cg-rain', type: 'circle', source: 'cg-rain', layout: { visibility: state.data.rain ? 'visible' : 'none' }, paint: {
@@ -1144,7 +1157,10 @@
   // ขยับแผนที่ไปยังข่าวที่ใช้ตอบ: เรื่องเดียวเปิดหมุด หลายเรื่องซูมให้เห็นทั้งหมด
   function showQueryOnMap(r) {
     var list = r.list;
-    if (r.topic === 'flood' && r.sat && (!r.place || r.place.id === HOME) && FLOOD.index && FLOOD.index.length) { showFloodArea(FLOOD.index[0].id); return; }
+    if (r.topic === 'flood' && r.sat && (!r.place || r.place.id === HOME) && floodReady()) {
+      var tp = topFloodProvinces(1)[0];
+      if (tp) { showFloodProvince(PID_BY_NAME[tp.name]); return; }
+    }
     if (!list.length) { if (r.place) goTo(r.place.id); return; }
     var def = r.topic ? TOPIC_DEF[r.topic] : null;
     D.LAYERS.forEach(function (l) {
@@ -1258,9 +1274,10 @@
   function queryAnswer(r) {
     var list = r.list;
     // ถามถึงดาวเทียมโดยตรง: ตอบด้วยผลตรวจจากดาวเทียมก่อน
-    if (r.topic === 'flood' && r.sat && (!r.place || r.place.id === HOME) && FLOOD.index && FLOOD.index.length) {
+    if (r.topic === 'flood' && r.sat && (!r.place || r.place.id === HOME) && floodReady()) {
       return { title: 'น้ำจากดาวเทียม (ทดลอง)', html: floodSummaryHtml(),
-        text: 'ดาวเทียมเรดาร์ Sentinel-1 ถ่ายทะลุเมฆได้ ตอนนี้ ChatGeo ตรวจภาพแล้ว ' + FLOOD.index.length + ' พื้นที่ ที่อื่นยังไม่ได้ตรวจ' +
+        text: 'ดาวเทียมเรดาร์ Sentinel-1 ถ่ายทะลุเมฆได้ ChatGeo ตรวจทั่วประเทศทุกครั้งที่มีภาพใหม่ ' +
+          (topFloodProvinces(1).length ? 'นี่คือจังหวัดที่น่าจะมีน้ำท่วมมากที่สุดตอนนี้' : 'ภาพล่าสุดยังไม่พบน้ำท่วมผิดปกติที่ชัดเจน') +
           (list.length ? ' ส่วนข่าวน้ำท่วมเช้านี้มี ' + list.length + ' เรื่อง พิมพ์ว่า "น้ำท่วม" เพื่อดูข่าว' : '') };
     }
     var loc = r.place && isLocalPlace(r.place) && (!r.topic || r.topic === 'flood') ? localHtml({ place: r.place }) : '';
@@ -1329,7 +1346,7 @@
   function renderSuggest() {
     var p = pal();
     var list = [{ q: 'รอบตัวฉันตอนนี้เป็นยังไง', layer: 'weather', near: true }]
-      .concat(FLOOD.index && FLOOD.index.length ? [{ q: 'ดาวเทียมเห็นน้ำท่วมที่ไหนบ้าง', layer: 'weather' }] : [])
+      .concat(floodReady() ? [{ q: 'ดาวเทียมเห็นน้ำท่วมที่ไหนบ้าง', layer: 'weather' }] : [])
       .concat(suggestions());
     $('suggest').innerHTML = list.map(function (q) {
       return '<button type="button" class="q-chip" data-q="' + esc(q.q) + '"><span class="dot" style="background:' + (p[q.layer] || p.accent) + '"></span>' + esc(q.q) + '</button>';
@@ -2294,15 +2311,15 @@
     map.getSource('cg-rain').setData(ptFC(LIVE.rain, function (o) { return { id: o.id, mm: o.mm }; }));
     map.getSource('cg-fc').setData(ptFC(LIVE.fc, function (o) { return { id: o.city }; }));
     // ไฟล์น้ำท่วมใหญ่ ส่งเข้าแผนที่เฉพาะตอนที่ข้อมูลเปลี่ยน
-    if (map.getSource('cg-flood') && v.floodSet !== FLOOD.fc) { map.getSource('cg-flood').setData(FLOOD.fc || emptyFC()); v.floodSet = FLOOD.fc; }
-    if (map.getSource('cg-flood-aoi') && v.floodAoiSet !== FLOOD.index) { map.getSource('cg-flood-aoi').setData(floodAoiFC()); v.floodAoiSet = FLOOD.index; }
-    [['cg-water', 'water'], ['cg-rain', 'rain'], ['cg-fc', 'fc'], ['cg-sat', 'sat'],
-      ['cg-flood-s', 'flood'], ['cg-flood-f', 'flood'], ['cg-flood-l', 'flood'], ['cg-flood-aoi', 'flood']].forEach(function (x) {
+    if (map.getSource('cg-flood-prov') && v.floodProvSet !== FLOOD.provFC) { map.getSource('cg-flood-prov').setData(FLOOD.provFC || emptyFC()); v.floodProvSet = FLOOD.provFC; }
+    [['cg-water', 'water'], ['cg-rain', 'rain'], ['cg-fc', 'fc'], ['cg-sat', 'sat'], ['cg-flood-pf', 'flood'], ['cg-flood-pl', 'flood'],
+      ['cg-flood-s', 'flood'], ['cg-flood-f', 'flood'], ['cg-flood-l', 'flood']].forEach(function (x) {
       if (map.getLayer(x[0])) map.setLayoutProperty(x[0], 'visibility', state.data[x[1]] ? 'visible' : 'none');
     });
     if (map.getLayer('cg-thr-line')) map.setPaintProperty('cg-thr-line', 'line-opacity', state.data.sat ? 0.9 : 0.6);
     if (map.getLayer('cg-thp-line')) map.setPaintProperty('cg-thp-line', 'line-opacity', state.data.sat ? 0.55 : 0.28);
     buildFcMarkers(v);
+    updateFloodTiles(v);
   }
   // ป้ายพยากรณ์วันนี้ที่เมืองตัวแทนของแต่ละภาค
   function buildFcMarkers(v) {
@@ -2360,17 +2377,23 @@
       .setLngLat([o.lon, o.lat]).setDOMContent(box).addTo(v.map);
   }
 
-  /* ---------- น้ำจากดาวเทียม Sentinel-1 (ทดลอง) ---------- */
-  // ผลมาจากโน้ตบุ๊ก notebooks/flood_s1.ipynb แล้วลงเว็บด้วย scripts/add_flood.py
-  // data/flood/index.json = รายการพื้นที่ที่ตรวจแล้ว (เล็ก โหลดทันที) ส่วนรูปปื้นน้ำโหลดเมื่อเปิดชั้นนี้
+  /* ---------- น้ำจากดาวเทียม Sentinel-1 ทั้งประเทศ (ทดลอง) ---------- */
+  // GitHub Actions (.github/workflows/flood.yml) วิเคราะห์ทีละกรอบ 1 องศา แล้วเก็บผลใน branch flood-data
+  // index.json (เล็ก โหลดทันที) = รายการกรอบ + สรุปรายจังหวัด · ไฟล์ปื้นน้ำรายกรอบโหลดเมื่อซูมเข้าเท่านั้น
   var FL_C = { flood: '#E5484D', seasonal: '#4FA3E8' };
-  var FLOOD = { index: null, fc: null, loading: null };
+  var FLOOD_BASE = 'https://raw.githubusercontent.com/Choonahakarn/chatgeo/flood-data/';
+  var FL_DETAIL_Z = 8;   // ซูมตั้งแต่ระดับนี้ โหลดปื้นน้ำรายกรอบ (ซูมออกเห็นเป็นสีรายจังหวัด)
+  var FL_MAX_TILES = 8;  // โหลดพร้อมกันไม่เกินกี่กรอบ
+  var FLOOD = { index: null, tiles: {}, loading: {}, provFC: null, provByName: {} };
   var NB_URL = 'https://github.com/Choonahakarn/chatgeo/blob/main/notebooks/flood_s1.ipynb';
+  var PID_BY_NAME = {};
+  Object.keys(PROV_FEAT).forEach(function (id) { PID_BY_NAME[PROV_FEAT[id].properties.name] = id; });
+  function floodReady() { return !!(FLOOD.index && FLOOD.index.tiles && FLOOD.index.tiles.length); }
   function floodAttr() {
-    var y = FLOOD.index && FLOOD.index[0] ? String(FLOOD.index[0].date).slice(0, 4) : String(new Date().getFullYear());
+    var y = FLOOD.index && FLOOD.index.date_max ? String(FLOOD.index.date_max).slice(0, 4) : String(new Date().getFullYear());
     return 'น้ำจากดาวเทียม (ทดลอง): ChatGeo · Contains modified Copernicus Sentinel data ' + y;
   }
-  function floodArea(id) { return find(FLOOD.index || [], function (a) { return a.id === id; }); }
+  function floodTile(id) { return find((FLOOD.index && FLOOD.index.tiles) || [], function (t) { return t.id === id; }); }
   function fmtKm2(v) {
     v = +v || 0;
     return v >= 10 ? Math.round(v).toLocaleString('th-TH') : v >= 0.1 ? v.toFixed(1) : 'ไม่ถึง 0.1';
@@ -2384,21 +2407,28 @@
     if (ds[0] === ds[ds.length - 1]) return b.getUTCDate() + ' ' + mb;
     return ma === mb ? a.getUTCDate() + '–' + b.getUTCDate() + ' ' + mb : a.getUTCDate() + ' ' + ma + ' – ' + b.getUTCDate() + ' ' + mb;
   }
-  function floodAoiFC() {
-    return { type: 'FeatureCollection', features: (FLOOD.index || []).map(function (a) {
-      var b = a.aoi;
-      return { type: 'Feature', properties: { id: a.id }, geometry: { type: 'LineString',
-        coordinates: [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]] } };
+  function floodCoverage() {
+    var I = FLOOD.index || {};
+    return 'ตรวจแล้ว ' + ((I.tiles || []).length) + ' จาก ' + (I.tiles_total || (I.tiles || []).length) + ' กรอบทั่วประเทศ';
+  }
+  // สีรายจังหวัด (ตอนซูมออก) จากสรุปใน index.json
+  function buildProvFC() {
+    FLOOD.provByName = {};
+    ((FLOOD.index && FLOOD.index.provinces) || []).forEach(function (r) { FLOOD.provByName[r.name] = r; });
+    if (!TH || !TH.provinces) return emptyFC();
+    return { type: 'FeatureCollection', features: TH.provinces.features.map(function (f) {
+      var r = FLOOD.provByName[f.properties.name] || {};
+      return { type: 'Feature', geometry: f.geometry,
+        properties: { id: f.properties.id, name: f.properties.name, fh: +r.flood_high || 0, fl: +r.flood_low || 0, s: +r.seasonal || 0 } };
     }) };
   }
   function loadFloodIndex() {
-    if (IN_ARTIFACT) { FLOOD.index = []; return; }
-    fetchJSON('data/flood/index.json').then(function (j) {
-      FLOOD.index = (j && Array.isArray(j.areas) ? j.areas : []).filter(function (a) {
-        return a && a.id && a.file && Array.isArray(a.aoi) && a.aoi.length === 4;
-      });
-    }, function () { FLOOD.index = []; }).then(function () {
-      if (state.data.flood) ensureFloodData();
+    if (IN_ARTIFACT) { FLOOD.index = { tiles: [], provinces: [] }; return; }
+    fetch(FLOOD_BASE + 'index.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+      FLOOD.index = j && j.v === 4 && Array.isArray(j.tiles) ? j : { tiles: [], provinces: [] };
+      FLOOD.index.tiles = FLOOD.index.tiles.filter(function (t) { return t && t.id && t.file && Array.isArray(t.bbox) && t.bbox.length === 4; });
+    }).catch(function () { FLOOD.index = { tiles: [], provinces: [] }; }).then(function () {
+      FLOOD.provFC = buildProvFC();
       eachView(refreshLive);
       renderDataChips();
       renderLiveCards();
@@ -2406,70 +2436,116 @@
       if (state.messages.some(function (m) { return m.key === 'near' || m.key === 'place' || m.key === 'q'; })) renderMsgs();
     });
   }
-  function ensureFloodData() {
-    if (FLOOD.fc || FLOOD.loading || !FLOOD.index || !FLOOD.index.length) return;
-    FLOOD.loading = Promise.all(FLOOD.index.map(function (a) {
-      var url = 'data/flood/' + encodeURIComponent(a.file) + '?v=' + encodeURIComponent(a.added || a.date);
-      return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
-        return ((j && j.features) || []).map(function (f) { f.properties = f.properties || {}; f.properties.area = a.id; return f; });
-      });
-    })).then(function (lists) {
-      FLOOD.fc = { type: 'FeatureCollection', features: [].concat.apply([], lists) };
-      FLOOD.loading = null;
-      eachView(refreshLive);
-    });
+  // กรอบที่ควรโหลดตอนนี้: ทับจอ เรียงจากใกล้กลางจอ ไม่เกิน FL_MAX_TILES
+  function floodWanted(v) {
+    if (!floodReady() || !state.data.flood || v.map.getZoom() < FL_DETAIL_Z - 0.5) return [];
+    var b = v.map.getBounds(), c = v.map.getCenter();
+    return FLOOD.index.tiles.filter(function (t) {
+      return t.bbox[0] < b.getEast() && t.bbox[2] > b.getWest() && t.bbox[1] < b.getNorth() && t.bbox[3] > b.getSouth();
+    }).sort(function (p, q) {
+      return Math.hypot((p.bbox[0] + p.bbox[2]) / 2 - c.lng, (p.bbox[1] + p.bbox[3]) / 2 - c.lat) -
+        Math.hypot((q.bbox[0] + q.bbox[2]) / 2 - c.lng, (q.bbox[1] + q.bbox[3]) / 2 - c.lat);
+    }).slice(0, FL_MAX_TILES);
   }
-  function showFloodArea(id) {
-    var a = floodArea(id);
-    if (!a) return;
+  function updateFloodTiles(v) {
+    if (!v || v.kind !== 'chat' || v.styleLoading || !v.map.getSource('cg-flood')) return;
+    var want = floodWanted(v);
+    v.floodWant = want.map(function (t) { return t.id; });
+    want.forEach(function (t) { if (!FLOOD.tiles[t.id] && !FLOOD.loading[t.id]) loadFloodTile(t); });
+    setFloodData(v);
+  }
+  function loadFloodTile(t) {
+    FLOOD.loading[t.id] = true;
+    fetch(FLOOD_BASE + t.file + '?v=' + encodeURIComponent(t.added || t.date)).then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; }).then(function (j) {
+        delete FLOOD.loading[t.id];
+        FLOOD.tiles[t.id] = ((j && j.features) || []).map(function (f) { f.properties = f.properties || {}; f.properties.tile = t.id; return f; });
+        // เก็บในหน่วยความจำไม่เกิน 16 กรอบ ทิ้งกรอบที่ไม่ได้ใช้ก่อน
+        var keep = (views.chat && views.chat.floodWant) || [];
+        var ids = Object.keys(FLOOD.tiles);
+        for (var i = 0; ids.length > 16 && i < ids.length; i++) {
+          if (keep.indexOf(ids[i]) < 0) { delete FLOOD.tiles[ids[i]]; ids = Object.keys(FLOOD.tiles); i = -1; }
+        }
+        eachView(setFloodData);
+      });
+  }
+  function setFloodData(v) {
+    if (!v || v.kind !== 'chat' || !v.map.getSource('cg-flood')) return;
+    var ids = (v.floodWant || []).filter(function (id) { return FLOOD.tiles[id]; });
+    var key = ids.join(',');
+    if (key === v.floodKey) return;
+    v.floodKey = key;
+    v.map.getSource('cg-flood').setData({ type: 'FeatureCollection', features: [].concat.apply([], ids.map(function (id) { return FLOOD.tiles[id]; })) });
+  }
+  function showFloodProvince(pid) {
+    if (!byId[pid]) return;
     state.data.flood = true;
     saveData();
-    ensureFloodData();
     if (state.page !== 'chat') setPage('chat');
     eachView(refreshLive);
     renderDataChips();
-    var v = views.chat;
-    if (!v) return;
-    if (v.popup) { v.popup.remove(); v.popup = null; }
-    v.map.fitBounds([[a.aoi[0], a.aoi[1]], [a.aoi[2], a.aoi[3]]],
-      { padding: mapPadding(v), maxZoom: 11, duration: reduceMotion ? 0 : 1200, essential: true });
+    goTo(pid);
+    // จังหวัดใหญ่ซูมไม่ถึงระดับที่เห็นปื้นน้ำ: ซูมต่อไปที่กรอบที่น้ำมากที่สุดในจังหวัด
+    var v = views.chat, r = FLOOD.provByName[PROV_FEAT[pid] ? PROV_FEAT[pid].properties.name : ''];
+    if (!v || !r) return;
+    var best = (r.tiles || []).map(floodTile).filter(Boolean).sort(function (a, b) { return (b.totals.flood_high || 0) - (a.totals.flood_high || 0); })[0];
+    var p = byId[pid];
+    setTimeout(function () {
+      if (!best || v.map.getZoom() >= FL_DETAIL_Z) return;
+      var cx = Math.min(Math.max((best.bbox[0] + best.bbox[2]) / 2, p.bx - p.hw), p.bx + p.hw);
+      var cy = Math.min(Math.max((best.bbox[1] + best.bbox[3]) / 2, p.by - p.hh), p.by + p.hh);
+      v.map.flyTo({ center: [cx, cy], zoom: FL_DETAIL_Z + 0.4, duration: reduceMotion ? 0 : 900, essential: true });
+    }, reduceMotion ? 50 : 1500);
   }
   function openFloodPopup(v, p, ll) {
-    var a = floodArea(p.area) || {};
+    var t = floodTile(p.tile) || {};
     var low = p.conf === 'low', seasonal = p.kind === 'seasonal';
     var title = seasonal ? 'น้ำที่มีเกือบทุกปีช่วงนี้' : low ? 'น้ำผิดปกติ (ยังไม่แน่ใจ)' : 'น่าจะเป็นน้ำท่วม';
-    var yrs = +a.baseline_years || 1;
+    var yrs = +t.baseline_years || 1;
     var why = seasonal ? 'ช่วงเดียวกันของปีก่อนๆ ก็มีน้ำตรงนี้ เช่น นาข้าวหรือทุ่งรับน้ำ อาจท่วมจริงแต่เป็นประจำ'
       : low ? 'ปื้นเล็กที่อยู่โดดๆ อาจเป็นนาที่เพิ่งปล่อยน้ำเข้าหรือบ่อมากกว่าน้ำท่วม'
       : yrs > 1 ? 'ช่วงเดียวกันของ ' + yrs + ' ปีก่อน ส่วนใหญ่ไม่มีน้ำตรงนี้' : 'ช่วงเดียวกันของปีที่แล้วไม่มีน้ำตรงนี้';
-    var when = p.date ? shortDates([p.date]) : shortDates(a.dates);
-    var t = a.totals || {};
+    var when = p.date ? shortDates([p.date]) : shortDates(t.dates);
     var box = document.createElement('div');
-    box.innerHTML = '<div class="pop-meta">ดาวเทียม Sentinel-1 · ทดลอง' + (a.name ? ' · ' + esc(a.name) : '') + '</div>' +
+    box.innerHTML = '<div class="pop-meta">ดาวเทียม Sentinel-1 · ทดลอง' + (t.name ? ' · ' + esc(t.name) : '') + '</div>' +
       '<div class="pop-title">' + title + '</div>' +
       '<div class="pop-stat"><i class="sq' + (low ? ' faint' : '') + '" style="background:' + (seasonal ? FL_C.seasonal : FL_C.flood) + '"></i>' +
       '<b>ราว ' + fmtKm2(p.area_km2) + ' ตร.กม.</b> · ภาพวันที่ ' + esc(when) + '</div>' +
       '<div class="pop-sub">' + why + '</div>' +
-      (t.flood_high != null ? '<div class="pop-sub">ทั้งกรอบที่ตรวจ: น่าจะท่วมราว ' + fmtKm2(t.flood_high) + ' ตร.กม.' +
-        (t.flood_low ? ' · ไม่แน่ใจ ' + fmtKm2(t.flood_low) : '') + '</div>' : '') +
       '<div class="pop-sub">ต้นแบบทดลอง ไม่ใช่ประกาศเตือนภัย ควรดูคู่กับ GISTDA และ ThaiWater · <a href="' + NB_URL + '" target="_blank" rel="noopener">วิธีทำ</a></div>';
     if (v.popup) v.popup.remove();
     v.popup = new maplibregl.Popup({ className: 'cg-popup', offset: 4, maxWidth: '290px', focusAfterOpen: false })
       .setLngLat(ll).setDOMContent(box).addTo(v.map);
   }
+  function openFloodProvPopup(v, p, ll) {
+    var r = FLOOD.provByName[p.name] || {};
+    var box = document.createElement('div');
+    box.innerHTML = '<div class="pop-meta">น้ำจากดาวเทียม Sentinel-1 · ทดลอง</div>' +
+      '<div class="pop-title">จ.' + esc(p.name) + '</div>' +
+      '<div class="pop-stat"><i class="sq" style="background:' + FL_C.flood + '"></i><b>น่าจะท่วมราว ' + fmtKm2(r.flood_high) + ' ตร.กม.</b></div>' +
+      (r.flood_low >= 0.1 ? '<div class="pop-sub">ไม่แน่ใจ (ปื้นเล็ก) ' + fmtKm2(r.flood_low) + ' ตร.กม. · มีน้ำเกือบทุกปี ' + fmtKm2(r.seasonal) + ' ตร.กม.</div>' : '') +
+      '<div class="pop-sub">ภาพวันที่ ' + esc(shortDates([r.date_min, r.date_max])) + '</div>' +
+      '<button type="button" class="btn-ghost fl-go" data-flood-prov="' + esc(p.id) + '">ซูมดูปื้นน้ำ</button>';
+    if (v.popup) v.popup.remove();
+    v.popup = new maplibregl.Popup({ className: 'cg-popup', offset: 4, maxWidth: '260px', focusAfterOpen: false })
+      .setLngLat(ll).setDOMContent(box).addTo(v.map);
+  }
+  function topFloodProvinces(n, min) {
+    return ((FLOOD.index && FLOOD.index.provinces) || []).filter(function (r) { return r.flood_high >= (min || 0.5) && PID_BY_NAME[r.name]; }).slice(0, n);
+  }
   function floodLegendHtml() {
-    var A = FLOOD.index || [];
-    var seas = A.some(function (a) { return a.has_seasonal; });
+    var I = FLOOD.index, top = topFloodProvinces(3);
     return '<div class="fl-legend" aria-label="สีน้ำจากดาวเทียม">' +
       '<span><i class="sq" style="background:' + FL_C.flood + '"></i>น่าจะท่วม</span>' +
       '<span><i class="sq faint" style="background:' + FL_C.flood + '"></i>ไม่แน่ใจ (ปื้นเล็ก)</span>' +
-      (seas ? '<span><i class="sq" style="background:' + FL_C.seasonal + '"></i>มีน้ำเกือบทุกปี</span>' : '') +
-      '<span><i class="sq dash"></i>กรอบที่ตรวจ</span></div>' +
-      '<div class="fl-areas">' + A.map(function (a) {
-        return '<button type="button" class="fl-go" data-flood-go="' + esc(a.id) + '">ไปดู ' + esc(a.name) + ' · ' + esc(shortDates(a.dates)) + '</button>';
-      }).join('') + '</div>' +
-      '<p class="fp-fine">ต้นแบบทดลองจากภาพเรดาร์ ไม่ใช่ประกาศเตือนภัยทางการ นอกกรอบเส้นประยังไม่ได้ตรวจ' +
-      (A.some(function (a) { return a.auto; }) ? ' · ระบบเช็กภาพดาวเทียมใหม่วันละ 2 รอบและอัปเดตเอง' : '') + '</p>';
+      '<span><i class="sq" style="background:' + FL_C.seasonal + '"></i>มีน้ำเกือบทุกปี</span></div>' +
+      '<div class="rain-legend" aria-label="สีรายจังหวัด"><span>ซูมออก: สีจังหวัด</span><span class="sp"></span><span>น้อย</span>' +
+      '<i style="background:linear-gradient(90deg,rgba(229,72,77,.12),rgba(229,72,77,.65))"></i><span>มาก</span></div>' +
+      (top.length ? '<div class="fl-areas">' + top.map(function (r) {
+        return '<button type="button" class="fl-go" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '">จ.' + esc(r.name) + ' ' + fmtKm2(r.flood_high) + ' ตร.กม.</button>';
+      }).join('') + '</div>' : '') +
+      '<p class="fp-fine">' + floodCoverage() + ' · ภาพ ' + esc(shortDates([I.date_min, I.date_max])) +
+      ' · ซูมถึงระดับจังหวัดเพื่อดูปื้นน้ำ · ระบบเช็กภาพใหม่วันละ 2 รอบ · ต้นแบบทดลอง ไม่ใช่ประกาศเตือนภัยทางการ</p>';
   }
   // จังหวัดที่เกี่ยวกับคำถาม: จังหวัดเดียว ทั้งภาค หรือจังหวัดที่ผู้ใช้อยู่
   function floodTarget(opt) {
@@ -2488,44 +2564,42 @@
     return { provs: provs, label: label };
   }
   function floodHtml(opt) {
-    var A = FLOOD.index || [], tg = A.length ? floodTarget(opt) : null;
+    var tg = floodReady() ? floodTarget(opt) : null;
     if (!tg) return '';
-    var names = {};
-    tg.provs.forEach(function (q) { names[q.name] = 1; });
-    return A.map(function (a) {
-      var b = a.aoi, s = { h: 0, l: 0, s: 0 }, hit = false;
-      (a.provinces || []).forEach(function (r) {
-        if (names[r.name]) { s.h += +r.flood_high || 0; s.l += +r.flood_low || 0; s.s += +r.seasonal || 0; hit = true; }
-      });
-      var covered = hit || tg.provs.some(function (q) { return q.lon >= b[0] && q.lon <= b[2] && q.lat >= b[1] && q.lat <= b[3]; });
-      if (!covered) return '';
-      var rows = '';
-      if (s.h >= 0.1) rows += '<div class="m-row"><i class="sq" style="background:' + FL_C.flood + '"></i><div><b>น่าจะท่วม</b> <span>ราว ' + fmtKm2(s.h) + ' ตร.กม.</span></div></div>';
-      if (s.l >= 0.1) rows += '<div class="m-row"><i class="sq faint" style="background:' + FL_C.flood + '"></i><div><b>ไม่แน่ใจ</b> <span>ปื้นเล็กราว ' + fmtKm2(s.l) + ' ตร.กม. อาจเป็นนาหรือบ่อ</span></div></div>';
-      if (s.s >= 0.1) rows += '<div class="m-row"><i class="sq" style="background:' + FL_C.seasonal + '"></i><div><b>มีน้ำเกือบทุกปี</b> <span>ราว ' + fmtKm2(s.s) + ' ตร.กม. เช่น นาหรือทุ่งรับน้ำ</span></div></div>';
-      if (!rows) rows = '<div class="m-row m-none"><span></span><div><span>ภาพนี้ไม่พบน้ำผิดปกติใน' + esc(tg.label) + ' (เฉพาะส่วนที่อยู่ในกรอบที่ตรวจ)</span></div></div>';
-      return '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ' + esc(tg.label) + ' · ภาพ ' + esc(shortDates(a.dates)) + '</div>' + rows +
-        '<div class="m-row m-act"><span></span><div><button type="button" class="btn-ghost fl-go" data-flood-go="' + esc(a.id) + '">ดูบนแผนที่</button></div></div></div>';
-    }).join('');
+    var I = FLOOD.index, s = { h: 0, l: 0, s: 0 }, dates = [], best = null;
+    tg.provs.forEach(function (q) {
+      var r = FLOOD.provByName[q.name];
+      if (!r) return;
+      s.h += r.flood_high; s.l += r.flood_low; s.s += r.seasonal;
+      dates.push(r.date_min, r.date_max);
+      if (!best || r.flood_high > best.flood_high) best = r;
+    });
+    var covered = dates.length || tg.provs.some(function (q) {
+      return I.tiles.some(function (t) { return q.lon >= t.bbox[0] && q.lon < t.bbox[2] && q.lat >= t.bbox[1] && q.lat < t.bbox[3]; });
+    });
+    var head = '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ' + esc(tg.label) + (dates.length ? ' · ภาพ ' + esc(shortDates(dates)) : '') + '</div>';
+    if (!covered) return head + '<div class="m-row m-none"><span></span><div><span>ยังไม่ได้ตรวจพื้นที่นี้ (' + floodCoverage() + ')</span></div></div></div>';
+    var rows = '';
+    if (s.h >= 0.1) rows += '<div class="m-row"><i class="sq" style="background:' + FL_C.flood + '"></i><div><b>น่าจะท่วม</b> <span>ราว ' + fmtKm2(s.h) + ' ตร.กม.</span></div></div>';
+    if (s.l >= 0.1) rows += '<div class="m-row"><i class="sq faint" style="background:' + FL_C.flood + '"></i><div><b>ไม่แน่ใจ</b> <span>ปื้นเล็กราว ' + fmtKm2(s.l) + ' ตร.กม. อาจเป็นนาหรือบ่อ</span></div></div>';
+    if (s.s >= 0.1) rows += '<div class="m-row"><i class="sq" style="background:' + FL_C.seasonal + '"></i><div><b>มีน้ำเกือบทุกปี</b> <span>ราว ' + fmtKm2(s.s) + ' ตร.กม. เช่น นาหรือทุ่งรับน้ำ</span></div></div>';
+    if (!rows) rows = '<div class="m-row m-none"><span></span><div><span>ภาพล่าสุดไม่พบน้ำผิดปกติใน' + esc(tg.label) + '</span></div></div>';
+    var pid = best && PID_BY_NAME[best.name];
+    return head + rows + (pid ? '<div class="m-row m-act"><span></span><div><button type="button" class="btn-ghost fl-go" data-flood-prov="' + esc(pid) + '">ดูบนแผนที่</button></div></div>' : '') + '</div>';
   }
   function floodSummaryHtml() {
-    var A = FLOOD.index || [];
-    if (!A.length) return '';
-    return '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ตรวจแล้ว ' + A.length + ' พื้นที่ ที่อื่นยังไม่ได้ตรวจ</div>' +
-      A.map(function (a) {
-        var t = a.totals || {};
-        var top = (a.provinces || []).filter(function (r) { return r.flood_high >= 0.5; }).slice(0, 3).map(function (r) {
-          return 'จ.' + esc(r.name) + ' ' + fmtKm2(r.flood_high);
-        }).join(' · ');
-        return '<div class="m-row"><i class="sq" style="background:' + FL_C.flood + '"></i><div><b>' + esc(a.name) + '</b> <span>ภาพ ' + esc(shortDates(a.dates)) +
-          ' · น่าจะท่วมราว ' + fmtKm2(t.flood_high) + ' ตร.กม.' + (top ? ' (' + top + ')' : '') + '</span>' +
-          ' <button type="button" class="btn-ghost fl-go" data-flood-go="' + esc(a.id) + '">ดูบนแผนที่</button></div></div>';
-      }).join('') + '</div>';
+    if (!floodReady()) return '';
+    var I = FLOOD.index, top = topFloodProvinces(5);
+    return '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ' + floodCoverage() + ' · ภาพ ' + esc(shortDates([I.date_min, I.date_max])) + '</div>' +
+      (top.length ? top.map(function (r) {
+        return '<div class="m-row"><i class="sq" style="background:' + FL_C.flood + '"></i><div><b>จ.' + esc(r.name) + '</b> <span>น่าจะท่วมราว ' + fmtKm2(r.flood_high) +
+          ' ตร.กม. · ภาพ ' + esc(shortDates([r.date_min, r.date_max])) + '</span> <button type="button" class="btn-ghost fl-go" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '">ดู</button></div></div>';
+      }).join('') : '<div class="m-row m-none"><span></span><div><span>ภาพล่าสุดยังไม่พบน้ำท่วมผิดปกติที่ชัดเจน</span></div></div>') + '</div>';
   }
-  // ปุ่ม "ดูบนแผนที่" ของน้ำจากดาวเทียมในแชทและการ์ดหน้าสรุป
+  // ปุ่ม "ดูบนแผนที่" ของน้ำจากดาวเทียม (แชท การ์ดหน้าสรุป และ popup)
   document.addEventListener('click', function (e) {
-    var g = e.target.closest && e.target.closest('[data-flood-go]');
-    if (g) { e.preventDefault(); showFloodArea(g.getAttribute('data-flood-go')); }
+    var g = e.target.closest && e.target.closest('[data-flood-prov]');
+    if (g) { e.preventDefault(); if (views.chat && views.chat.popup) { views.chat.popup.remove(); views.chat.popup = null; } showFloodProvince(g.getAttribute('data-flood-prov')); }
   });
 
   // ปุ่มเปิดปิดชั้นข้อมูลในเมนู "ชั้นข้อมูล"
@@ -2540,9 +2614,8 @@
     if (r.id === 'sat') return r.src;
     if (r.id === 'flood') {
       if (!FLOOD.index) return r.src + ' · กำลังโหลด';
-      if (!FLOOD.index.length) return r.src + ' · ยังไม่มีข้อมูล';
-      var A = FLOOD.index;
-      return r.src + (A.length > 1 ? ' · ภาพล่าสุด ' + shortDates([A[0].date]) + ' · ' + A.length + ' พื้นที่' : ' · ภาพ ' + shortDates(A[0].dates) + ' · 1 พื้นที่');
+      if (!floodReady()) return r.src + ' · ยังไม่มีข้อมูล';
+      return r.src + ' · ภาพ ' + shortDates([FLOOD.index.date_min, FLOOD.index.date_max]) + ' · ตรวจ ' + FLOOD.index.tiles.length + '/' + (FLOOD.index.tiles_total || FLOOD.index.tiles.length) + ' กรอบ';
     }
     var n = (LIVE[r.id] || []).length;
     return r.src + (LIVE.src[r.id] ? ' · ' + (n ? n + ' จุด' : 'ดึงข้อมูลไม่ได้ตอนนี้') : ' · กำลังโหลด');
@@ -2560,19 +2633,18 @@
     }).join('') + '</div>' : '') + (state.data.rain ? '<div class="rain-legend" aria-label="สีปริมาณฝน"><span>ฝน</span><span class="sp"></span><span>10</span><i style="background:linear-gradient(90deg,' +
       RAIN_C.join(',') + ')"></i><span>150+ มม.</span></div>' : '') +
       (state.data.water || state.data.rain ? '<p class="fp-fine">ซูมออกจะเห็นเฉพาะสถานีที่น้ำผิดปกติและฝน 35 มม.ขึ้นไป ซูมเข้าเพื่อดูครบทุกสถานี</p>' : '') +
-      (state.data.flood && FLOOD.index && FLOOD.index.length ? floodLegendHtml() : '');
+      (state.data.flood && floodReady() ? floodLegendHtml() : '');
   }
   function saveData() { try { localStorage.setItem('cg-data', JSON.stringify(state.data)); } catch (e) { /* ข้าม */ } }
   if ($('dataChips')) {
     $('dataChips').addEventListener('click', function (e) {
-      var g = e.target.closest('[data-flood-go]');
-      if (g) { setFilterOpen(false); showFloodArea(g.getAttribute('data-flood-go')); return; }
+      var g = e.target.closest('[data-flood-prov]');
+      if (g) { setFilterOpen(false); showFloodProvince(g.getAttribute('data-flood-prov')); return; }
       var b = e.target.closest('[data-data]');
       if (!b) return;
       var id = b.getAttribute('data-data');
       state.data[id] = !state.data[id];
       saveData();
-      if (id === 'flood' && state.data.flood) ensureFloodData();
       if (views.chat && views.chat.popup) { views.chat.popup.remove(); views.chat.popup = null; }
       eachView(refreshLive);
       renderDataChips();
@@ -2584,7 +2656,7 @@
     var wc = $('liveCard'), fc = $('fcCard');
     if (!wc || !fc) return;
     var W = LIVE.water, R = LIVE.rain;
-    var FA = FLOOD.index || [];
+    var FA = floodReady() ? topFloodProvinces(3) : [];
     wc.hidden = !W.length && !R.length && !FA.length;
     if (!wc.hidden) {
       var over = W.filter(function (o) { return o.lv === 5; }).length, high = W.filter(function (o) { return o.lv === 4; }).length;
@@ -2609,11 +2681,10 @@
         }).join('');
       }
       if (FA.length) {
-        h += '<div class="live-sub">น้ำจากดาวเทียม Sentinel-1 (ทดลอง)</div>' + FA.slice(0, 3).map(function (a) {
-          var t = a.totals || {};
-          return '<button type="button" class="live-row" data-flood-go="' + esc(a.id) + '"><i class="sq" style="background:' + FL_C.flood + '"></i>' +
-            '<span class="lr-name">' + esc(a.name) + ' <small>ภาพ ' + esc(shortDates(a.dates)) + '</small></span>' +
-            '<span class="lr-val">' + fmtKm2(t.flood_high) + ' ตร.กม.</span></button>';
+        h += '<div class="live-sub">น้ำท่วมจากดาวเทียม Sentinel-1 (ทดลอง) · มากสุด</div>' + FA.map(function (r) {
+          return '<button type="button" class="live-row" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '"><i class="sq" style="background:' + FL_C.flood + '"></i>' +
+            '<span class="lr-name">จ.' + esc(r.name) + ' <small>ภาพ ' + esc(shortDates([r.date_min, r.date_max])) + '</small></span>' +
+            '<span class="lr-val">' + fmtKm2(r.flood_high) + ' ตร.กม.</span></button>';
         }).join('');
       }
       h += '<button type="button" class="btn-ghost live-map" data-live="map">ดูบนแผนที่</button>';
