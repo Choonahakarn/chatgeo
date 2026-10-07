@@ -608,3 +608,19 @@ i.tri { display: inline-block; width: 0; height: 0; border-left: 5.5px solid tra
 .rain-legend i { width: 72px; height: 8px; border-radius: 999px; display: inline-block; }
 .rain-legend .sp { flex: 1; }
 .live-row i.tri { justify-self: center; }
+
+/* ---------- ป้ายเตือนเมื่อสรุปยังไม่ใช่ของวันนี้ ---------- */
+.badge.stale { color: var(--conflict, #E5484D); border-color: currentColor; }
+.stale-note {
+  margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.55;
+  background: color-mix(in srgb, #E0A526 16%, transparent); color: var(--ink); border: 1px solid color-mix(in srgb, #E0A526 45%, transparent);
+}
+
+/* ---------- รอบตัวฉัน ---------- */
+.near-btn.busy svg { animation: cg-spin 1s linear infinite; }
+@keyframes cg-spin { to { transform: rotate(360deg); } }
+.me-dot { width: 16px; height: 16px; border-radius: 50%; background: #2F80ED; border: 3px solid #FFFFFF; box-shadow: 0 0 0 6px rgba(47, 128, 237, 0.25); }
+.m-row i.tri { margin-top: 5px; }
+.m-none span { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .near-btn.busy svg { animation: none; } }
+.fp-fine { margin: 2px 8px 6px; font-size: 11.5px; line-height: 1.5; color: var(--muted); }

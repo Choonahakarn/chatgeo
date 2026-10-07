@@ -108,8 +108,10 @@ def parse_rain(j):
             'lat': round(lat, 5), 'lon': round(lon, 5), 'mm': mm, 'mm1': num(r.get('rain_1h')),
             'time': clean(r.get('rainfall_datetime'), 20),
         })
+    # เก็บเฉพาะฝน 1 มม.ขึ้นไป และไม่เกิน 1,200 สถานี ไฟล์สำรองจะได้ไม่ใหญ่
+    out = [o for o in out if o['mm'] >= 1]
     out.sort(key=lambda o: -o['mm'])
-    return out
+    return out[:1200]
 
 
 def parse_fc(j):
