@@ -1,0 +1,89 @@
+# น้ำจากดาวเทียม Sentinel-1: เช็กภาพใหม่วันละ 2 รอบ ถ้ามีจะวิเคราะห์แล้วอัปเดต data/flood/ เอง
+# พื้นที่ที่ตรวจอยู่ใน scripts/flood_areas.json (รายการ "auto")
+# กดรันเองได้ที่แท็บ Actions → "น้ำจากดาวเทียม" → Run workflow
+name: น้ำจากดาวเทียม
+
+on:
+  schedule:
+    - cron: '17 2 * * *'    # 09:17 น. เวลาไทย
+    - cron: '17 14 * * *'   # 21:17 น. เวลาไทย
+  workflow_dispatch:
+    inputs:
+      areas:
+        description: 'ชื่อย่อพื้นที่ คั่นด้วยจุลภาค เช่น ccs,chi (เว้นว่าง = ตามรายการ auto)'
+        required: false
+        default: ''
+      force:
+        description: 'วิเคราะห์ใหม่แม้ไม่มีภาพใหม่'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: flood
+  cancel-in-progress: false
+
+jobs:
+  flood:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      AREAS: ${{ inputs.areas }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      OUT: /tmp/chatgeo-flood
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-flood.txt
+
+      - name: เช็กว่ามีภาพใหม่ไหม
+        id: check
+        run: |
+          pip install -q pystac-client planetary-computer
+          python scripts/flood_s1.py --check --areas "$AREAS" $FORCE
+
+      - name: ติดตั้งไลบรารีวิเคราะห์ภาพ
+        if: steps.check.outputs.todo != ''
+        run: pip install -q -r scripts/requirements-flood.txt
+
+      - name: วิเคราะห์
+        if: steps.check.outputs.todo != ''
+        run: python scripts/flood_s1.py --areas "${{ steps.check.outputs.todo }}" --out "$OUT"
+
+      - name: ลงเว็บ
+        if: steps.check.outputs.todo != ''
+        run: |
+          shopt -s nullglob
+          for f in "$OUT"/*.geojson; do python scripts/add_flood.py "$f"; done
+
+      - name: commit และ push
+        if: steps.check.outputs.todo != ''
+        run: |
+          git config user.name "ChatGeo bot"
+          git config user.email "chatgeo-bot@users.noreply.github.com"
+          git add data/flood
+          if git diff --cached --quiet; then echo "ไม่มีอะไรเปลี่ยน"; exit 0; fi
+          git commit -q -m "น้ำจากดาวเทียม $(TZ=Asia/Bangkok date '+%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            if git pull -q --rebase origin main && git push -q origin HEAD:main; then echo "push แล้ว"; exit 0; fi
+            sleep 15
+          done
+          exit 1
+
+      - name: สั่งให้ GitHub Pages อัปเดตเว็บ
+        if: steps.check.outputs.todo != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" >/dev/null || echo "สั่งไม่ได้ เว็บจะอัปเดตรอบถัดไปที่มีการ push"
+
+      - name: แจ้งถ้ามีพื้นที่ที่พัง
+        if: steps.check.outputs.todo != ''
+        run: |
+          if [ -s "$OUT/errors.txt" ]; then cat "$OUT/errors.txt"; exit 1; fi

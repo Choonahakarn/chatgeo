@@ -2468,7 +2468,8 @@
       '<div class="fl-areas">' + A.map(function (a) {
         return '<button type="button" class="fl-go" data-flood-go="' + esc(a.id) + '">ไปดู ' + esc(a.name) + ' · ' + esc(shortDates(a.dates)) + '</button>';
       }).join('') + '</div>' +
-      '<p class="fp-fine">ต้นแบบทดลองจากภาพเรดาร์ ไม่ใช่ประกาศเตือนภัยทางการ นอกกรอบเส้นประยังไม่ได้ตรวจ</p>';
+      '<p class="fp-fine">ต้นแบบทดลองจากภาพเรดาร์ ไม่ใช่ประกาศเตือนภัยทางการ นอกกรอบเส้นประยังไม่ได้ตรวจ' +
+      (A.some(function (a) { return a.auto; }) ? ' · ระบบเช็กภาพดาวเทียมใหม่วันละ 2 รอบและอัปเดตเอง' : '') + '</p>';
   }
   // จังหวัดที่เกี่ยวกับคำถาม: จังหวัดเดียว ทั้งภาค หรือจังหวัดที่ผู้ใช้อยู่
   function floodTarget(opt) {
@@ -2540,7 +2541,8 @@
     if (r.id === 'flood') {
       if (!FLOOD.index) return r.src + ' · กำลังโหลด';
       if (!FLOOD.index.length) return r.src + ' · ยังไม่มีข้อมูล';
-      return r.src + ' · ภาพ ' + shortDates(FLOOD.index[0].dates) + ' · ' + FLOOD.index.length + ' พื้นที่';
+      var A = FLOOD.index;
+      return r.src + (A.length > 1 ? ' · ภาพล่าสุด ' + shortDates([A[0].date]) + ' · ' + A.length + ' พื้นที่' : ' · ภาพ ' + shortDates(A[0].dates) + ' · 1 พื้นที่');
     }
     var n = (LIVE[r.id] || []).length;
     return r.src + (LIVE.src[r.id] ? ' · ' + (n ? n + ' จุด' : 'ดึงข้อมูลไม่ได้ตอนนี้') : ' · กำลังโหลด');

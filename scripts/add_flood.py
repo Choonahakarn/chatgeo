@@ -221,6 +221,11 @@ def normalize(doc, area_id, name):
         'baseline_years': int(num(props.get('baseline_years')) or (1 if legacy else 0)),
         'has_seasonal': any(f['properties']['kind'] == 'seasonal' for f in out),
         'totals': {k: round(v, 1) for k, v in t.items()}, 'provinces': provs,
+        'scenes': {d: int(n) for d, n in (props.get('scenes') or {}).items()
+                   if isinstance(d, str) and DATE_RE.match(d) and num(n) is not None} if isinstance(props.get('scenes'), dict) else {},
+        'baseline_dates': [d for d in (props.get('baseline_dates') or []) if isinstance(d, str) and DATE_RE.match(d)][:10],
+        'threshold_db': num(props.get('threshold_db')),
+        'auto': bool(props.get('auto')),
         'source': clean(props.get('source') or 'Sentinel-1 RTC (Copernicus/ESA) via Microsoft Planetary Computer', 200),
         'method': clean(props.get('method'), 300),
         'added': dt.datetime.now(dt.timezone(dt.timedelta(hours=7))).isoformat(timespec='minutes'),
@@ -254,6 +259,7 @@ def rebuild_index():
             'id': p['id'], 'file': os.path.basename(path), 'name': p.get('name') or p['id'], 'aoi': p.get('aoi'),
             'date': p['date'], 'dates': p.get('dates') or [p['date']], 'v': p.get('v'),
             'baseline_years': p.get('baseline_years', 0), 'has_seasonal': bool(p.get('has_seasonal')), 'added': p.get('added', ''),
+            'auto': bool(p.get('auto')),
             'totals': p.get('totals') or {}, 'provinces': p.get('provinces') or [],
         })
     areas.sort(key=lambda a: a['date'], reverse=True)

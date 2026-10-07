@@ -1,0 +1,10 @@
+# ไลบรารีสำหรับ scripts/flood_s1.py (GitHub Actions ติดตั้งให้เอง)
+numpy
+scipy
+scikit-image
+rasterio
+shapely
+pyproj
+odc-stac
+pystac-client
+planetary-computer

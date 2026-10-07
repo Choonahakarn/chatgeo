@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-07T15:37+07:00",
+ "updated": "2026-10-07T15:57+07:00",
  "areas": [
   {
    "id": "ccs",
@@ -20,6 +20,7 @@
    "baseline_years": 3,
    "has_seasonal": true,
    "added": "2026-10-07T15:37+07:00",
+   "auto": false,
    "totals": {
     "flood_high": 236.9,
     "flood_low": 225.2,
