@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-07T15:25+07:00",
+ "updated": "2026-10-07T15:37+07:00",
  "areas": [
   {
    "id": "ccs",
@@ -16,64 +16,64 @@
     "2026-10-02",
     "2026-10-01"
    ],
-   "v": 2,
-   "baseline_years": 1,
-   "has_seasonal": false,
-   "added": "2026-10-07T15:21+07:00",
+   "v": 3,
+   "baseline_years": 3,
+   "has_seasonal": true,
+   "added": "2026-10-07T15:37+07:00",
    "totals": {
-    "flood_high": 197.4,
-    "flood_low": 220.2,
-    "seasonal": 0.0
+    "flood_high": 236.9,
+    "flood_low": 225.2,
+    "seasonal": 283.3
    },
    "provinces": [
     {
-     "name": "ปราจีนบุรี",
-     "zone": "th-e",
-     "flood_high": 98.4,
-     "flood_low": 32.2,
-     "seasonal": 0.0
-    },
-    {
      "name": "ฉะเชิงเทรา",
      "zone": "th-e",
-     "flood_high": 85.7,
-     "flood_low": 127.7,
-     "seasonal": 0.0
+     "flood_high": 131.1,
+     "flood_low": 129.1,
+     "seasonal": 91.3
     },
     {
-     "name": "ชลบุรี",
+     "name": "ปราจีนบุรี",
      "zone": "th-e",
-     "flood_high": 6.2,
-     "flood_low": 14.2,
-     "seasonal": 0.0
+     "flood_high": 92.1,
+     "flood_low": 34.9,
+     "seasonal": 149.0
     },
     {
      "name": "นครนายก",
      "zone": "th-c",
-     "flood_high": 3.5,
-     "flood_low": 15.3,
-     "seasonal": 0.0
+     "flood_high": 6.2,
+     "flood_low": 14.9,
+     "seasonal": 7.3
+    },
+    {
+     "name": "ชลบุรี",
+     "zone": "th-e",
+     "flood_high": 4.5,
+     "flood_low": 16.1,
+     "seasonal": 11.1
     },
     {
      "name": "กรุงเทพมหานคร",
      "zone": "th-c",
-     "flood_high": 3.5,
+     "flood_high": 1.6,
      "flood_low": 17.6,
-     "seasonal": 0.0
+     "seasonal": 6.8
     },
     {
      "name": "ปทุมธานี",
      "zone": "th-c",
-     "flood_high": 0.2,
-     "flood_low": 8.1,
-     "seasonal": 0.0
+     "flood_high": 1.4,
+     "flood_low": 6.3,
+     "seasonal": 3.0
     },
     {
      "name": "สมุทรปราการ",
      "zone": "th-c",
      "flood_high": 0.0,
-     "flood_low": 3.7,
-     "seasonal": 0.0
+     "flood_low": 5.3,
+     "seasonal": 12.8
     }
    ]
   }
