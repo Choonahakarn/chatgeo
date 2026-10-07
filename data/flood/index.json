@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-07T15:57+07:00",
+ "updated": "2026-10-07T16:28+07:00",
  "areas": [
   {
    "id": "ccs",
@@ -19,8 +19,8 @@
    "v": 3,
    "baseline_years": 3,
    "has_seasonal": true,
-   "added": "2026-10-07T15:37+07:00",
-   "auto": false,
+   "added": "2026-10-07T16:28+07:00",
+   "auto": true,
    "totals": {
     "flood_high": 236.9,
     "flood_low": 225.2,
@@ -75,6 +75,97 @@
      "flood_high": 0.0,
      "flood_low": 5.3,
      "seasonal": 12.8
+    }
+   ]
+  },
+  {
+   "id": "chi",
+   "file": "chi.geojson",
+   "name": "ลุ่มน้ำชีตอนล่าง (ร้อยเอ็ด–ยโสธร)",
+   "aoi": [
+    102.9,
+    15.5,
+    104.6,
+    16.5
+   ],
+   "date": "2026-10-02",
+   "dates": [
+    "2026-10-02",
+    "2026-09-29"
+   ],
+   "v": 3,
+   "baseline_years": 3,
+   "has_seasonal": true,
+   "added": "2026-10-07T16:28+07:00",
+   "auto": true,
+   "totals": {
+    "flood_high": 0.0,
+    "flood_low": 2.7,
+    "seasonal": 47.0
+   },
+   "provinces": [
+    {
+     "name": "กาฬสินธุ์",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.8,
+     "seasonal": 3.3
+    },
+    {
+     "name": "ร้อยเอ็ด",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.7,
+     "seasonal": 16.7
+    },
+    {
+     "name": "มหาสารคาม",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.6,
+     "seasonal": 12.5
+    },
+    {
+     "name": "ยโสธร",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.4,
+     "seasonal": 10.6
+    },
+    {
+     "name": "อุบลราชธานี",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.1,
+     "seasonal": 0.1
+    },
+    {
+     "name": "มุกดาหาร",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.0,
+     "seasonal": 1.7
+    },
+    {
+     "name": "อำนาจเจริญ",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.0,
+     "seasonal": 1.5
+    },
+    {
+     "name": "บุรีรัมย์",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.0,
+     "seasonal": 0.3
+    },
+    {
+     "name": "ขอนแก่น",
+     "zone": "th-ne",
+     "flood_high": 0.0,
+     "flood_low": 0.0,
+     "seasonal": 0.1
     }
    ]
   }
