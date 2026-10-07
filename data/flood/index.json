@@ -1,0 +1,81 @@
+{
+ "updated": "2026-10-07T15:25+07:00",
+ "areas": [
+  {
+   "id": "ccs",
+   "file": "ccs.geojson",
+   "name": "ฉะเชิงเทรา–ปราจีนบุรี (ลุ่มน้ำบางปะกง)",
+   "aoi": [
+    100.8,
+    13.4,
+    101.6,
+    14.0
+   ],
+   "date": "2026-10-02",
+   "dates": [
+    "2026-10-02",
+    "2026-10-01"
+   ],
+   "v": 2,
+   "baseline_years": 1,
+   "has_seasonal": false,
+   "added": "2026-10-07T15:21+07:00",
+   "totals": {
+    "flood_high": 197.4,
+    "flood_low": 220.2,
+    "seasonal": 0.0
+   },
+   "provinces": [
+    {
+     "name": "ปราจีนบุรี",
+     "zone": "th-e",
+     "flood_high": 98.4,
+     "flood_low": 32.2,
+     "seasonal": 0.0
+    },
+    {
+     "name": "ฉะเชิงเทรา",
+     "zone": "th-e",
+     "flood_high": 85.7,
+     "flood_low": 127.7,
+     "seasonal": 0.0
+    },
+    {
+     "name": "ชลบุรี",
+     "zone": "th-e",
+     "flood_high": 6.2,
+     "flood_low": 14.2,
+     "seasonal": 0.0
+    },
+    {
+     "name": "นครนายก",
+     "zone": "th-c",
+     "flood_high": 3.5,
+     "flood_low": 15.3,
+     "seasonal": 0.0
+    },
+    {
+     "name": "กรุงเทพมหานคร",
+     "zone": "th-c",
+     "flood_high": 3.5,
+     "flood_low": 17.6,
+     "seasonal": 0.0
+    },
+    {
+     "name": "ปทุมธานี",
+     "zone": "th-c",
+     "flood_high": 0.2,
+     "flood_low": 8.1,
+     "seasonal": 0.0
+    },
+    {
+     "name": "สมุทรปราการ",
+     "zone": "th-c",
+     "flood_high": 0.0,
+     "flood_low": 3.7,
+     "seasonal": 0.0
+    }
+   ]
+  }
+ ]
+}

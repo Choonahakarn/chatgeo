@@ -19,21 +19,32 @@
 | ระดับน้ำในแม่น้ำ (สามเหลี่ยมสีตามระดับ: ล้นตลิ่ง น้ำมาก ปกติ น้อย น้อยวิกฤต) | คลังข้อมูลน้ำแห่งชาติ ThaiWater (สสน.) | ดึงสดทุกครั้งที่เปิดเว็บ |
 | ฝนสะสม 24 ชม. (วงกลมสีฟ้า ยิ่งใหญ่ยิ่งตกหนัก) | ThaiWater (สสน.) | ดึงสดทุกครั้งที่เปิดเว็บ |
 | พยากรณ์อากาศ 3 วัน ของเมืองหลักแต่ละภาค | Open-Meteo (CC BY 4.0) | ดึงสดทุกครั้งที่เปิดเว็บ |
+| น้ำจากดาวเทียม (ทดลอง): แดง = น่าจะท่วม, แดงจาง = ไม่แน่ใจ, ฟ้าอ่อน = มีน้ำเกือบทุกปี, เส้นประ = กรอบที่ตรวจ | ChatGeo ประมวลผลจาก Sentinel-1 (ดูหัวข้อถัดไป) | ตามรอบที่รันโน้ตบุ๊ก |
 | ภาพดาวเทียม | Sentinel-2 cloudless 2016 โดย EOX (CC BY 4.0) | ภาพพื้นหลังรายปี |
 
 ถ้าดึงสดไม่ได้ เว็บจะใช้ข้อมูลสำรอง `data/live.json` ที่งานเช้าเก็บไว้แทน และบอกบนหน้าว่าเป็นข้อมูลสำรอง
 ข้อมูลน้ำของ ThaiWater ใช้ API สาธารณะที่หน้าเว็บ thaiwater.net ใช้อยู่ ถ้าจะเปิดให้คนใช้จำนวนมาก ควรขอใช้ API อย่างเป็นทางการกับ สสน. ก่อน
 
-## ต้นแบบตรวจน้ำท่วมจากดาวเทียม (ลุ่มน้ำชี)
+## น้ำจากดาวเทียม Sentinel-1 (ต้นแบบ)
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Choonahakarn/chatgeo/blob/main/notebooks/flood_s1_chi.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Choonahakarn/chatgeo/blob/main/notebooks/flood_s1.ipynb)
 
-โน้ตบุ๊ก `notebooks/flood_s1_chi.ipynb` ใช้ภาพเรดาร์ Sentinel-1 (ทะลุเมฆได้) หาพื้นที่น้ำท่วมล่าสุดในลุ่มน้ำชีตอนล่าง (ร้อยเอ็ด ยโสธร มหาสารคาม)
+โน้ตบุ๊ก `notebooks/flood_s1.ipynb` ใช้ภาพเรดาร์ Sentinel-1 (ทะลุเมฆได้) แยกน้ำในพื้นที่ที่เลือกเป็น 2 แบบ
 
-- ตัดแหล่งน้ำถาวรออกด้วยข้อมูล JRC และตัดเงาภูเขาด้วยความชันจาก Copernicus DEM
-- ได้ไฟล์ GeoJSON ภาพตัวอย่าง แผนที่ซูมได้ และพื้นที่น้ำท่วมรายจังหวัด พร้อมเทียบกับสถานีวัดน้ำ ThaiWater
+- **น้ำผิดปกติ (น่าจะท่วม)** ตอนนี้มีน้ำ แต่ช่วงเดียวกันของ 3 ปีก่อนส่วนใหญ่ไม่มี แบ่งความมั่นใจเป็นสูง (ผืนตั้งแต่ 1 ตร.กม. หรือห่างผืนใหญ่ไม่เกิน 300 ม.) กับต่ำ (ปื้นเล็กโดดๆ มักเป็นนาที่เพิ่งปล่อยน้ำหรือบ่อ)
+- **น้ำที่มีเกือบทุกปีช่วงนี้** เช่น นาข้าวขังน้ำ ทุ่งรับน้ำ อาจท่วมจริงแต่ท่วมเป็นประจำ
+- ตัดแหล่งน้ำถาวรด้วยข้อมูล JRC และตัดเงาภูเขาด้วยความชันจาก Copernicus DEM
+- เลือกพื้นที่ได้จาก `PRESETS` ในโน้ตบุ๊ก (ฉะเชิงเทรา–ปราจีนบุรี ลุ่มน้ำชี อยุธยา สุโขทัย อุบลฯ) หรือกำหนดกรอบเอง
 - รันฟรีบน Google Colab ไม่ต้องมีบัญชีหรือ API key (ข้อมูลเปิดจาก Microsoft Planetary Computer)
-- เป็นต้นแบบเพื่อทดลอง ยังไม่ใช่ข้อมูลเตือนภัยทางการ
+- เป็นต้นแบบเพื่อทดลอง ไม่ใช่ข้อมูลเตือนภัยทางการ ควรดูคู่กับ GISTDA และ ThaiWater
+
+**เอาผลขึ้นแผนที่:** ดาวน์โหลดไฟล์ `flood_s1_<พื้นที่>_<วันที่>.geojson` จาก Colab วางไว้ในโฟลเดอร์นี้ แล้วรัน
+
+```
+python3 scripts/add_flood.py flood_s1_ccs_2026-10-02.geojson
+```
+
+สคริปต์จะทำความสะอาดไฟล์ สรุปรายจังหวัด แล้วเขียน `data/flood/<พื้นที่>.geojson` กับ `data/flood/index.json` (พื้นที่ชื่อเดียวกันจะถูกแทนที่ด้วยผลใหม่) จากนั้นรัน `publish.command` เว็บจะแสดงผลบนแผนที่ ในแชท (เช่น "ฉะเชิงเทราตอนนี้เป็นยังไง" หรือ "ดาวเทียมเห็นน้ำท่วมที่ไหนบ้าง") และในการ์ดหน้าสรุป
 
 ## ข่าวเช้าขึ้นเว็บได้อย่างไร
 
@@ -122,15 +133,17 @@ chatgeo-prototype/
 │   ├── latest.json       ข่าวเช้าล่าสุด (งานอัตโนมัติเขียนทุกเช้า)
 │   ├── briefs/           ข่าวเช้าย้อนหลัง 30 วัน วันละไฟล์
 │   ├── live.json         ข้อมูลน้ำ ฝน พยากรณ์สำรอง (งานเช้าเขียน)
+│   ├── flood/            น้ำจากดาวเทียม: index.json + ไฟล์ละพื้นที่ (เขียนด้วย scripts/add_flood.py)
 │   ├── th-regions.js     ขอบเขต 6 ภาค 77 จังหวัด และเส้นแบ่งจังหวัดของไทย (Natural Earth)
 │   ├── data.js           พื้นที่ ป้ายชื่อไทย หมวดข่าว และข่าวชุดสำรอง
 │   ├── geo.js            แผนที่โลกสำรองแบบออฟไลน์ (Natural Earth) โหลดเฉพาะตอนต้องใช้
 │   └── countries.js      เส้นขอบประเทศที่ใช้ไฮไลต์ประเทศที่เลือก
 ├── notebooks/
-│   └── flood_s1_chi.ipynb  ต้นแบบตรวจน้ำท่วมจาก Sentinel-1 (เปิดใน Colab)
+│   └── flood_s1.ipynb    ตรวจน้ำท่วมจาก Sentinel-1 (เปิดใน Colab)
 ├── scripts/
 │   ├── publish_brief.py  ตรวจข่าวแล้วเขียนลง data/ (งานอัตโนมัติเรียกใช้)
-│   └── fetch_public_data.py  เก็บข้อมูลน้ำ ฝน พยากรณ์สำรองลง data/live.json
+│   ├── fetch_public_data.py  เก็บข้อมูลน้ำ ฝน พยากรณ์สำรองลง data/live.json
+│   └── add_flood.py      เอาผลตรวจน้ำจากดาวเทียมขึ้นแผนที่
 ├── ROUTINE.md            คำสั่งของงานสรุปข่าวเช้า
 ├── og.png                ภาพตัวอย่างตอนแชร์ลิงก์ใน LINE/Facebook
 ├── favicon.svg           ไอคอนแท็บเบราว์เซอร์
@@ -146,7 +159,7 @@ chatgeo-prototype/
 
 1. **AI ในแชทบนเว็บ**: ต่อโมเดลภาษาผ่านเซิร์ฟเวอร์เล็กๆ (เช่น Cloudflare Workers) เพื่อซ่อน API key ไม่ให้คนอื่นเห็น
 2. **เฝ้าพื้นที่ + แจ้งเตือน LINE**: ให้ผู้ใช้เลือกพื้นที่ที่สนใจ แล้วส่งสรุปเข้า LINE ทุกเช้า
-3. **ขอบเขตจังหวัดไทย**: เพิ่มไฟล์ขอบเขตจังหวัด เพื่อไฮไลต์ภาคและจังหวัดได้เหมือนระดับประเทศ
+3. **น้ำจากดาวเทียมแบบอัตโนมัติ**: ให้รันโน้ตบุ๊กตามรอบภาพ Sentinel-1 ใหม่ แล้วลงเว็บเอง ไม่ต้องกดใน Colab
 4. **โดเมนของตัวเอง**: ตั้งค่า Custom domain ในหน้า GitHub Pages
 
 ---
@@ -158,6 +171,7 @@ chatgeo-prototype/
 - ระดับน้ำและฝน: คลังข้อมูลน้ำแห่งชาติ ThaiWater สถาบันสารสนเทศทรัพยากรน้ำ (สสน.) https://www.thaiwater.net
 - พยากรณ์อากาศ: Open-Meteo.com (CC BY 4.0)
 - ภาพดาวเทียม: Sentinel-2 cloudless 2016 https://s2maps.eu โดย EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016) (CC BY 4.0)
+- น้ำจากดาวเทียม (ทดลอง): ChatGeo ประมวลผลจาก Sentinel-1 RTC ผ่าน Microsoft Planetary Computer (Contains modified Copernicus Sentinel data) · แหล่งน้ำถาวร: JRC Global Surface Water (EC JRC/Google) · ความสูงพื้นที่: Copernicus DEM GLO-30 (© DLR e.V. 2010–2014 และ © Airbus Defence and Space GmbH 2014–2018 provided under COPERNICUS by the European Union and ESA; all rights reserved)
 - ขอบเขตภาค จังหวัด แผนที่สำรอง และเส้นขอบประเทศ: Natural Earth (public domain)
 - ไลบรารีแผนที่: MapLibre GL JS (BSD-3-Clause) ดูใน `vendor/MAPLIBRE-LICENSE.txt`
 - ฟอนต์: Anuphan และ IBM Plex Mono จาก Google Fonts
