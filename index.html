@@ -37,6 +37,10 @@
     </nav>
     <span class="badge" id="badgeText">ต้นแบบ</span>
     <div class="top-actions">
+      <button type="button" id="btnHelp" class="icon-btn" title="วิธีใช้งานเว็บนี้" aria-haspopup="dialog">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 3.9"/><path d="M12 17h.01"/></svg>
+        <span class="help-text">วิธีใช้</span>
+      </button>
       <button type="button" id="btnGlobe" class="icon-btn" aria-pressed="false" title="สลับเป็นลูกโลก 3 มิติ">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.4 3.8 5.4 3.8 9s-1.3 6.6-3.8 9"/><path d="M12 3c-2.5 2.4-3.8 5.4-3.8 9s1.3 6.6 3.8 9"/></svg>
         <span id="globeText">ลูกโลก</span>
@@ -212,6 +216,100 @@
         <button type="button" class="pal-x" data-cc-close aria-label="ปิด"><kbd>Esc</kbd><svg class="pal-x-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
       </div>
       <div class="cc-body" id="ccBody"></div>
+    </div>
+  </div>
+
+  <div class="palette cc-modal help-modal" id="helpModal" hidden>
+    <div class="pal-backdrop" data-help-close></div>
+    <div class="pal-dialog cc-dialog help-dialog" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <div class="cc-head">
+        <h2 id="helpTitle">วิธีใช้งาน ChatGeo</h2>
+        <button type="button" class="pal-x" data-help-close aria-label="ปิด"><kbd>Esc</kbd><svg class="pal-x-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+      </div>
+      <div class="cc-body help-body">
+        <nav class="help-toc" aria-label="หัวข้อ">
+          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
+        </nav>
+
+        <section id="h-start">
+          <h3>ChatGeo คืออะไร</h3>
+          <p>แผนที่ประเทศไทยที่รวม <b>ข่าวเช้า</b> และ <b>สถานการณ์น้ำ ฝน อากาศ</b> ไว้ในที่เดียว ถามเป็นภาษาไทยได้เหมือนคุยกับคน เช่น "หาดใหญ่น้ำท่วมไหม" แชทจะหยิบข้อมูลจริงที่เกี่ยวข้องมาตอบ และขยับแผนที่ไปให้ดู</p>
+          <p>ลองเริ่มจากปุ่ม <b>รอบตัวฉัน</b> บนแผนที่ ระบบจะบอกระดับน้ำ ฝน พยากรณ์ และความสูงพื้นดินใกล้ตัวคุณ (ตำแหน่งใช้ในเครื่องคุณเท่านั้น ไม่ถูกส่งไปที่ไหน)</p>
+        </section>
+
+        <section id="h-map">
+          <h3>แผนที่</h3>
+          <ul>
+            <li><b>เลือกพื้นที่</b> กดภาคบนแผนที่ หรือใช้แถบด้านบน (เอเชีย › อาเซียน › ไทย › ภาค) หรือกดปุ่ม <kbd>/</kbd> เพื่อค้นชื่อจังหวัด</li>
+            <li><b>ซูม</b> ด้วยปุ่ม + − หรือหมุนเมาส์ ยิ่งซูมเข้า ยิ่งเห็นสถานีและรายละเอียดมาก</li>
+            <li><b>กดจุดบนแผนที่</b> (สามเหลี่ยมระดับน้ำ วงกลมฝน หมุดกล้อง ปื้นน้ำ) เพื่อดูรายละเอียดและแหล่งที่มา</li>
+            <li><b>ลูกโลก</b> และ <b>ธีมมืด/สว่าง</b> อยู่มุมขวาบน</li>
+          </ul>
+        </section>
+
+        <section id="h-layers">
+          <h3>ชั้นข้อมูล (ปุ่ม "ชั้นข้อมูล" มุมขวาบนของแผนที่)</h3>
+          <dl class="help-dl">
+            <dt><i class="tri" style="border-top-color:#E5484D"></i>ระดับน้ำในแม่น้ำ</dt><dd>สามเหลี่ยมสีตามระดับ แดง = ล้นตลิ่ง ส้ม = น้ำมาก เขียว = ปกติ จากสถานีวัดน้ำของ ThaiWater</dd>
+            <dt><i class="cc-dot" style="background:#4FA3FF"></i>ฝนสะสม 24 ชม.</dt><dd>วงกลมยิ่งใหญ่ยิ่งตกหนัก วัดจริงจากสถานี</dd>
+            <dt><i class="cc-dot" style="background:#FFC500"></i>เรดาร์ฝน</dt><dd>กลุ่มฝนที่กำลังตก สีฟ้า = ฝนเบา เหลือง ส้ม แดง = ฝนหนัก กดปุ่มเล่นที่มุมซ้ายล่างเพื่อดูกลุ่มฝนเคลื่อนที่ย้อนหลัง 2 ชม.</dd>
+            <dt><i class="cc-dot" style="background:#C9D5E6"></i>เมฆจากดาวเทียม</dt><dd>ภาพอินฟราเรดจากดาวเทียม Himawari-9 เมฆหนาและสูงจะเห็นเป็นสีขาว ภาพช้ากว่าจริงราว 1 ชม.</dd>
+            <dt><i class="cc-dot" style="background:#F0EB96"></i>ลม</dt><dd>เส้นเคลื่อนตามทิศที่ลมพัดไป สีฟ้า = ลมเบา เหลืองถึงแดง = ลมแรง อัปเดตทุกชั่วโมง</dd>
+            <dt><i class="sq" style="background:#E5484D"></i>น้ำจากดาวเทียม (ทดลอง)</dt><dd>ซูมออกเห็นสีรายจังหวัด ซูมเข้าเห็นปื้นน้ำ แดง = น่าจะท่วม แดงจาง = ไม่แน่ใจ ฟ้า = มีน้ำเกือบทุกปี ป้ายมุมซ้ายล่างบอกว่าภาพเก่ากี่วัน และ ▲▼ บอกว่าน้ำเพิ่มหรือลดจากภาพก่อน</dd>
+            <dt><i class="cc-dot" style="background:#2FA36B"></i>กล้อง CCTV + AI (ทดลอง)</dt><dd>หมุดรูปกล้อง สีตามสิ่งที่ AI เห็น กดหมุดดูภาพทุกกล้อง กดภาพเพื่อดูภาพใหญ่และประวัติ 48 ชม. หรือกด <b>เปิดจอรวม</b> ดูทุกกล้องพร้อมกัน</dd>
+            <dt><i class="cc-dot" style="background:#9AA8BC"></i>ความสูงพื้นดิน</dt><dd>เปิดแล้วกดจุดใดก็ได้ จะบอกความสูงจากระดับน้ำทะเล และบอกว่าเป็นที่ลุ่มหรือที่ดอนเมื่อเทียบกับรอบๆ 1 กม. ดูแบบ 3 มิติได้จากป๊อปอัป</dd>
+            <dt><i class="cc-dot" style="background:#3A6B4C"></i>ภาพดาวเทียม</dt><dd>ภาพพื้นผิวโลกจริงเป็นพื้นหลัง</dd>
+          </dl>
+        </section>
+
+        <section id="h-chat">
+          <h3>ถามแชท (กดตัวอย่างเพื่อลองถามได้เลย)</h3>
+          <div class="help-qs">
+            <button type="button" class="q-chip" data-help-q="รอบตัวฉันตอนนี้เป็นยังไง">รอบตัวฉันตอนนี้เป็นยังไง</button>
+            <button type="button" class="q-chip" data-help-q="ร้อยเอ็ดตอนนี้เป็นยังไง">ร้อยเอ็ดตอนนี้เป็นยังไง</button>
+            <button type="button" class="q-chip" data-help-q="ตอนนี้ฝนตกตรงไหน">ตอนนี้ฝนตกตรงไหน</button>
+            <button type="button" class="q-chip" data-help-q="ดาวเทียมเห็นน้ำท่วมที่ไหนบ้าง">ดาวเทียมเห็นน้ำท่วมที่ไหนบ้าง</button>
+            <button type="button" class="q-chip" data-help-q="หาดใหญ่น้ำท่วมไหม">หาดใหญ่น้ำท่วมไหม</button>
+            <button type="button" class="q-chip" data-help-q="กล้องไหนเห็นน้ำท่วมบ้าง">กล้องไหนเห็นน้ำท่วมบ้าง</button>
+            <button type="button" class="q-chip" data-help-q="เขื่อนภูมิพลเป็นยังไง">เขื่อนภูมิพลเป็นยังไง</button>
+            <button type="button" class="q-chip" data-help-q="ความสูงพื้นดิน">ความสูงพื้นดิน</button>
+            <button type="button" class="q-chip" data-help-q="ข่าวเศรษฐกิจและตลาดล่าสุด">ข่าวเศรษฐกิจและตลาดล่าสุด</button>
+          </div>
+          <p>แชทตอบจากข้อมูลที่บันทึกไว้จริงเท่านั้น (ข่าวเช้านี้ สถานี ดาวเทียม กล้อง) และบอกเวลาของข้อมูลทุกครั้ง ถ้าไม่มีข้อมูลจะบอกตรงๆ</p>
+        </section>
+
+        <section id="h-brief">
+          <h3>หน้า "สรุปเช้านี้"</h3>
+          <p>ข่าวเช้าที่ Claude สรุปเป็นภาษาไทย แบ่งตาม 6 ภาค ข่าว AI โลก และข่าวต่างประเทศที่กระทบไทย กดฟังเสียงอ่านได้ ด้านขวามีการ์ดน้ำ ฝน พยากรณ์ และกล้องที่ AI เห็นน้ำ ทุกข่าวมีลิงก์ไปข่าวต้นฉบับ</p>
+        </section>
+
+        <section id="h-fresh">
+          <h3>ข้อมูลใหม่แค่ไหน</h3>
+          <table class="help-table">
+            <thead><tr><th>ข้อมูล</th><th>อัปเดต</th></tr></thead>
+            <tbody>
+              <tr><td>ข่าวเช้า</td><td>ทุกเช้าราว 04:30 น.</td></tr>
+              <tr><td>ระดับน้ำ ฝน 24 ชม.</td><td>ดึงสดทุกครั้งที่เปิดเว็บ</td></tr>
+              <tr><td>เรดาร์ฝน</td><td>ทุก 10 นาที</td></tr>
+              <tr><td>ลม และกล้อง CCTV + AI</td><td>ทุกชั่วโมง</td></tr>
+              <tr><td>เมฆจากดาวเทียม</td><td>ทุก 10 นาที (ช้ากว่าจริงราว 1 ชม.)</td></tr>
+              <tr><td>น้ำจากดาวเทียม Sentinel-1</td><td>เช็กภาพใหม่วันละ 2 รอบ ภาพมาช้ากว่าจริง 5–7 วัน</td></tr>
+              <tr><td>พยากรณ์ 3 วัน</td><td>ดึงสดทุกครั้งที่เปิดเว็บ</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="h-limits">
+          <h3>ข้อจำกัดและความเป็นส่วนตัว</h3>
+          <ul>
+            <li>ChatGeo เป็น<b>ต้นแบบ ไม่ใช่ประกาศเตือนภัยทางการ</b> เมื่อมีภัยให้ติดตามประกาศของ ปภ. กรมอุตุนิยมวิทยา และหน่วยงานในพื้นที่</li>
+            <li>AI ในระบบเป็นโมเดลขนาดเล็ก อาจผิดได้ ดูภาพจริงประกอบเสมอ</li>
+            <li>กล้อง CCTV: AI ดูแค่สภาพน้ำ ถนน อากาศ และนับรถ ไม่จดจำใบหน้า ไม่อ่านทะเบียน ไม่ติดตามคน</li>
+            <li>ความสูงพื้นดินมาจากแผนที่ความละเอียดราว 30 ม. ไม่ใช่ค่ารังวัด</li>
+            <li>ข้อมูลทุกชิ้นมาจากหน่วยงานเจ้าของ ดูรายชื่อแหล่งที่มาได้ที่มุมขวาล่างของแผนที่ และในแต่ละป๊อปอัป</li>
+          </ul>
+        </section>
+      </div>
     </div>
   </div>
 

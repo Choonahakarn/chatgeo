@@ -56,7 +56,7 @@
     return x.getImageData(0, 0, w, h);
   }
   function readDataPrefs() {
-    var d = { water: true, rain: true, fc: true, sat: false, flood: true, cctv: true };
+    var d = { water: true, rain: true, fc: true, sat: false, flood: true, cctv: true, radar: true, cloud: false, wind: !reduceMotion, terrain: false };
     try {
       var j = JSON.parse(localStorage.getItem('cg-data') || 'null');
       if (j) Object.keys(d).forEach(function (k) { if (typeof j[k] === 'boolean') d[k] = j[k]; });
@@ -414,6 +414,7 @@
       var t = e.originalEvent && e.originalEvent.target;
       if (t && t.closest && t.closest('.maplibregl-marker, .maplibregl-popup')) return;
       if (topLayersAt(e.point).length) return;
+      if (kind === 'chat' && state.data.terrain) return; // เปิดความสูงพื้นดินอยู่: กดแผนที่เพื่อดูความสูงแทนการเปลี่ยนพื้นที่
       var f = e.features && e.features[0];
       if (f && f.properties.id !== state.place) goTo(f.properties.id);
     });
@@ -455,6 +456,14 @@
       });
       map.on('mouseenter', 'cg-flood-pf', function () { map.getCanvas().style.cursor = 'pointer'; });
       map.on('moveend', function () { updateFloodTiles(v); });
+      // ความสูงพื้นดิน: กดจุดว่างบนแผนที่ (ไม่โดนหมุดหรือสถานี)
+      map.on('click', function (e) {
+        if (!state.data.terrain) return;
+        var t = e.originalEvent && e.originalEvent.target;
+        if (t && t.closest && t.closest('.maplibregl-marker, .maplibregl-popup')) return;
+        if (topLayersAt(e.point).length) return;
+        openElevationPopup(v, e.lngLat);
+      });
     }
 
     // ป้ายชื่อภาษาไทย
@@ -1115,6 +1124,7 @@
     var r = { q: t, place: place, topic: topic, impact: impact, list: [], missing: '', prefix: '', label: '', sat: /ดาวเทียม|satellite/i.test(t) };
     // กล้อง CCTV: ถามถึงกล้องตรงๆ หรือเอ่ยชื่อจุดที่มีกล้อง (เช่น หาดใหญ่ เขื่อนภูมิพล)
     r.camQ = CC_RE.test(t);
+    r.wx = RADAR_RE.test(t) ? 'radar' : ELE_RE.test(t) ? 'terrain' : WIND_RE.test(t) ? 'wind' : HELP_RE.test(t) ? 'help' : '';
     r.cam = ccMatch(t);
 
     var pool = D.STORIES.slice().sort(byRank), scope = null;
@@ -1161,6 +1171,11 @@
   // ขยับแผนที่ไปยังข่าวที่ใช้ตอบ: เรื่องเดียวเปิดหมุด หลายเรื่องซูมให้เห็นทั้งหมด
   function showQueryOnMap(r) {
     var list = r.list;
+    if (r.wx) {
+      if (r.wx === 'help') setTimeout(openHelp, 50); else wxOn(r.wx);
+      if (r.place && r.place.id !== HOME) goTo(r.place.id);
+      return;
+    }
     if (ccFirst(r) && ccQueryOnMap(r)) return;
     if (r.topic === 'flood' && r.sat && (!r.place || r.place.id === HOME) && floodReady()) {
       var tp = topFloodProvinces(1)[0];
@@ -1285,6 +1300,7 @@
           (topFloodProvinces(1).length ? 'นี่คือจังหวัดที่น่าจะมีน้ำท่วมมากที่สุดตอนนี้' : 'ภาพล่าสุดยังไม่พบน้ำท่วมผิดปกติที่ชัดเจน') +
           (list.length ? ' ส่วนข่าวน้ำท่วมเช้านี้มี ' + list.length + ' เรื่อง พิมพ์ว่า "น้ำท่วม" เพื่อดูข่าว' : '') };
     }
+    if (r.wx) return wxAnswer(r);
     if (ccFirst(r)) return cctvAnswer(r);
     var loc = r.place && isLocalPlace(r.place) && (!r.topic || r.topic === 'flood') ? localHtml({ place: r.place }) : '';
     if (!loc && r.topic === 'flood' && (!r.place || r.place.id === HOME)) loc = floodSummaryHtml();
@@ -2330,6 +2346,10 @@
     updateFloodTiles(v);
     updateFloodChip(v);
     updateCctvMarkers(v);
+    updateRadar(v);
+    updateCloud(v);
+    updateTerrain(v);
+    updateWind(v);
   }
   // ป้ายพยากรณ์วันนี้ที่เมืองตัวแทนของแต่ละภาค
   function buildFcMarkers(v) {
@@ -2461,17 +2481,7 @@
     if (!v.flAge) {
       v.flAge = document.createElement('div');
       v.flAge.className = 'fl-age';
-      v.el.appendChild(v.flAge);
-      // ยกป้ายให้อยู่เหนือแถบแหล่งที่มาของแผนที่ (แถบนี้สูงไม่เท่ากันตามขนาดจอ และย่อ/ขยายได้)
-      var at = v.el.querySelector('.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib');
-      var lift = function () {
-        var r = at && at.getBoundingClientRect(), box = v.el.getBoundingClientRect();
-        // ถ้าแถบกว้างมาถึงฝั่งซ้าย ให้ยกขึ้นเหนือแถบ ไม่งั้นวางชิดล่างตามปกติ
-        v.flAge.style.bottom = (r && r.height && r.left - box.left < v.flAge.offsetWidth + 24 ? Math.round(box.bottom - r.top) + 6 : 10) + 'px';
-      };
-      v.flAgeLift = lift;
-      if (at && window.ResizeObserver) new ResizeObserver(lift).observe(at);
-      window.addEventListener('resize', lift);
+      mapStack(v).appendChild(v.flAge);
     }
     var show = !!(state.data.flood && floodReady());
     v.flAge.hidden = !show;
@@ -2482,7 +2492,25 @@
     var age = ageText(I.date_max);
     v.flAge.textContent = 'น้ำจากดาวเทียม · ภาพ' + (age ? (n > 1 ? 'เมื่อ ' : '') + age : '') + ' (' + shortDates([I.date_min, I.date_max].filter(Boolean)) + ')';
     v.flAge.title = floodOldNote(I.date_max) || 'ภาพเรดาร์ Sentinel-1 ล่าสุดที่ประมวลผลแล้ว';
-    v.flAgeLift();
+    v.stackLift();
+  }
+  // มุมซ้ายล่างของแผนที่: ป้ายอายุภาพดาวเทียม + แถบเวลาเรดาร์ ซ้อนกันเป็นกลุ่มเดียว
+  function mapStack(v) {
+    if (v.stack) return v.stack;
+    var st = v.stack = document.createElement('div');
+    st.className = 'map-stack';
+    v.el.appendChild(st);
+    // ยกกลุ่มให้อยู่เหนือแถบแหล่งที่มาของแผนที่ (แถบนี้สูงไม่เท่ากันตามขนาดจอ และย่อ/ขยายได้)
+    var at = v.el.querySelector('.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib');
+    var lift = function () {
+      var r = at && at.getBoundingClientRect(), box = v.el.getBoundingClientRect();
+      // ถ้าแถบกว้างมาถึงฝั่งซ้าย ให้ยกขึ้นเหนือแถบ ไม่งั้นวางชิดล่างตามปกติ
+      st.style.bottom = (r && r.height && r.left - box.left < st.offsetWidth + 24 ? Math.round(box.bottom - r.top) + 6 : 10) + 'px';
+    };
+    v.stackLift = lift;
+    if (at && window.ResizeObserver) new ResizeObserver(lift).observe(at);
+    window.addEventListener('resize', lift);
+    return st;
   }
   function floodCoverage() {
     var I = FLOOD.index || {};
@@ -3146,13 +3174,405 @@
       '<p class="fp-fine">ภาพจาก HatyaiCityClimate.Org และ กฟผ. · AI ตัวเล็กดูทุกชั่วโมง ดูแค่น้ำ ถนน อากาศ และนับรถ ไม่จดจำใบหน้า ไม่อ่านทะเบียน · ต้นแบบทดลอง</p>';
   }
 
+  /* ---------- เรดาร์ฝน เมฆ ลม และความสูงพื้นดิน ---------- */
+  // เรดาร์: RainViewer (ย้อนหลัง 2 ชม. ทุก 10 นาที ซูมสุด 7 ใช้ได้เพื่อการส่วนตัว/การศึกษา ต้องให้เครดิต)
+  // เมฆ: ภาพอินฟราเรดดาวเทียม Himawari-9 จาก NASA GIBS (ช้ากว่าจริงราว 1 ชม.)
+  // ลม: ตารางลมรายชั่วโมงจาก Open-Meteo ที่ GitHub Actions ดึงเก็บไว้ (cctv-data/wind.json) วาดเป็นเส้นลมเคลื่อนไหว
+  // ความสูง: Terrain Tiles (Terrarium, AWS Open Data) ทำเงาภูเขา และอ่านความสูงจุดที่กด
+  var RADAR_API = 'https://api.rainviewer.com/public/weather-maps.json';
+  var RADAR = { host: '', frames: [], idx: -1, playing: false, timer: 0, at: 0, err: false };
+  var CLOUD_LAYER = 'Himawari_AHI_Band13_Clean_Infrared';
+  var DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+  var DEM_ATTR = 'ความสูง: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Terrain Tiles</a> (Mapzen, SRTM)';
+  var WIND = { grid: null, at: 0 };
+  // สีเรดาร์ Universal Blue ของ RainViewer (ใช้ทำคำอธิบายสี)
+  var RADAR_LEG = [['#88DDEE', 'ปรอย'], ['#0091CA', 'เบา'], ['#004A70', 'ปานกลาง'], ['#FFC500', 'หนัก'], ['#FF4400', 'หนักมาก'], ['#C10000', 'รุนแรง'], ['#FF77FF', 'พายุ']];
+
+  function loadRadar(force) {
+    if (IN_ARTIFACT) return;
+    if (!force && RADAR.frames.length && Date.now() - RADAR.at < 5 * 60e3) return;
+    RADAR.at = Date.now();
+    fetch(RADAR_API).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+      var past = (j && j.radar && j.radar.past) || [];
+      if (!j.host || !past.length) throw new Error('ไม่มีภาพ');
+      var keep = RADAR.idx >= 0 && RADAR.idx < RADAR.frames.length - 1 && RADAR.playing;
+      RADAR.host = j.host;
+      RADAR.frames = past.map(function (f) { return { time: f.time, path: f.path }; });
+      if (!keep) RADAR.idx = RADAR.frames.length - 1;
+      RADAR.err = false;
+    }).catch(function () { RADAR.err = true; }).then(function () {
+      eachView(updateRadar);
+      renderDataChips();
+    });
+  }
+  function radarTime(i) {
+    var f = RADAR.frames[i];
+    if (!f) return '';
+    var d = new Date((f.time + 7 * 3600) * 1000);
+    var hm = ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' น.';
+    var ago = Math.round((Date.now() / 1000 - f.time) / 60);
+    return hm + (ago >= 1 ? ' (' + (ago >= 60 ? Math.floor(ago / 60) + ' ชม. ' + (ago % 60 ? ago % 60 + ' นาที' : '') : ago + ' นาที') + 'ก่อน)' : '');
+  }
+  // เรดาร์แต่ละช่วงเวลาเป็นชั้นของตัวเอง เปิดทีละชั้น (โหลดภาพล่วงหน้าตอนเล่น)
+  function radarLayerId(i) { return 'cg-radar-' + RADAR.frames[i].time; }
+  function ensureRadarLayer(v, i) {
+    var map = v.map, id = radarLayerId(i);
+    if (map.getLayer(id)) return id;
+    if (!map.getSource(id)) {
+      map.addSource(id, { type: 'raster', tiles: [RADAR.host + RADAR.frames[i].path + '/512/{z}/{x}/{y}/2/1_1.png'], tileSize: 512, maxzoom: 7,
+        attribution: 'เรดาร์ฝน: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>' });
+    }
+    map.addLayer({ id: id, type: 'raster', source: id, paint: { 'raster-opacity': 0, 'raster-opacity-transition': { duration: 0 }, 'raster-fade-duration': 0 } },
+      map.getLayer('cg-flood-pf') ? 'cg-flood-pf' : undefined);
+    return id;
+  }
+  function updateRadar(v) {
+    if (!v || v.kind !== 'chat' || v.styleLoading || !v.map.getSource('cg-water')) return;
+    var map = v.map, on = !!state.data.radar && RADAR.frames.length > 0;
+    var want = {};
+    if (on) {
+      want[ensureRadarLayer(v, RADAR.idx)] = 1;
+      if (RADAR.playing) ensureRadarLayer(v, (RADAR.idx + 1) % RADAR.frames.length);
+    }
+    // ลบชั้นของเวลาที่หลุดช่วง 2 ชม. แล้ว และซ่อน/แสดงตามเวลาที่เลือก
+    (map.getStyle().layers || []).forEach(function (l) {
+      if (l.id.indexOf('cg-radar-') !== 0) return;
+      var t = +l.id.slice(9);
+      if (!RADAR.frames.some(function (f) { return f.time === t; })) { map.removeLayer(l.id); if (map.getSource(l.id)) map.removeSource(l.id); return; }
+      map.setPaintProperty(l.id, 'raster-opacity', want[l.id] ? 0.72 : 0);
+    });
+    updateRadarBar(v);
+  }
+  function updateRadarBar(v) {
+    var bar = v.radarBar;
+    var show = !!state.data.radar && RADAR.frames.length > 0;
+    if (!bar) {
+      if (!show) return;
+      bar = v.radarBar = document.createElement('div');
+      bar.className = 'wx-bar';
+      bar.innerHTML = '<button type="button" class="wx-play" aria-label="เล่นเรดาร์ย้อนหลัง"></button>' +
+        '<input type="range" class="wx-range" min="0" max="0" step="1" aria-label="เลือกเวลาของภาพเรดาร์">' +
+        '<span class="wx-time" aria-live="off"></span>';
+      mapStack(v).appendChild(bar);
+      bar.querySelector('.wx-play').addEventListener('click', function () { setRadarPlaying(!RADAR.playing); });
+      bar.querySelector('.wx-range').addEventListener('input', function (e) {
+        setRadarPlaying(false);
+        RADAR.idx = +e.target.value;
+        eachView(updateRadar);
+      });
+    }
+    bar.hidden = !show;
+    if (!show) return;
+    var rg = bar.querySelector('.wx-range');
+    rg.max = RADAR.frames.length - 1;
+    rg.value = RADAR.idx;
+    bar.querySelector('.wx-play').innerHTML = RADAR.playing
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l12 7-12 7z"/></svg>';
+    bar.querySelector('.wx-play').setAttribute('aria-label', RADAR.playing ? 'หยุดเรดาร์' : 'เล่นเรดาร์ย้อนหลัง 2 ชั่วโมง');
+    bar.querySelector('.wx-time').textContent = 'เรดาร์ ' + radarTime(RADAR.idx) + (RADAR.idx === RADAR.frames.length - 1 ? ' · ล่าสุด' : '');
+    if (v.stackLift) v.stackLift();
+  }
+  function setRadarPlaying(on) {
+    RADAR.playing = !!on && !reduceMotion;
+    clearInterval(RADAR.timer);
+    if (RADAR.playing) {
+      if (RADAR.idx >= RADAR.frames.length - 1) RADAR.idx = 0;
+      RADAR.timer = setInterval(function () {
+        RADAR.idx = RADAR.idx + 1;
+        if (RADAR.idx >= RADAR.frames.length) RADAR.idx = 0;
+        eachView(updateRadar);
+        if (RADAR.idx === RADAR.frames.length - 1) setTimeout(function () { if (RADAR.playing && RADAR.idx === RADAR.frames.length - 1) setRadarPlaying(false); }, 900);
+      }, 650);
+    } else if (reduceMotion && on) toast('ปิดการเคลื่อนไหวในเครื่องอยู่ ใช้แถบเลื่อนเลือกเวลาแทนได้');
+    eachView(updateRadar);
+  }
+
+  // เมฆ: เลือกภาพที่ GIBS น่าจะทำเสร็จแล้ว (ย้อนไปราว 70 นาที ปัดลงทีละ 10 นาที)
+  function cloudTime() {
+    var t = new Date(Date.now() - 70 * 60e3);
+    t.setUTCMinutes(Math.floor(t.getUTCMinutes() / 10) * 10, 0, 0);
+    return t.toISOString().slice(0, 19) + 'Z';
+  }
+  function updateCloud(v) {
+    if (!v || v.kind !== 'chat' || v.styleLoading || !v.map.getSource('cg-water')) return;
+    var map = v.map, on = !!state.data.cloud && !IN_ARTIFACT;
+    var t = cloudTime();
+    if (map.getLayer('cg-cloud') && (!on || v.cloudTime !== t)) { map.removeLayer('cg-cloud'); map.removeSource('cg-cloud'); }
+    if (on && !map.getLayer('cg-cloud')) {
+      v.cloudTime = t;
+      map.addSource('cg-cloud', { type: 'raster', tileSize: 256, maxzoom: 6,
+        tiles: ['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/' + CLOUD_LAYER + '/default/' + t + '/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png'],
+        attribution: 'เมฆ: <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">NASA GIBS</a> (Himawari-9, JMA)' });
+      // ภาพอินฟราเรด: เมฆยอดสูง (เย็น) สว่าง พื้นดินมืด ใช้โปร่งแสงให้เห็นแผนที่ด้านล่าง
+      map.addLayer({ id: 'cg-cloud', type: 'raster', source: 'cg-cloud', paint: { 'raster-opacity': 0.55, 'raster-contrast': 0.25, 'raster-brightness-min': 0 } },
+        map.getLayer('cg-thr-fill') ? 'cg-thr-fill' : undefined);
+    }
+  }
+
+  // ความสูงพื้นดิน: เงาภูเขา + อ่านค่าความสูงจากภาพ Terrarium (R*256 + G + B/256 − 32768 เมตร)
+  function updateTerrain(v) {
+    if (!v || v.kind !== 'chat' || v.styleLoading || !v.map.getSource('cg-water')) return;
+    var map = v.map, on = !!state.data.terrain && !IN_ARTIFACT, dark = state.theme !== 'light';
+    if (on && !map.getSource('cg-dem')) {
+      map.addSource('cg-dem', { type: 'raster-dem', tiles: [DEM_URL], tileSize: 256, maxzoom: 14, encoding: 'terrarium', attribution: DEM_ATTR });
+    }
+    if (on && !map.getLayer('cg-hill')) {
+      map.addLayer({ id: 'cg-hill', type: 'hillshade', source: 'cg-dem', paint: {
+        'hillshade-exaggeration': 0.55, 'hillshade-shadow-color': dark ? '#000814' : '#3C4A5C',
+        'hillshade-highlight-color': dark ? '#5B6B82' : '#FFFFFF', 'hillshade-accent-color': dark ? '#1A2638' : '#6B7A8C'
+      } }, map.getLayer('cg-thr-fill') ? 'cg-thr-fill' : undefined);
+    }
+    if (map.getLayer('cg-hill')) map.setLayoutProperty('cg-hill', 'visibility', on ? 'visible' : 'none');
+    if (!on && v.terrain3d) setTerrain3d(v, false);
+  }
+  function setTerrain3d(v, on) {
+    var map = v.map;
+    v.terrain3d = !!on;
+    try {
+      if (on) {
+        if (!map.getSource('cg-dem')) { state.data.terrain = true; saveData(); updateTerrain(v); renderDataChips(); }
+        map.setTerrain({ source: 'cg-dem', exaggeration: 1.6 });
+        map.easeTo({ pitch: 62, duration: reduceMotion ? 0 : 900 });
+      } else {
+        map.setTerrain(null);
+        map.easeTo({ pitch: 0, duration: reduceMotion ? 0 : 600 });
+      }
+    } catch (e) { toast('เปิดภาพ 3 มิติไม่ได้ในเบราว์เซอร์นี้'); }
+  }
+  var DEM_CACHE = {};
+  function demTile(z, x, y) {
+    var k = z + '/' + x + '/' + y;
+    if (!DEM_CACHE[k]) {
+      DEM_CACHE[k] = fetch(DEM_URL.replace('{z}', z).replace('{x}', x).replace('{y}', y)).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob();
+      }).then(function (b) { return createImageBitmap(b); }).then(function (bmp) {
+        var c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        var g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+        return g.getImageData(0, 0, c.width, c.height);
+      });
+      DEM_CACHE[k].catch(function () { delete DEM_CACHE[k]; });
+    }
+    return DEM_CACHE[k];
+  }
+  // ความสูงที่จุด + เทียบกับพื้นที่รอบๆ รัศมีราว 1 กม. (บอกว่าเป็นที่ลุ่มหรือที่ดอน)
+  function elevationAt(lon, lat) {
+    var z = 12, n = Math.pow(2, z), r = Math.PI / 180;
+    var fx = (lon + 180) / 360 * n, fy = (1 - Math.log(Math.tan(lat * r) + 1 / Math.cos(lat * r)) / Math.PI) / 2 * n;
+    var tx = Math.floor(fx), ty = Math.floor(fy);
+    var px = Math.min(255, Math.floor((fx - tx) * 256)), py = Math.min(255, Math.floor((fy - ty) * 256));
+    return demTile(z, tx, ty).then(function (img) {
+      function at(x, y) {
+        x = Math.max(0, Math.min(255, x)); y = Math.max(0, Math.min(255, y));
+        var i = (y * 256 + x) * 4, d = img.data;
+        return d[i] * 256 + d[i + 1] + d[i + 2] / 256 - 32768;
+      }
+      var e = at(px, py);
+      var mPerPx = 40075016 * Math.cos(lat * r) / (n * 256);
+      var rad = Math.max(3, Math.round(1000 / mPerPx)), vals = [];
+      for (var dy = -rad; dy <= rad; dy += 2) for (var dx = -rad; dx <= rad; dx += 2) if (dx * dx + dy * dy <= rad * rad) vals.push(at(px + dx, py + dy));
+      vals.sort(function (a, b) { return a - b; });
+      var below = vals.filter(function (x) { return x < e; }).length / vals.length;
+      return { ele: e, med: vals[Math.floor(vals.length / 2)], min: vals[0], max: vals[vals.length - 1], pct: below };
+    });
+  }
+  function eleText(o) {
+    if (!o) return '';
+    var d = o.ele - o.med;
+    var rel = o.pct <= 0.15 ? 'ต่ำกว่าพื้นที่รอบๆ เกือบทั้งหมด (ที่ลุ่ม น้ำมักไหลมารวม)' : o.pct >= 0.85 ? 'สูงกว่าพื้นที่รอบๆ เกือบทั้งหมด (ที่ดอน)'
+      : Math.abs(d) < 1 ? 'ระดับใกล้เคียงพื้นที่รอบๆ' : (d < 0 ? 'ต่ำกว่า' : 'สูงกว่า') + 'ระดับกลางของพื้นที่รอบๆ ราว ' + Math.abs(d).toFixed(d > -10 && d < 10 ? 1 : 0) + ' ม.';
+    return rel;
+  }
+  function openElevationPopup(v, ll) {
+    var box = document.createElement('div');
+    box.innerHTML = '<div class="pop-meta">ความสูงพื้นดิน (ทดลอง)</div><div class="pop-title">กำลังอ่านค่าความสูง…</div>';
+    if (v.popup) v.popup.remove();
+    v.popup = new maplibregl.Popup({ className: 'cg-popup', offset: 6, maxWidth: '280px', focusAfterOpen: false }).setLngLat(ll).setDOMContent(box).addTo(v.map);
+    elevationAt(ll.lng, ll.lat).then(function (o) {
+      box.innerHTML = '<div class="pop-meta">ความสูงพื้นดิน (ทดลอง) · ' + ll.lat.toFixed(4) + ', ' + ll.lng.toFixed(4) + '</div>' +
+        '<div class="pop-title">ราว ' + Math.round(o.ele) + ' ม. จากระดับน้ำทะเล</div>' +
+        '<div class="pop-sub">' + esc(eleText(o)) + '</div>' +
+        '<div class="pop-sub">รัศมี 1 กม.: ต่ำสุด ' + Math.round(o.min) + ' · กลาง ' + Math.round(o.med) + ' · สูงสุด ' + Math.round(o.max) + ' ม.</div>' +
+        '<div class="pop-sub">ค่าจากแผนที่ความสูงความละเอียดราว 30 ม. ที่ราบลุ่มอาจคลาดเคลื่อนหลายเมตร ใช้ดูภาพรวม ไม่ใช่ค่ารังวัด · ' + DEM_ATTR + '</div>' +
+        '<button type="button" class="btn-ghost fl-go" data-terrain3d="' + (v.terrain3d ? '0' : '1') + '">' + (v.terrain3d ? 'กลับเป็นแผนที่แบน' : 'ดูแบบ 3 มิติ') + '</button>';
+    }).catch(function () {
+      box.innerHTML = '<div class="pop-meta">ความสูงพื้นดิน</div><div class="pop-title">อ่านค่าความสูงไม่ได้ตอนนี้</div><div class="pop-sub">ลองใหม่อีกครั้ง หรือเช็กอินเทอร์เน็ต</div>';
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-terrain3d]');
+    if (b && views.chat) { e.preventDefault(); setTerrain3d(views.chat, b.getAttribute('data-terrain3d') === '1'); if (views.chat.popup) views.chat.popup.remove(); }
+  });
+
+  // ลม: เส้นลมเคลื่อนไหวบน canvas ซ้อนแผนที่ (หยุดตอนเลื่อนแผนที่ เพื่อไม่ให้หน่วง)
+  function loadWind() {
+    if (IN_ARTIFACT || (WIND.grid && Date.now() - WIND.at < 20 * 60e3)) return;
+    WIND.at = Date.now();
+    fetch(CCTV_BASE + 'wind.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+      if (j && j.nx && j.ny && j.u && j.u.length === j.nx * j.ny) WIND.grid = j;
+    }).catch(function () { /* ไม่มีข้อมูลลม ข้ามไป */ }).then(function () { eachView(updateWind); renderDataChips(); });
+  }
+  function windAt(lon, lat) {
+    var g = WIND.grid;
+    var fx = (lon - g.lon0) / g.dx, fy = (lat - g.lat0) / g.dy;
+    if (fx < 0 || fy < 0 || fx > g.nx - 1 || fy > g.ny - 1) return null;
+    var x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(g.nx - 1, x0 + 1), y1 = Math.min(g.ny - 1, y0 + 1), ax = fx - x0, ay = fy - y0;
+    function bl(a) {
+      var i00 = y0 * g.nx + x0, i10 = y0 * g.nx + x1, i01 = y1 * g.nx + x0, i11 = y1 * g.nx + x1;
+      return (a[i00] * (1 - ax) + a[i10] * ax) * (1 - ay) + (a[i01] * (1 - ax) + a[i11] * ax) * ay;
+    }
+    return [bl(g.u), bl(g.v)];
+  }
+  function windColor(s) {
+    return s < 2 ? 'rgba(170,205,235,.55)' : s < 5 ? 'rgba(130,215,235,.7)' : s < 9 ? 'rgba(240,235,150,.8)' : s < 14 ? 'rgba(250,170,90,.85)' : 'rgba(255,110,110,.9)';
+  }
+  function updateWind(v) {
+    if (!v || v.kind !== 'chat') return;
+    var on = !!state.data.wind && !!WIND.grid;
+    if (!on) { if (v.wind) { cancelAnimationFrame(v.wind.raf); v.wind.cv.remove(); v.wind = null; } updateWindNote(v); return; }
+    if (!v.wind) {
+      var cv = document.createElement('canvas');
+      cv.className = 'wx-wind';
+      v.map.getCanvasContainer().appendChild(cv);
+      v.wind = { cv: cv, ps: [], raf: 0, moving: false };
+      v.map.on('movestart', function () { if (v.wind) { v.wind.moving = true; v.wind.cv.getContext('2d').clearRect(0, 0, v.wind.cv.width, v.wind.cv.height); } });
+      v.map.on('moveend', function () { if (v.wind) { v.wind.moving = false; seedWind(v); } });
+      v.map.on('resize', function () { if (v.wind) seedWind(v); });
+      seedWind(v);
+      windLoop(v);
+    }
+    updateWindNote(v);
+  }
+  function updateWindNote(v) {
+    var el = v.windNote;
+    var on = !!state.data.wind && !!WIND.grid;
+    if (!el && !on) return;
+    if (!el) { el = v.windNote = document.createElement('div'); el.className = 'wx-wind-note'; v.el.appendChild(el); }
+    el.hidden = !on;
+    if (on) el.textContent = 'ลม ' + (WIND.grid.time ? ccTime(WIND.grid.time) : '') + ' · Open-Meteo';
+  }
+  function seedWind(v) {
+    var w = v.wind, cv = w.cv, c = v.map.getCanvas();
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = c.clientWidth * dpr; cv.height = c.clientHeight * dpr;
+    cv.style.width = c.clientWidth + 'px'; cv.style.height = c.clientHeight + 'px';
+    var n = Math.max(250, Math.min(1800, Math.round(c.clientWidth * c.clientHeight / 1100)));
+    w.ps = [];
+    for (var i = 0; i < n; i++) w.ps.push(newParticle(v, true));
+  }
+  function newParticle(v, rnd) {
+    var c = v.map.getCanvas();
+    return { x: Math.random() * c.clientWidth, y: Math.random() * c.clientHeight, age: rnd ? Math.floor(Math.random() * 80) : 0 };
+  }
+  function windLoop(v) {
+    var w = v.wind;
+    if (!w) return;
+    w.raf = requestAnimationFrame(function () { windLoop(v); });
+    if (w.moving || document.hidden) return;
+    var g = w.cv.getContext('2d'), dpr = window.devicePixelRatio || 1, map = v.map;
+    var c = map.getCanvas(), W = c.clientWidth, H = c.clientHeight;
+    g.save();
+    g.globalCompositeOperation = 'destination-in';
+    g.fillStyle = 'rgba(0,0,0,0.93)';
+    g.fillRect(0, 0, w.cv.width, w.cv.height);
+    g.restore();
+    g.lineWidth = 1.2 * dpr;
+    g.lineCap = 'round';
+    var z = map.getZoom(), k = 0.22 * Math.pow(1.25, Math.max(0, 7 - z)) / Math.pow(2, Math.max(0, z - 7));
+    w.ps.forEach(function (p, i) {
+      var ll = map.unproject([p.x, p.y]);
+      var uv = windAt(ll.lng, ll.lat);
+      if (!uv || p.age > 90 || p.x < 0 || p.y < 0 || p.x > W || p.y > H) { w.ps[i] = newParticle(v, false); return; }
+      var s = Math.sqrt(uv[0] * uv[0] + uv[1] * uv[1]);
+      var nx = p.x + uv[0] * k * 6, ny = p.y - uv[1] * k * 6;
+      g.strokeStyle = windColor(s);
+      g.beginPath(); g.moveTo(p.x * dpr, p.y * dpr); g.lineTo(nx * dpr, ny * dpr); g.stroke();
+      p.x = nx; p.y = ny; p.age++;
+    });
+  }
+  function wxLegendHtml() {
+    var h = '';
+    if (state.data.radar) {
+      h += '<div class="rain-legend wx-legend" aria-label="สีเรดาร์ฝน"><span>เรดาร์</span><span class="sp"></span>' + RADAR_LEG.map(function (x) {
+        return '<i title="' + x[1] + '" style="background:' + x[0] + '"></i>';
+      }).join('') + '<span>เบา → หนัก</span></div>';
+      h += '<p class="fp-fine">' + (RADAR.err ? 'โหลดเรดาร์ไม่ได้ตอนนี้ · ' : RADAR.frames.length ? 'ย้อนหลัง 2 ชม. ทุก 10 นาที กดปุ่มเล่นที่ด้านล่างแผนที่ · ' : '') +
+        'เรดาร์ครอบเฉพาะพื้นที่ที่มีสถานีเรดาร์ ซูมได้ถึงระดับจังหวัด · <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a></p>';
+    }
+    if (state.data.terrain) h += '<p class="fp-fine">ความสูงพื้นดิน: กดจุดใดก็ได้บนแผนที่เพื่อดูความสูงและเทียบกับพื้นที่รอบๆ (ที่ลุ่ม/ที่ดอน) · ดูแบบ 3 มิติได้จากป๊อปอัป</p>';
+    return h;
+  }
+
+  // แชท: เรดาร์ ลม ความสูง และวิธีใช้งาน
+  var RADAR_RE = /เรดาร์|กลุ่มฝน|กลุ่มเมฆ|เมฆฝน|ฝนตก(ตรง|ที่)ไหน|ฝนกำลังตก|ตอนนี้ฝนตก|radar/i;
+  var ELE_RE = /ความสูง(พื้น|จาก|ของ)|ระดับน้ำทะเล|ที่ลุ่ม|ที่ดอน|elevation|3 ?มิติ/i;
+  var WIND_RE = /ลมแรง|ลมพัด|ทิศลม|ความเร็วลม|ทิศทางลม/;
+  var HELP_RE = /วิธีใช้|ใช้งานยังไง|ใช้ยังไง|ทำอะไรได้บ้าง|help/i;
+  function wxOn(id) {
+    if (!state.data[id]) { state.data[id] = true; saveData(); eachView(refreshLive); renderDataChips(); }
+  }
+  function wxAnswer(r) {
+    var loc = r.place && isLocalPlace(r.place) ? localHtml({ place: r.place }) : '';
+    if (r.wx === 'help') {
+      return { title: 'วิธีใช้งาน ChatGeo', text: 'เปิดหน้าวิธีใช้งานให้แล้ว อ่านทีละหัวข้อได้เลย หรือกดปุ่ม "วิธีใช้" มุมขวาบนเมื่อไรก็ได้' };
+    }
+    if (r.wx === 'radar') {
+      var t = RADAR.frames.length ? 'ภาพล่าสุด ' + radarTime(RADAR.frames.length - 1) : (RADAR.err ? 'ตอนนี้โหลดเรดาร์ไม่ได้' : 'กำลังโหลดเรดาร์');
+      return { title: 'เรดาร์ฝน · กลุ่มฝนตอนนี้', extra: 'weather', html: loc,
+        text: 'เปิดเรดาร์ฝนบนแผนที่แล้ว (' + t + ') สีฟ้าคือฝนเบา เหลือง ส้ม แดง คือฝนหนัก กดปุ่มเล่นที่มุมซ้ายล่างของแผนที่เพื่อดูกลุ่มฝนเคลื่อนที่ย้อนหลัง 2 ชม. ' +
+          'เรดาร์บอกว่าฝนตกตรงไหนตอนนี้ ส่วนตัวเลขฝนสะสม 24 ชม. ด้านล่างมาจากสถานีวัดจริงของ ThaiWater' };
+    }
+    if (r.wx === 'terrain') {
+      return { title: 'ความสูงพื้นดิน', html: loc,
+        text: 'เปิดความสูงพื้นดินแล้ว กดจุดใดก็ได้บนแผนที่ จะบอกความสูงจากระดับน้ำทะเล และเทียบกับพื้นที่รอบๆ รัศมี 1 กม. ว่าเป็นที่ลุ่ม (น้ำมักไหลมารวม) หรือที่ดอน ' +
+          'ในป๊อปอัปมีปุ่มดูแบบ 3 มิติ ค่ามาจากแผนที่ความสูงราว 30 ม. ที่ราบลุ่มอาจคลาดเคลื่อนหลายเมตร' };
+    }
+    var g = WIND.grid, sp = '';
+    if (g) {
+      var s = g.u.map(function (u, i) { return Math.sqrt(u * u + g.v[i] * g.v[i]); });
+      sp = ' ลมแรงสุดในพื้นที่ราว ' + Math.max.apply(null, s).toFixed(1) + ' ม./วินาที (' + ccTime(g.time) + ')';
+    }
+    return { title: 'ลมตอนนี้', html: loc,
+      text: 'เปิดเส้นลมบนแผนที่แล้ว เส้นเคลื่อนตามทิศที่ลมพัดไป สีฟ้าคือลมเบา เหลือง ส้ม แดง คือลมแรง' + (sp ? sp : ' (ข้อมูลลมจะมาเมื่อระบบรายชั่วโมงทำงาน)') + ' · Open-Meteo' };
+  }
+
+  // หน้าต่าง "วิธีใช้งาน"
+  var helpOpener = null;
+  function openHelp() {
+    if (!$('helpModal')) return;
+    helpOpener = document.activeElement;
+    $('helpModal').hidden = false;
+    setTimeout(function () { var b = $('helpModal').querySelector('.pal-x'); if (b) b.focus(); }, 0);
+  }
+  function closeHelp() {
+    if (!$('helpModal') || $('helpModal').hidden) return;
+    $('helpModal').hidden = true;
+    if (helpOpener && helpOpener.focus) helpOpener.focus();
+  }
+  if ($('btnHelp')) $('btnHelp').addEventListener('click', openHelp);
+  if ($('helpModal')) {
+    $('helpModal').addEventListener('click', function (e) {
+      if (e.target.closest('[data-help-close]')) { closeHelp(); return; }
+      var q = e.target.closest('[data-help-q]');
+      if (q) { closeHelp(); if (state.page !== 'chat') setPage('chat'); submitQuestion(q.getAttribute('data-help-q')); return; }
+      var a = e.target.closest('.help-toc a');
+      if (a) { e.preventDefault(); var t = $(a.getAttribute('href').slice(1)); if (t) t.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' }); }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('helpModal').hidden) { e.preventDefault(); closeHelp(); } });
+  }
+
   // ปุ่มเปิดปิดชั้นข้อมูลในเมนู "ชั้นข้อมูล"
   var DATA_ROWS = [
     { id: 'water', name: 'ระดับน้ำในแม่น้ำ', src: 'ThaiWater (สสน.)' },
     { id: 'rain', name: 'ฝนสะสม 24 ชม.', src: 'ThaiWater (สสน.)' },
+    { id: 'radar', name: 'เรดาร์ฝน (กลุ่มฝนตอนนี้)', src: 'RainViewer' },
+    { id: 'cloud', name: 'เมฆจากดาวเทียม', src: 'Himawari-9 · NASA GIBS' },
+    { id: 'wind', name: 'ลม (เส้นเคลื่อนไหว)', src: 'Open-Meteo' },
     { id: 'fc', name: 'พยากรณ์อากาศ 3 วัน', src: 'Open-Meteo' },
     { id: 'flood', name: 'น้ำจากดาวเทียม (ทดลอง)', src: 'Sentinel-1' },
     { id: 'cctv', name: 'กล้อง CCTV + AI (ทดลอง)', src: 'หาดใหญ่ · เขื่อน กฟผ.' },
+    { id: 'terrain', name: 'ความสูงพื้นดิน', src: 'Terrain Tiles' },
     { id: 'sat', name: 'ภาพดาวเทียม', src: 'Sentinel-2 · EOX' }
   ];
   function dataSub(r) {
@@ -3162,6 +3582,10 @@
       if (!floodReady()) return r.src + ' · ยังไม่มีข้อมูล';
       return r.src + ' · ภาพ ' + dateAge([FLOOD.index.date_min, FLOOD.index.date_max]) + ' · ตรวจ ' + FLOOD.index.tiles.length + '/' + (FLOOD.index.tiles_total || FLOOD.index.tiles.length) + ' กรอบ';
     }
+    if (r.id === 'radar') return r.src + (RADAR.err ? ' · โหลดไม่ได้ตอนนี้' : RADAR.frames.length ? ' · ภาพ ' + radarTime(RADAR.frames.length - 1) : ' · กำลังโหลด');
+    if (r.id === 'cloud') return r.src + ' · ช้ากว่าจริงราว 1 ชม.';
+    if (r.id === 'wind') return r.src + (WIND.grid ? ' · ' + ccTime(WIND.grid.time) : ' · ยังไม่มีข้อมูล (ระบบดึงทุกชั่วโมง)');
+    if (r.id === 'terrain') return 'เงาภูเขา · กดแผนที่ดูความสูง ที่ลุ่ม/ที่ดอน';
     if (r.id === 'cctv') {
       if (!CCTV.loaded) return r.src + ' · กำลังโหลด';
       if (!ccReady()) return r.src + ' · โหลดรายชื่อกล้องไม่ได้';
@@ -3184,7 +3608,7 @@
       RAIN_C.join(',') + ')"></i><span>150+ มม.</span></div>' : '') +
       (state.data.water || state.data.rain ? '<p class="fp-fine">ซูมออกจะเห็นเฉพาะสถานีที่น้ำผิดปกติและฝน 35 มม.ขึ้นไป ซูมเข้าเพื่อดูครบทุกสถานี</p>' : '') +
       (state.data.flood && floodReady() ? floodLegendHtml() : '') +
-      (state.data.cctv && ccReady() ? ccLegendHtml() : '');
+      (state.data.cctv && ccReady() ? ccLegendHtml() : '') + wxLegendHtml();
   }
   function saveData() { try { localStorage.setItem('cg-data', JSON.stringify(state.data)); } catch (e) { /* ข้าม */ } }
   if ($('dataChips')) {
@@ -3366,7 +3790,9 @@
       text: 'คุณอยู่แถว' + (p.full || p.name) + (zone ? ' (' + zone.name + ')' : '') + ' นี่คือสถานการณ์ใกล้คุณตอนนี้' +
         (news.length ? ' และข่าวเช้านี้ใน' + scope + ' ' + news.length + ' เรื่อง' : ' เช้านี้ยังไม่มีข่าวในภาคนี้'),
       points: pointsOf(news.slice(0, 3)),
-      html: localHtml({ place: p, near: { lon: m.lon, lat: m.lat } })
+      html: (m.ele ? '<div class="m-extra"><div class="m-extra-head">ความสูงพื้นดินที่ตำแหน่งคุณ (ทดลอง)</div><div class="m-row"><span></span><div><b>ราว ' + Math.round(m.ele.ele) +
+        ' ม. จากระดับน้ำทะเล</b> <span>' + esc(eleText(m.ele)) + ' · ค่าจากแผนที่ความสูงราว 30 ม. อาจคลาดเคลื่อนหลายเมตร</span></div></div></div>' : '') +
+        localHtml({ place: p, near: { lon: m.lon, lat: m.lat } })
     };
   }
   function showMeMarker() {
@@ -3397,8 +3823,10 @@
       me.lon = pos.coords.longitude; me.lat = pos.coords.latitude;
       var pid = provinceAt(me.lon, me.lat);
       if (state.page !== 'chat') setPage('chat');
-      state.messages.push({ role: 'bot', key: 'near', lon: me.lon, lat: me.lat, prov: pid });
+      var nm = { role: 'bot', key: 'near', lon: me.lon, lat: me.lat, prov: pid };
+      state.messages.push(nm);
       renderMsgs();
+      if (!IN_ARTIFACT) elevationAt(me.lon, me.lat).then(function (o) { nm.ele = o; renderMsgs(); }).catch(function () { /* ข้าม */ });
       if (pid) {
         state.data.water = true; state.data.rain = true; saveData();
         eachView(refreshLive); renderDataChips();
@@ -3438,6 +3866,15 @@
   loadFloodIndex();
   loadCctv();
   setInterval(function () { if (!document.hidden) loadCctv(); }, 10 * 60e3); // ผล AI อัปเดตทุกชั่วโมง เช็กทุก 10 นาที
+  loadRadar();
+  loadWind();
+  if (location.hash === '#help') setTimeout(openHelp, 300);
+  setInterval(function () {
+    if (document.hidden) return;
+    if (state.data.radar) loadRadar(); // เรดาร์ใหม่ทุก 10 นาที
+    if (state.data.wind) loadWind();
+    if (state.data.cloud) eachView(updateCloud);
+  }, 5 * 60e3);
   if (IN_ARTIFACT) {
     setTimeout(function () {
       toast('ในแอป Claude ใช้แผนที่โลกแบบออฟไลน์ ซูมถึงระดับถนนไม่ได้ ถ้าอยากเห็นถนนจริงจาก OpenStreetMap ให้เปิดไฟล์ index.html ในเครื่อง');

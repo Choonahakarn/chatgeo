@@ -641,7 +641,9 @@ i.sq.dash { background: none; border: 1.5px dashed var(--ink2); width: 11px; hei
 .pop-stat i.sq { margin-right: 6px; vertical-align: -1px; }
 .live-row i.sq { justify-self: center; }
 /* อายุภาพดาวเทียม และน้ำเพิ่ม/ลด */
-.fl-age { position: absolute; left: 10px; bottom: 10px; z-index: 2; max-width: calc(100% - 140px); padding: 5px 10px; border-radius: 999px;
+.map-stack { position: absolute; left: 10px; bottom: 10px; z-index: 2; display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 6px; max-width: calc(100% - 140px); pointer-events: none; }
+.map-stack > * { pointer-events: auto; max-width: 100%; }
+.fl-age { padding: 5px 10px; border-radius: 999px;
   background: var(--panel); color: var(--ink2); border: 1px solid var(--line2); font-size: 12px; line-height: 1.3; box-shadow: 0 2px 8px rgba(0,0,0,.18);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; }
 .fl-age.old { border-color: color-mix(in srgb, #E0A526 70%, transparent); color: var(--ink); }
@@ -717,4 +719,44 @@ i.sq.dash { background: none; border: 1.5px dashed var(--ink2); width: 11px; hei
   .cc-nav.next { left: auto; right: 6px; }
   .cc-wall { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .cc-popup .maplibregl-popup-content { width: 290px; }
+}
+
+/* ---------- เรดาร์ ลม เมฆ ความสูง ---------- */
+.wx-bar { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line2);
+  box-shadow: 0 2px 8px rgba(0,0,0,.18); font-size: 12px; color: var(--ink2); }
+.wx-bar[hidden] { display: none; }
+.wx-play { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 0; background: var(--chip-on); color: var(--ink); cursor: pointer; flex: 0 0 auto; }
+.wx-play:hover { background: var(--accent); color: #111; }
+.wx-range { width: 120px; accent-color: var(--accent); }
+.wx-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.wx-wind { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
+.wx-wind-note { position: absolute; right: 52px; bottom: 34px; z-index: 2; font-size: 11px; color: var(--muted); background: var(--overlay); padding: 2px 8px; border-radius: 999px; pointer-events: none; }
+.wx-wind-note[hidden] { display: none; }
+.wx-legend i { flex: 1 1 0; height: 8px; min-width: 10px; border-radius: 2px; }
+.wx-legend i:first-of-type { border-radius: 4px 2px 2px 4px; }
+/* ---------- วิธีใช้งาน ---------- */
+.help-dialog { width: min(820px, 100%); }
+.help-body { line-height: 1.65; font-size: 14px; }
+.help-body h3 { margin: 18px 0 8px; font-size: 16px; }
+.help-body section:first-of-type h3 { margin-top: 6px; }
+.help-body p { margin: 6px 0; color: var(--ink2); }
+.help-body ul { margin: 6px 0; padding-left: 20px; color: var(--ink2); }
+.help-body li { margin: 4px 0; }
+.help-body kbd { font-family: 'IBM Plex Mono', monospace; font-size: 12px; border: 1px solid var(--line2); border-radius: 5px; padding: 0 5px; }
+.help-toc { position: sticky; top: -12px; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.help-toc a { font-size: 12.5px; color: var(--ink2); text-decoration: none; border: 1px solid var(--line2); border-radius: 999px; padding: 4px 10px; }
+.help-toc a:hover { background: var(--chip-on); color: var(--ink); }
+.help-dl { display: grid; grid-template-columns: minmax(150px, 210px) 1fr; gap: 6px 14px; margin: 8px 0; }
+.help-dl dt { font-weight: 600; display: flex; align-items: baseline; gap: 7px; }
+.help-dl dd { margin: 0; color: var(--ink2); }
+.help-qs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.help-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.help-table th, .help-table td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.help-table th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+@media (max-width: 760px) {
+  .help-text { display: none; }
+  .help-dl { grid-template-columns: 1fr; gap: 2px; }
+  .help-dl dd { margin-bottom: 8px; }
+  .wx-range { width: 80px; }
+  .wx-wind-note { bottom: 30px; right: 48px; }
 }

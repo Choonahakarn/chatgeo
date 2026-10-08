@@ -32,7 +32,8 @@ UA = 'ChatGeo-CCTV/1.0 (+https://choonahakarn.github.io/chatgeo/)'
 VLM_MODELS = {'smolvlm': 'HuggingFaceTB/SmolVLM-500M-Instruct', 'qwen2vl': 'Qwen/Qwen2-VL-2B-Instruct'}
 DET_MODEL = 'PekingU/rtdetr_r50vd'
 STALE_H = 3          # ภาพจากต้นทางเก่ากว่านี้ (ดูจาก Last-Modified) = ภาพค้าง
-FROZEN_H = 6         # ภาพเหมือนเดิมทุกไบต์นานเกินนี้ = ภาพค้าง
+FROZEN_H = 2         # ภาพเหมือนเดิมทุกไบต์นานเกินนี้ = ภาพค้าง (กล้องปกติเปลี่ยนภาพทุกไม่กี่นาที)
+BASE_MIN = 6         # ต้องมีผลย้อนหลังอย่างน้อยกี่รอบ ถึงจะรู้ว่า "ปกติ" ของกล้องนี้เป็นแบบไหน
 HIST_H = 48          # เก็บประวัติย้อนหลังกี่ชั่วโมง
 THUMB_SIDE = 480
 NIGHT_MEAN = 45      # ความสว่างเฉลี่ยต่ำกว่านี้ = กลางคืน/มืด
@@ -53,7 +54,12 @@ ASK = {
     'mixed': [('flood', 'flood'), ('high', 'high'), ('rain', 'rain')],
     'dam': [('spill', 'spill'), ('rain', 'rain')],
 }
-CAP_EN = 'Describe this CCTV image in one short sentence: the road, the water and the weather. Do not describe people.'
+CAP_EN = {
+    'road': 'Describe the road in this CCTV image in one short sentence: is it dry, wet or flooded? Do not describe people.',
+    'water': 'Describe the river or canal in this CCTV image in one short sentence: how high is the water compared with its banks? Do not describe people.',
+    'mixed': 'Describe this CCTV image in one short sentence: the water level and whether roads or land are flooded. Do not describe people.',
+    'dam': 'Describe this dam camera view in one short sentence: the reservoir, spillway and water flow. Do not describe people.',
+}
 CAP_TH = 'บรรยายภาพจากกล้องวงจรปิดนี้เป็นภาษาไทย 1 ประโยคสั้นๆ เน้นสภาพถนน น้ำ และอากาศ ไม่ต้องบรรยายลักษณะคน'
 # ประโยคที่พูดถึงคนหรือทะเบียนรถ ตัดทิ้ง (AI ดูแค่ฉาก)
 PEOPLE_RE = re.compile(r'\b(man|men|woman|women|person|people|boy|girl|child|face|license plate|plate number)\b|คน|ผู้ชาย|ผู้หญิง|ใบหน้า|ทะเบียน', re.I)
@@ -180,8 +186,8 @@ class VLM:
         d = t.logsumexp(lg[self.yes], 0) - t.logsumexp(lg[self.no], 0)
         return float(t.sigmoid(d))
 
-    def caption(self, img, thai=False, max_new=48):
-        inp = self._inputs(img, CAP_TH if thai else CAP_EN)
+    def caption(self, img, thai=False, max_new=48, kind='mixed'):
+        inp = self._inputs(img, CAP_TH if thai else CAP_EN.get(kind, CAP_EN['mixed']))
         with self.torch.no_grad():
             g = self.model.generate(**inp, max_new_tokens=max_new, do_sample=False)
         txt = self.proc.batch_decode(g[:, inp['input_ids'].shape[1]:], skip_special_tokens=True)[0]
@@ -222,7 +228,7 @@ class MockVLM:
             return 0.2
         return max(0.02, min(0.98, 0.5 + blue * 2))
 
-    def caption(self, img, thai=False):
+    def caption(self, img, thai=False, kind='mixed'):
         return clean_caption('A road next to a canal under a cloudy sky. A man in a red shirt walks by.')
 
 
@@ -244,32 +250,64 @@ LABEL_TH = {'flood': 'น่าจะมีน้ำท่วม', 'high': 'น�
             'normal': 'ปกติ', 'night': 'มืด อ่านยาก', 'stale': 'ภาพค้าง', 'offline': 'ไม่มีภาพ', 'pending': 'รอวิเคราะห์'}
 
 
-def decide(kind, p, night):
+def baseline(points):
+    """ค่าปกติของกล้องนี้: มัธยฐานคะแนนแต่ละคำถามจากรอบก่อนๆ (ไม่นับภาพค้าง/ไม่มีภาพ/มืด) · ยังไม่พอ → None"""
+    vals = {}
+    for x in points:
+        if len(x) > 4 and isinstance(x[4], dict) and x[1] not in ('stale', 'offline', 'pending', 'night'):
+            for k, v in x[4].items():
+                vals.setdefault(k, []).append(v)
+    out = {}
+    for k, v in vals.items():
+        if len(v) >= BASE_MIN:
+            v = sorted(v)
+            out[k] = v[len(v) // 2]
+    return out or None
+
+
+def decide(kind, p, night, base=None):
+    """ป้ายของภาพนี้ · กล้องที่เห็นคลองหรือแม่น้ำ AI มักตอบว่า "ท่วม" ทั้งที่น้ำปกติ
+    จึงเทียบกับค่าปกติของกล้องตัวเอง (base) และเตือนเฉพาะเมื่อสูงกว่าปกติชัดเจน"""
     f, h, s = p.get('flood', 0), p.get('high', 0), p.get('spill', 0)
     if kind == 'dam':
         return 'spill' if s >= 60 else ('night' if night else 'normal')
-    if f >= 60:
+    if base:
+        df, dh = f - base.get('flood', f), h - base.get('high', h)
+        if f >= 60 and df >= 25:
+            return 'flood'
+        if h >= 60 and dh >= 25:
+            return 'high'
+        if night:
+            return 'night'
+        if max(df, dh) >= 12 and max(f, h) >= 40:
+            return 'watch'
+        return 'normal'
+    # ยังไม่รู้ค่าปกติ: ระวังไว้ก่อน ถนนต้องเห็นชัดมาก กล้องคลองไม่ตัดสินว่าท่วม
+    if kind == 'road' and f >= 85:
         return 'flood'
-    if h >= 60:
-        return 'high'
     if night:
         return 'night'
-    if max(f, h) >= 40:
+    if max(f, h) >= 60:
         return 'watch'
     return 'normal'
 
 
-def thai_text(kind, label, p, veh, night):
+def thai_text(kind, label, p, veh, night, base=None):
     f, h, s, r = (p.get(k, 0) for k in ('flood', 'high', 'spill', 'rain'))
     where = {'road': 'ผิวถนน', 'water': 'ริมลำน้ำ', 'mixed': 'ในภาพ'}.get(kind, 'ในภาพ')
+    def vs(k, v):
+        return ' สูงกว่าปกติของกล้องนี้ (คะแนน %d ปกติราว %d)' % (v, base[k]) if base and k in base else ' (คะแนน %d)' % v
     if label == 'flood':
-        t = 'AI ประเมินว่าน่าจะมีน้ำท่วม' + where + ' (คะแนน %d)' % f
+        t = 'AI ประเมินว่าน่าจะมีน้ำท่วม' + where + vs('flood', f)
     elif label == 'high':
-        t = 'AI ประเมินว่าระดับน้ำค่อนข้างสูง ใกล้ตลิ่ง (คะแนน %d)' % h
+        t = 'AI ประเมินว่าระดับน้ำค่อนข้างสูง ใกล้ตลิ่ง' + vs('high', h)
     elif label == 'spill':
         t = 'AI เห็นน้ำไหลผ่านทางระบายน้ำของเขื่อน (คะแนน %d)' % s
+    elif label == 'watch' and not base and kind != 'dam':
+        t = 'AI เห็นน้ำในภาพ แต่ยังเรียนรู้ภาพปกติของกล้องนี้อยู่ จึงยังไม่ตัดสินว่าท่วม (คะแนน %d)' % max(f, h)
     elif label == 'watch':
-        t = 'AI เห็นน้ำมากกว่าปกติเล็กน้อย ยังไม่ชัด (คะแนน %d)' % max(f, h)
+        k = 'flood' if f - base.get('flood', f) >= h - base.get('high', h) else 'high'
+        t = 'AI เห็นน้ำมากกว่าปกติเล็กน้อย ยังไม่ชัด' + vs(k, p.get(k, 0))
     elif label == 'night':
         t = 'ภาพกลางคืนหรือมืด AI อ่านได้ไม่ชัด'
     elif kind == 'road':
@@ -392,7 +430,7 @@ def scan(args):
             same = old.get('hash') == h and old.get('p') is not None and old.get('model') == (vlm.model_id if vlm else '')
             late = time.time() - t0 > args.budget * 60
             if same:
-                for k in ('p', 'veh', 'en', 'th', 'label', 'ai', 'model'):
+                for k in ('p', 'veh', 'en', 'th', 'label', 'ai', 'model', 'base'):
                     if k in old:
                         rec[k] = old[k]
                 stats['reuse'] += 1
@@ -405,27 +443,30 @@ def scan(args):
                 for key, qk in ASK[kind]:
                     p[key] = int(round(vlm.p_yes(img, Q[qk]) * 100))
                 veh = det.vehicles(img) if det and kind in ('road', 'mixed') else None
-                cap = vlm.caption(img, thai=vlm.thai)
-                label = decide(kind, p, night)
+                cap = vlm.caption(img, thai=vlm.thai, kind=kind)
+                base = baseline(hist.get(cid, []))
+                label = decide(kind, p, night, base)
                 rec.update(p=p, label=label, ai=iso(now), model=vlm.model_id)
+                if base:
+                    rec['base'] = base
                 if veh is not None:
                     rec['veh'] = veh
                 if vlm.thai and cap:
-                    rec['th'] = cap + ' · ' + thai_text(kind, label, p, veh, night)
+                    rec['th'] = cap + ' · ' + thai_text(kind, label, p, veh, night, base)
                 else:
-                    rec['th'] = thai_text(kind, label, p, veh, night)
+                    rec['th'] = thai_text(kind, label, p, veh, night, base)
                     if cap:
                         rec['en'] = cap
                 stats['ai'] += 1
                 print('[%d/%d] %s %s %s %.1fs · %s' % (i + 1, len(cams), cid, label, p, time.time() - ta, rec.get('en', '')[:80]), flush=True)
         out[cid] = rec
 
-        # ประวัติ: จุดละ 1 ครั้งต่อรอบ [เวลา, ป้าย, คะแนนหลัก, จำนวนรถ]
+        # ประวัติ: จุดละ 1 ครั้งต่อรอบ [เวลา, ป้าย, คะแนนหลัก, จำนวนรถ, คะแนนแต่ละคำถาม] (ใช้หาค่าปกติของกล้อง)
         pp = rec.get('p') or {}
         score = max([pp.get('flood', 0), pp.get('high', 0), pp.get('spill', 0)] or [0])
         pts = [x for x in hist.get(cid, []) if parse_iso(x[0]) and now - parse_iso(x[0]) <= timedelta(hours=HIST_H)]
         pts = [x for x in pts if x[0] != iso(now)]
-        pts.append([iso(now), rec.get('label'), score if rec.get('p') else None, rec.get('veh')])
+        pts.append([iso(now), rec.get('label'), score if rec.get('p') else None, rec.get('veh'), {k: v for k, v in pp.items() if k != 'rain'} or None])
         hist[cid] = pts[-HIST_H * 2:]
 
     # กล้องที่ไม่ได้ตรวจรอบนี้ (ใช้ --only) เก็บผลเดิมไว้

@@ -1,6 +1,7 @@
 # กล้อง CCTV + AI ดูภาพ (ทดลอง): ทุกชั่วโมง ดึงภาพจากกล้องใน data/cctv.json
 # ให้ VLM ตัวเล็กดูว่าน้ำท่วม น้ำสูง หรือฝนตกไหม นับรถ (เฉพาะกล้องถนน) แล้วเก็บผลใน branch "cctv-data"
 # AI ดูเฉพาะฉาก ไม่จดจำใบหน้า ไม่อ่านทะเบียน ไม่ติดตามคน
+# ขั้นแรกดึงตารางลมรายชั่วโมง (wind.json) ไว้ใน branch เดียวกัน สำหรับเส้นลมบนแผนที่
 # หน้าเว็บอ่านจาก https://raw.githubusercontent.com/<repo>/cctv-data/index.json
 # กดรันเองได้ที่แท็บ Actions → "กล้อง CCTV + AI" → Run workflow
 name: กล้อง CCTV + AI
@@ -63,6 +64,9 @@ jobs:
             echo "ยังไม่มี branch cctv-data จะสร้างใหม่"
             mkdir -p "$DATA" && git -C "$DATA" init -q -b cctv-data
           }
+
+      - name: ลมรายชั่วโมง (Open-Meteo) สำหรับเส้นลมบนแผนที่
+        run: python scripts/wx_grid.py --out "$DATA"
 
       - name: ติดตั้งไลบรารี
         run: pip install -q -r scripts/requirements-cctv.txt
