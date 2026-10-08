@@ -77,6 +77,7 @@
           <span class="bar-div" aria-hidden="true"></span>
           <button type="button" class="search-btn" data-open-search aria-label="ค้นหาพื้นที่" title="ค้นหาพื้นที่ (กด /)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="sb-label">ค้นหา</span><kbd>/</kbd></button>
           <button type="button" class="search-btn near-btn" id="btnNear" aria-label="รอบตัวฉัน: ดูน้ำ ฝน พยากรณ์ และข่าวใกล้ตำแหน่งของคุณ" title="รอบตัวฉัน (ใช้ตำแหน่งในเครื่องเท่านั้น)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="sb-label">รอบตัวฉัน</span></button>
+          <button type="button" class="search-btn site-btn" id="btnSite" aria-pressed="false" aria-label="ตรวจทำเล: เลือกจุดบนแผนที่ ดูน้ำท่วมย้อนหลัง แบบจำลองน้ำท่วม ความสูง และผังเมือง" title="ตรวจทำเล (หรือคลิกขวาที่จุดใดก็ได้บนแผนที่)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h6"/><circle cx="16.5" cy="16" r="3"/><path d="M18.7 18.2 21 20.5"/></svg><span class="sb-label">ตรวจทำเล</span></button>
         </div>
         <div class="filter-wrap">
           <button type="button" class="filter-btn" id="btnFilter" aria-expanded="false" aria-controls="filterPop">
@@ -96,6 +97,14 @@
           </div>
         </div>
       </div>
+      <div class="site-pick" id="sitePick" hidden role="status"><span id="sitePickText">แตะจุดบนแผนที่ที่อยากตรวจทำเล</span><button type="button" class="btn-ghost" id="sitePickX">ยกเลิก</button></div>
+      <section class="site-card" id="siteCard" hidden aria-labelledby="siteTitle">
+        <div class="site-head">
+          <div class="site-hd"><div class="site-kicker">ตรวจทำเล · ทดลอง</div><h2 id="siteTitle"></h2><div class="site-sub" id="siteSub"></div></div>
+          <button type="button" class="pin-x" data-site-close aria-label="ปิดรายงานทำเล"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+        </div>
+        <div class="site-body" id="siteBody"></div>
+      </section>
       <div class="pin-card" id="pinCard" hidden>
         <button type="button" class="pin-x" id="pinClose" aria-label="ปิด">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
@@ -228,7 +237,7 @@
       </div>
       <div class="cc-body help-body">
         <nav class="help-toc" aria-label="หัวข้อ">
-          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
+          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
         </nav>
 
         <section id="h-start">
@@ -257,9 +266,27 @@
             <dt><i class="cc-dot" style="background:#F0EB96"></i>ลม</dt><dd>เส้นเคลื่อนตามทิศที่ลมพัดไป สีฟ้า = ลมเบา เหลืองถึงแดง = ลมแรง อัปเดตทุกชั่วโมง</dd>
             <dt><i class="sq" style="background:#E5484D"></i>น้ำจากดาวเทียม (ทดลอง)</dt><dd>ซูมออกเห็นสีรายจังหวัด ซูมเข้าเห็นปื้นน้ำ แดง = น่าจะท่วม แดงจาง = ไม่แน่ใจ ฟ้า = มีน้ำเกือบทุกปี ป้ายมุมซ้ายล่างบอกว่าภาพเก่ากี่วัน และ ▲▼ บอกว่าน้ำเพิ่มหรือลดจากภาพก่อน</dd>
             <dt><i class="cc-dot" style="background:#2FA36B"></i>กล้อง CCTV + AI (ทดลอง)</dt><dd>หมุดรูปกล้อง สีตามสิ่งที่ AI เห็น กดหมุดดูภาพทุกกล้อง กดภาพเพื่อดูภาพใหญ่และประวัติ 48 ชม. หรือกด <b>เปิดจอรวม</b> ดูทุกกล้องพร้อมกัน</dd>
+            <dt><i class="sq" style="background:#A03070"></i>น้ำในอดีต 41 ปี</dt><dd>ทุกที่ที่ดาวเทียม Landsat เคยเห็นน้ำตั้งแต่ปี 1984–2024 สีแดงจาง = เคยมีน้ำท่วมหรือน้ำขังบางช่วง สีน้ำเงิน = มีน้ำเกือบตลอด (แม่น้ำ อ่าง) เป็นภาพย้อนหลัง ไม่ใช่ตอนนี้</dd>
+            <dt><i class="sq" style="background:#8052E0"></i>พื้นที่น้ำท่วมใหญ่ (แบบจำลอง)</dt><dd>พื้นที่ที่น้ำล้นแม่น้ำสายใหญ่ท่วมถึง ถ้าเกิดน้ำท่วมระดับ "รอบ 100 ปี" สีเข้ม = ลึก จากแบบจำลองของ JRC (สหภาพยุโรป) ไม่รวมคันกั้นน้ำและน้ำท่วมขังในเมือง</dd>
+            <dt><i class="sq" style="background:#FFE15A"></i>ผังเมืองรวม (ทดลอง)</dt><dd>สีผังเมืองจากเซิร์ฟเวอร์ของกรมโยธาธิการและผังเมือง ซูมถึงระดับอำเภอจึงจะเห็น เหลือง = ที่อยู่อาศัยหนาแน่นน้อย ส้ม = ปานกลาง น้ำตาล = มาก แดง = พาณิชยกรรม ม่วง = อุตสาหกรรม เขียว = เกษตรกรรม ใช้อ้างอิงทางกฎหมายไม่ได้</dd>
             <dt><i class="cc-dot" style="background:#9AA8BC"></i>ความสูงพื้นดิน</dt><dd>เปิดแล้วกดจุดใดก็ได้ จะบอกความสูงจากระดับน้ำทะเล และบอกว่าเป็นที่ลุ่มหรือที่ดอนเมื่อเทียบกับรอบๆ 1 กม. ดูแบบ 3 มิติได้จากป๊อปอัป</dd>
             <dt><i class="cc-dot" style="background:#3A6B4C"></i>ภาพดาวเทียม</dt><dd>ภาพพื้นผิวโลกจริงเป็นพื้นหลัง</dd>
           </dl>
+        </section>
+
+        <section id="h-site">
+          <h3>ตรวจทำเล (ทดลอง) · ก่อนซื้อบ้าน ที่ดิน หรือทรัพย์ขายทอดตลาด</h3>
+          <p>เลือกจุดใดก็ได้ในประเทศไทย ระบบจะรวมข้อมูลเปิดหลายแหล่งมาไว้ในการ์ดเดียว</p>
+          <ul>
+            <li><b>วิธีเลือกจุด</b> กดปุ่ม <b>ตรวจทำเล</b> บนแผนที่แล้วแตะจุดที่สนใจ หรือคลิกขวาที่แผนที่ หรือพิมพ์ในแชท เช่น "ตรวจทำเล บางบัวทอง" หรือวางพิกัด/ลิงก์ Google Maps ของทรัพย์</li>
+            <li><b>น้ำในอดีต 41 ปี</b> ดาวเทียมเคยเห็นน้ำท่วมหรือน้ำขังตรงจุดนี้และรอบๆ 300 ม. หรือไม่ และบอกถ้าเคยเป็นที่ลุ่มน้ำขังที่ถูกถมแล้ว</li>
+            <li><b>ถ้าเกิดน้ำท่วมใหญ่</b> ตารางบอกว่าน้ำท่วมระดับรอบ 10, 20, 50, 100, 500 ปี จะท่วมจุดนี้ลึกแค่ไหนตามแบบจำลอง และโอกาสที่จะเจอแต่ละระดับในช่วง 20 ปี เช่น รอบ 100 ปี มีโอกาสราว 18%</li>
+            <li><b>ความสูงพื้นดิน</b> เป็นที่ลุ่มหรือที่ดอนเมื่อเทียบกับรอบๆ</li>
+            <li><b>ผังเมือง</b> ลิงก์ไปเว็บตรวจผังเมืองของกรมโยธาฯ และกรุงเทพฯ และเปิดสีผังบนแผนที่ได้</li>
+            <li><b>ตอนนี้</b> ระดับน้ำ ฝน พยากรณ์ และกล้องใกล้จุดนั้น</li>
+            <li>กด <b>คัดลอกลิงก์รายงานนี้</b> ท้ายการ์ด ส่งให้ครอบครัวหรือนายหน้าเปิดรายงานเดียวกันได้</li>
+          </ul>
+          <p>ข้อควรรู้: ดาวเทียมมองไม่เห็นน้ำท่วมขังในเมืองจากฝนหนัก และแบบจำลองไม่รวมคันกั้นน้ำ "ไม่พบสัญญาณ" จึงไม่ได้แปลว่าไม่เคยท่วม ผลนี้ใช้คัดกรองเบื้องต้น ไม่ใช่คำแนะนำการลงทุน ควรดูหน้างานหลังฝนหนัก ถามคนในพื้นที่ และตรวจเอกสารกับหน่วยงาน ChatGeo ไม่ได้คัดลอกประกาศขายทอดตลาดมาเก็บ ให้ค้นทรัพย์ที่เว็บกรมบังคับคดี แล้วนำพิกัดมาตรวจที่นี่</p>
         </section>
 
         <section id="h-chat">
@@ -273,6 +300,8 @@
             <button type="button" class="q-chip" data-help-q="กล้องไหนเห็นน้ำท่วมบ้าง">กล้องไหนเห็นน้ำท่วมบ้าง</button>
             <button type="button" class="q-chip" data-help-q="เขื่อนภูมิพลเป็นยังไง">เขื่อนภูมิพลเป็นยังไง</button>
             <button type="button" class="q-chip" data-help-q="ความสูงพื้นดิน">ความสูงพื้นดิน</button>
+            <button type="button" class="q-chip" data-help-q="ตรวจทำเล 13.9100, 100.4000">ตรวจทำเล 13.9100, 100.4000</button>
+            <button type="button" class="q-chip" data-help-q="ที่ดินแถวรังสิต น้ำเคยท่วมไหม">ที่ดินแถวรังสิต น้ำเคยท่วมไหม</button>
             <button type="button" class="q-chip" data-help-q="ข่าวเศรษฐกิจและตลาดล่าสุด">ข่าวเศรษฐกิจและตลาดล่าสุด</button>
           </div>
           <p>แชทตอบจากข้อมูลที่บันทึกไว้จริงเท่านั้น (ข่าวเช้านี้ สถานี ดาวเทียม กล้อง) และบอกเวลาของข้อมูลทุกครั้ง ถ้าไม่มีข้อมูลจะบอกตรงๆ</p>
@@ -295,6 +324,9 @@
               <tr><td>เมฆจากดาวเทียม</td><td>ทุก 10 นาที (ช้ากว่าจริงราว 1 ชม.)</td></tr>
               <tr><td>น้ำจากดาวเทียม Sentinel-1</td><td>เช็กภาพใหม่วันละ 2 รอบ ภาพมาช้ากว่าจริง 5–7 วัน</td></tr>
               <tr><td>พยากรณ์ 3 วัน</td><td>ดึงสดทุกครั้งที่เปิดเว็บ</td></tr>
+              <tr><td>น้ำในอดีต (Landsat)</td><td>ข้อมูลปี 1984–2024 (ชุดล่าสุดของ JRC)</td></tr>
+              <tr><td>แบบจำลองน้ำท่วมใหญ่</td><td>JRC GloFAS v2.1 คิดจากภูมิอากาศปัจจุบัน ไม่ใช่พยากรณ์</td></tr>
+              <tr><td>ผังเมือง</td><td>ภาพจากเซิร์ฟเวอร์กรมโยธาฯ ตามที่หน่วยงานปรับปรุง</td></tr>
             </tbody>
           </table>
         </section>
@@ -306,6 +338,7 @@
             <li>AI ในระบบเป็นโมเดลขนาดเล็ก อาจผิดได้ ดูภาพจริงประกอบเสมอ</li>
             <li>กล้อง CCTV: AI ดูแค่สภาพน้ำ ถนน อากาศ และนับรถ ไม่จดจำใบหน้า ไม่อ่านทะเบียน ไม่ติดตามคน</li>
             <li>ความสูงพื้นดินมาจากแผนที่ความละเอียดราว 30 ม. ไม่ใช่ค่ารังวัด</li>
+            <li>ตรวจทำเลเป็นการคัดกรองจากข้อมูลเปิด ไม่ใช่การประเมินอย่างเป็นทางการ ไม่ใช่คำแนะนำการลงทุน และผังเมืองบนเว็บใช้อ้างอิงทางกฎหมายไม่ได้ ชื่อสถานที่ค้นจาก OpenStreetMap เฉพาะตอนที่คุณกดตรวจ</li>
             <li>ข้อมูลทุกชิ้นมาจากหน่วยงานเจ้าของ ดูรายชื่อแหล่งที่มาได้ที่มุมขวาล่างของแผนที่ และในแต่ละป๊อปอัป</li>
           </ul>
         </section>

@@ -56,7 +56,7 @@
     return x.getImageData(0, 0, w, h);
   }
   function readDataPrefs() {
-    var d = { water: true, rain: true, fc: true, sat: false, flood: true, cctv: true, radar: true, cloud: false, wind: !reduceMotion, terrain: false };
+    var d = { water: true, rain: true, fc: true, sat: false, flood: true, cctv: true, radar: true, cloud: false, wind: !reduceMotion, terrain: false, hist: false, hazard: false, zoning: false };
     try {
       var j = JSON.parse(localStorage.getItem('cg-data') || 'null');
       if (j) Object.keys(d).forEach(function (k) { if (typeof j[k] === 'boolean') d[k] = j[k]; });
@@ -370,7 +370,7 @@
     map.on('error', function (e) {
       if (usingFallback) return;
       if (v.styleLoading) { switchToFallback('ต้องต่ออินเทอร์เน็ต'); return; }
-      if (e && e.sourceId && !v.tileOK) {
+      if (e && e.sourceId && e.sourceId.indexOf('cg-') !== 0 && !v.tileOK) {
         v.tileErrors += 1;
         if (v.tileErrors >= 8) switchToFallback('โหลดภาพแผนที่ไม่ได้');
       }
@@ -413,6 +413,7 @@
     map.on('click', 'cg-thr-fill', function (e) {
       var t = e.originalEvent && e.originalEvent.target;
       if (t && t.closest && t.closest('.maplibregl-marker, .maplibregl-popup')) return;
+      if (kind === 'chat' && SITE.pick) return; // กำลังเลือกจุดตรวจทำเล
       if (topLayersAt(e.point).length) return;
       if (kind === 'chat' && state.data.terrain) return; // เปิดความสูงพื้นดินอยู่: กดแผนที่เพื่อดูความสูงแทนการเปลี่ยนพื้นที่
       var f = e.features && e.features[0];
@@ -422,12 +423,14 @@
     if (kind === 'chat') {
       map.on('zoomend', function () { refreshView(v); });
       map.on('click', 'cg-pins-halo', function (e) {
+        if (SITE.pick) return;
         if (e.features && e.features.length) selectPin(e.features[0].properties.id);
       });
       map.on('mouseenter', 'cg-pins-halo', function () { map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'cg-pins-halo', function () { map.getCanvas().style.cursor = ''; });
       ['cg-water', 'cg-rain'].forEach(function (lid) {
         map.on('click', lid, function (e) {
+          if (SITE.pick) return;
           if (map.queryRenderedFeatures(e.point, { layers: ['cg-pins-halo'] }).length) return;
           // จุดฝนกับสถานีน้ำซ้อนกันได้ ให้สถานีน้ำมาก่อน
           if (lid === 'cg-rain' && state.data.water && map.queryRenderedFeatures(e.point, { layers: ['cg-water'] }).length) return;
@@ -440,6 +443,7 @@
       // ปื้นน้ำจากดาวเทียม (หมุดข่าวและสถานีมาก่อน)
       ['cg-flood-f', 'cg-flood-s'].forEach(function (lid) {
         map.on('click', lid, function (e) {
+          if (SITE.pick) return;
           var top = ['cg-pins-halo', 'cg-water', 'cg-rain'].filter(function (l) { return map.getLayer(l); });
           if (map.queryRenderedFeatures(e.point, { layers: top }).length) return;
           var f = e.features && e.features[0];
@@ -449,6 +453,7 @@
         map.on('mouseleave', lid, function () { map.getCanvas().style.cursor = ''; });
       });
       map.on('click', 'cg-flood-pf', function (e) {
+        if (SITE.pick) return;
         var top = ['cg-pins-halo', 'cg-water', 'cg-rain', 'cg-flood-f', 'cg-flood-s'].filter(function (l) { return map.getLayer(l); });
         if (map.queryRenderedFeatures(e.point, { layers: top }).length) return;
         var f = e.features && e.features[0];
@@ -458,12 +463,15 @@
       map.on('moveend', function () { updateFloodTiles(v); });
       // ความสูงพื้นดิน: กดจุดว่างบนแผนที่ (ไม่โดนหมุดหรือสถานี)
       map.on('click', function (e) {
-        if (!state.data.terrain) return;
         var t = e.originalEvent && e.originalEvent.target;
         if (t && t.closest && t.closest('.maplibregl-marker, .maplibregl-popup')) return;
+        if (SITE.pick) { openSite(e.lngLat.lng, e.lngLat.lat); return; } // เลือกจุดตรวจทำเล
+        if (!state.data.terrain) return;
         if (topLayersAt(e.point).length) return;
         openElevationPopup(v, e.lngLat);
       });
+      // คลิกขวาที่จุดใดก็ได้ = ตรวจทำเลจุดนั้น
+      if (!IN_ARTIFACT) map.on('contextmenu', function (e) { if (e.originalEvent) e.originalEvent.preventDefault(); openSite(e.lngLat.lng, e.lngLat.lat); });
     }
 
     // ป้ายชื่อภาษาไทย
@@ -691,6 +699,8 @@
   }
   function parseHash() {
     var h = decodeURIComponent((location.hash || '').slice(1));
+    var sm = /^site=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(h);
+    if (sm) return { page: 'chat', place: state.place || HOME, site: { lat: +sm[1], lon: +sm[2] } };
     if (h === 'brief') return { page: 'brief', place: HOME };
     if (h.indexOf('brief-') === 0 && byId[h.slice(6)]) return { page: 'brief', place: h.slice(6) };
     if (byId[h]) return { page: 'chat', place: h };
@@ -726,6 +736,7 @@
     var r = parseHash();
     if (r.place !== state.place) goTo(r.place, { noHash: true, instant: r.page !== state.page });
     if (r.page !== state.page) setPage(r.page, { fromHash: true });
+    if (r.site && !IN_ARTIFACT) openSite(r.site.lon, r.site.lat);
   }
   window.addEventListener('popstate', onRoute);
   window.addEventListener('hashchange', onRoute);
@@ -1257,6 +1268,7 @@
       };
     }
     if (m.key === 'near') return nearAnswer(m);
+    if (m.key === 'site') return siteAnswer(m);
     if (m.key === 'nearfail') {
       return { title: 'รอบตัวคุณ', text: m.code === 1
         ? 'ยังไม่ได้รับอนุญาตให้ใช้ตำแหน่ง ถ้าอยากใช้ ให้กดอนุญาตตำแหน่งในเบราว์เซอร์แล้วกด "รอบตัวฉัน" อีกครั้ง หรือพิมพ์ชื่อจังหวัดแทนก็ได้ เช่น ร้อยเอ็ดตอนนี้เป็นยังไง'
@@ -1605,6 +1617,7 @@
   /* ---------- ส่งคำถาม: ใช้ AI ถ้ามี ไม่งั้นตอบแบบออฟไลน์ ---------- */
   function submitQuestion(text) {
     if (!text || state.typing || ai.busy) return;
+    if (!IN_ARTIFACT && ((SITE_RE.test(text) && !/ข่าว/.test(text)) || parseCoords(text))) { siteQuery(text); return; }
     if (NEAR_RE.test(text)) {
       if (state.page !== 'chat') setPage('chat');
       state.messages.push({ role: 'user', text: text });
@@ -2350,6 +2363,9 @@
     updateCloud(v);
     updateTerrain(v);
     updateWind(v);
+    updateHist(v);
+    updateHazard(v);
+    updateZoning(v);
   }
   // ป้ายพยากรณ์วันนี้ที่เมืองตัวแทนของแต่ละภาค
   function buildFcMarkers(v) {
@@ -2836,6 +2852,7 @@
         el.setAttribute('aria-label', 'กล้อง CCTV ' + name + ' ' + cams.length + ' ตัว สถานะ ' + L.t);
         el.addEventListener('click', function (ev) {
           ev.stopPropagation();
+          if (SITE.pick) { openSite(lon, lat); return; }
           if (level === 'area' && sites.length > 1) {
             var b = sites.reduce(function (bb, s) { return [Math.min(bb[0], s.lon), Math.min(bb[1], s.lat), Math.max(bb[2], s.lon), Math.max(bb[3], s.lat)]; }, [999, 999, -999, -999]);
             v.map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 90, maxZoom: 11.5, duration: reduceMotion ? 0 : 900 });
@@ -3111,7 +3128,7 @@
     }
     var wall = names.length === 1 ? 'prov:' + names[0] : 'all';
     var sites = cams.map(function (c) { return CCTV.siteOf[c.id].id; }).filter(function (x, i, a) { return a.indexOf(x) === i; });
-    return ccBlockHtml(cams, opt.near ? 'ใกล้คุณ' : tg.label, wall, { showSite: sites.length > 1, links: links, max: 5, site: sites.length === 1 ? sites[0] : '' });
+    return ccBlockHtml(cams, opt.near ? (opt.nearLabel || 'ใกล้คุณ') : tg.label, wall, { showSite: sites.length > 1, links: links, max: 5, site: sites.length === 1 ? sites[0] : '' });
   }
   function cctvAnswer(r) {
     if (!ccReady()) return { title: 'กล้อง CCTV', text: CCTV.loaded ? 'โหลดรายชื่อกล้องไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง' : 'กำลังโหลดรายชื่อกล้อง ลองถามอีกครั้งในไม่กี่วินาทีครับ' };
@@ -3395,7 +3412,8 @@
         '<div class="pop-sub">' + esc(eleText(o)) + '</div>' +
         '<div class="pop-sub">รัศมี 1 กม.: ต่ำสุด ' + Math.round(o.min) + ' · กลาง ' + Math.round(o.med) + ' · สูงสุด ' + Math.round(o.max) + ' ม.</div>' +
         '<div class="pop-sub">ค่าจากแผนที่ความสูงความละเอียดราว 30 ม. ที่ราบลุ่มอาจคลาดเคลื่อนหลายเมตร ใช้ดูภาพรวม ไม่ใช่ค่ารังวัด · ' + DEM_ATTR + '</div>' +
-        '<button type="button" class="btn-ghost fl-go" data-terrain3d="' + (v.terrain3d ? '0' : '1') + '">' + (v.terrain3d ? 'กลับเป็นแผนที่แบน' : 'ดูแบบ 3 มิติ') + '</button>';
+        '<div class="pop-acts"><button type="button" class="btn-ghost fl-go" data-site-ll="' + ll.lng.toFixed(6) + ',' + ll.lat.toFixed(6) + '">ตรวจทำเลจุดนี้</button>' +
+        '<button type="button" class="btn-ghost fl-go" data-terrain3d="' + (v.terrain3d ? '0' : '1') + '">' + (v.terrain3d ? 'กลับเป็นแผนที่แบน' : 'ดูแบบ 3 มิติ') + '</button></div>';
     }).catch(function () {
       box.innerHTML = '<div class="pop-meta">ความสูงพื้นดิน</div><div class="pop-title">อ่านค่าความสูงไม่ได้ตอนนี้</div><div class="pop-sub">ลองใหม่อีกครั้ง หรือเช็กอินเทอร์เน็ต</div>';
     });
@@ -3562,6 +3580,903 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('helpModal').hidden) { e.preventDefault(); closeHelp(); } });
   }
 
+  /* ---------- ตรวจทำเล: น้ำในอดีต 41 ปี + แบบจำลองน้ำท่วมใหญ่ + ความสูง + ผังเมือง ---------- */
+  // น้ำในอดีต: JRC Global Surface Water (Landsat 1984–2024) ภาพสำเร็จรูป ซูมได้ถึงระดับ 13 (ราว 19 ม./จุด)
+  var GSW_URL = 'https://storage.googleapis.com/water-world/tiles2024/';
+  var GSW_ATTR = 'น้ำในอดีต: <a href="https://global-surface-water.appspot.com/" target="_blank" rel="noopener">Source: EC JRC/Google</a> (Landsat 1984–2024)';
+  var GSW_Z = 13;
+  // สีของชั้น transitions (เทียบปีแรกกับปีล่าสุด) อ่านจากภาพจริงของ JRC แล้วจับคู่สีที่ใกล้สุด
+  var GSW_TR = [
+    { k: 'perm', c: [0, 0, 221], t: 'แหล่งน้ำถาวร (แม่น้ำ คลอง บ่อ อ่าง)' },
+    { k: 'newperm', c: [34, 177, 76], t: 'กลายเป็นแหล่งน้ำถาวรในช่วงหลัง เช่น บ่อหรืออ่างที่ขุดใหม่' },
+    { k: 'lostperm', c: [147, 7, 62], t: 'เคยเป็นแหล่งน้ำถาวร ตอนนี้แห้งหรือถูกถมแล้ว' },
+    { k: 'seas', c: [153, 217, 234], t: 'มีน้ำตามฤดูกาลแทบทุกปี เช่น ทุ่งรับน้ำ นาที่น้ำขัง' },
+    { k: 'newseas', c: [181, 230, 29], t: 'เริ่มมีน้ำตามฤดูกาลในช่วงหลัง' },
+    { k: 'lostseas', c: [235, 180, 187], t: 'เคยมีน้ำตามฤดูกาล ตอนนี้ไม่มีแล้ว (อาจถูกถมหรือมีคันกั้น)' },
+    { k: 'seas2perm', c: [255, 139, 55], t: 'จากน้ำตามฤดูกาล กลายเป็นแหล่งน้ำถาวร' },
+    { k: 'perm2seas', c: [255, 221, 102], t: 'จากแหล่งน้ำถาวร กลายเป็นน้ำตามฤดูกาล' },
+    { k: 'ephperm', c: [127, 127, 127], t: 'เคยมีน้ำขังนานช่วงหนึ่งแล้วหายไป' },
+    { k: 'ephseas', c: [172, 172, 172], t: 'เคยมีน้ำเป็นครั้งคราวบางปี (มักเป็นน้ำท่วม)' }
+  ];
+  var GSW_PERM = { perm: 1, newperm: 1, seas2perm: 1 };
+  var GSW_FILLED = { lostperm: 1, lostseas: 1 };
+  // แบบจำลองน้ำท่วมจากแม่น้ำ: JRC GloFAS flood hazard v2.1 (90 ม.) อ่านไฟล์ COG ทีละส่วนจาก Source Cooperative
+  var GLOFAS_BASE = 'https://data.source.coop/nlebovits/jrc-glofas/';
+  var GLOFAS_TILES = ['ID200_N30_E90', 'ID201_N20_E90', 'ID202_N10_E90', 'ID209_N30_E100', 'ID210_N20_E100', 'ID211_N10_E100'];
+  var GLOFAS_ATTR = 'แบบจำลองน้ำท่วม: <a href="https://source.coop/nlebovits/jrc-glofas" target="_blank" rel="noopener">European Union, 2016-2021, GloFAS</a> (CC BY 4.0)';
+  var GLOFAS_RP = [10, 20, 50, 100, 500];
+  // ชั้นความลึกในไฟล์ของ JRC (ตรวจจากไฟล์ความลึกจริง): 1 = 0.1–1 ม., 2 = 1–3 ม., 3 ขึ้นไป = มากกว่า 3 ม.
+  var HAZ_T = { 1: 'ลึกไม่เกิน 1 ม.', 2: 'ลึก 1–3 ม.', 3: 'ลึกเกิน 3 ม.', 4: 'ลึกเกิน 3 ม.' };
+  var HAZ_RGBA = { 1: [173, 140, 245, 150], 2: [128, 82, 224, 185], 3: [84, 40, 176, 215], 4: [84, 40, 176, 215] };
+  var HAZ = { err: false };
+  // ผังเมืองรวม: แสดงภาพจากเซิร์ฟเวอร์ของกรมโยธาธิการและผังเมืองตรงๆ ไม่คัดลอกข้อมูลมาเก็บ
+  var ZONE_SVC = 'https://onedpt.dpt.go.th/arcgis/rest/services/TOWNPLAN/CPLLU_NON/MapServer';
+  var ZONE_ATTR = 'ผังเมือง: <a href="https://plludds.dpt.go.th/landuse/" target="_blank" rel="noopener">กรมโยธาธิการและผังเมือง</a> (ใช้อ้างอิงทางกฎหมายไม่ได้)';
+  var ZONE_MINZ = 11;
+  var ZONE = { ok: false, err: false, legend: null, legendTried: false };
+  // สีมาตรฐานของผังเมืองรวมแบบคร่าวๆ (ไม่ใช่ค่าสีทางการ) ใช้อธิบาย ส่วนสีจริงบนแผนที่มาจากเซิร์ฟเวอร์กรมโยธาฯ
+  var ZONE_LEG = [
+    ['#FFE15A', 'ย.1–ย.4 สีเหลือง', 'ที่อยู่อาศัยหนาแน่นน้อย บ้านเดี่ยวเป็นหลัก'],
+    ['#FF9F3F', 'ย.5–ย.7 สีส้ม', 'ที่อยู่อาศัยหนาแน่นปานกลาง ทาวน์เฮาส์ อาคารชุดขนาดกลาง'],
+    ['#A86A3D', 'ย.8–ย.10 สีน้ำตาล', 'ที่อยู่อาศัยหนาแน่นมาก ในเมือง ใกล้ระบบขนส่ง'],
+    ['#E5484D', 'พ. สีแดง', 'พาณิชยกรรม ร้านค้า สำนักงาน ศูนย์กลางเมือง'],
+    ['#8E5BC4', 'อ. สีม่วง', 'อุตสาหกรรม'],
+    ['#D9A2E0', 'คลังสินค้า สีเม็ดมะปราง', 'คลังสินค้าและโลจิสติกส์'],
+    ['#7CC56B', 'ก. สีเขียว', 'ชนบทและเกษตรกรรม'],
+    ['hatch', 'ก. ขาวลายเขียว', 'อนุรักษ์ชนบทและเกษตรกรรม (มักเป็นทางระบายน้ำ ฟลัดเวย์)'],
+    ['#C9A27E', 'ศ. สีน้ำตาลอ่อน', 'อนุรักษ์เพื่อส่งเสริมเอกลักษณ์ศิลปวัฒนธรรมไทย'],
+    ['#3B6FD6', 'ส. สีน้ำเงิน', 'สถาบันราชการ สาธารณูปโภค']
+  ];
+  var NOMI = 'https://nominatim.openstreetmap.org/';
+  var SITE = { pick: false, cur: null, res: {}, marker: null, pickMsg: null };
+
+  // ---------- อ่านไฟล์ GeoTIFF แบบ COG ทีละส่วนผ่าน HTTP Range (ไม่ต้องโหลดทั้งไฟล์) ----------
+  // รองรับ TIFF ปกติ แบ่งเป็นช่อง (tile) บีบอัด DEFLATE หรือไม่บีบอัด predictor 1/2/3 ภาพมีภาพย่อ (overview) ในไฟล์เดียวกัน
+  var COG_OPEN = {}, COG_BLOCKS = new Map(), COG_BLOCK_MAX = 40;
+  function rangeGet(url, a, b) {
+    return fetch(url, { headers: { Range: 'bytes=' + a + '-' + b } }).then(function (r) {
+      if (r.status !== 206 && r.status !== 200) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer().then(function (buf) { return r.status === 200 && buf.byteLength > b - a + 1 ? buf.slice(a, b + 1) : buf; });
+    });
+  }
+  function cogOpen(url) {
+    if (COG_OPEN[url]) return COG_OPEN[url];
+    var p = (async function () {
+      var hdr = new Uint8Array(await rangeGet(url, 0, 16383));
+      async function need(end) { // ขยายส่วนหัวที่โหลดไว้ให้ครอบถึงตำแหน่ง end
+        if (end <= hdr.length) return;
+        var more = new Uint8Array(await rangeGet(url, hdr.length, Math.max(end, hdr.length * 2) - 1));
+        var n = new Uint8Array(hdr.length + more.length); n.set(hdr); n.set(more, hdr.length); hdr = n;
+      }
+      function dv() { return new DataView(hdr.buffer, hdr.byteOffset, hdr.byteLength); }
+      var le = hdr[0] === 0x49;
+      if (dv().getUint16(2, le) !== 42) throw new Error('ไม่ใช่ TIFF ปกติ');
+      var SZ = { 1: 1, 2: 1, 3: 2, 4: 4, 6: 1, 7: 1, 8: 2, 9: 4, 11: 4, 12: 8, 16: 8 };
+      async function values(type, count, at) {
+        var size = (SZ[type] || 1) * count;
+        await need(at + size);
+        var d = dv(), out = [];
+        if (type === 2) return new TextDecoder().decode(hdr.subarray(at, at + count)).replace(/\0+$/, '');
+        for (var i = 0; i < count; i++) {
+          var o = at + i * SZ[type];
+          out.push(type === 3 ? d.getUint16(o, le) : type === 4 ? d.getUint32(o, le) : type === 12 ? d.getFloat64(o, le) :
+            type === 1 || type === 7 ? d.getUint8(o) : type === 8 ? d.getInt16(o, le) : type === 9 ? d.getInt32(o, le) : type === 11 ? d.getFloat32(o, le) : 0);
+        }
+        return out;
+      }
+      var levels = [], off = dv().getUint32(4, le), geo = null, nodata = null;
+      while (off && levels.length < 16) {
+        await need(off + 2);
+        var n = dv().getUint16(off, le), T = {};
+        await need(off + 2 + n * 12 + 4);
+        for (var i = 0; i < n; i++) {
+          var e = off + 2 + i * 12, d = dv();
+          var tag = d.getUint16(e, le), type = d.getUint16(e + 2, le), cnt = d.getUint32(e + 4, le);
+          var inl = (SZ[type] || 1) * cnt <= 4;
+          T[tag] = await values(type, cnt, inl ? e + 8 : d.getUint32(e + 8, le));
+        }
+        var next = dv().getUint32(off + 2 + n * 12, le);
+        var sub = T[254] ? T[254][0] : 0;
+        if (!(sub & 4) && T[322] && T[324]) { // ข้ามภาพหน้ากาก (mask)
+          levels.push({ w: T[256][0], h: T[257][0], tw: T[322][0], th: T[323][0], bps: (T[258] || [8])[0], comp: (T[259] || [1])[0],
+            pred: (T[317] || [1])[0], sf: (T[339] || [1])[0], offsets: T[324], counts: T[325] });
+          if (!geo && T[33550] && T[33922]) {
+            var s = T[33550], tp = T[33922];
+            geo = { x0: tp[3] - tp[0] * s[0], y0: tp[4] + tp[1] * s[1], sx: s[0], sy: s[1] };
+          }
+          if (nodata == null && T[42113] != null) nodata = parseFloat(T[42113]);
+        }
+        off = next;
+      }
+      if (!levels.length || !geo) throw new Error('ไฟล์ไม่มีข้อมูลพิกัด');
+      var W = levels[0].w * geo.sx, H = levels[0].h * geo.sy;
+      levels.forEach(function (L) { L.rx = W / L.w; L.ry = H / L.h; L.nx = Math.ceil(L.w / L.tw); });
+      return { url: url, levels: levels, west: geo.x0, north: geo.y0, east: geo.x0 + W, south: geo.y0 - H, nodata: nodata };
+    })();
+    COG_OPEN[url] = p;
+    p.catch(function () { delete COG_OPEN[url]; });
+    return p;
+  }
+  function inflate(u8) {
+    var ds = new DecompressionStream('deflate');
+    return new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+  }
+  function unpredict(b, L) {
+    var w = L.tw, h = L.th, by = L.bps / 8, r, i, o;
+    if (L.pred === 2) { // ผลต่างตามแนวนอน: บวกสะสมทีละค่า (ตามขนาดข้อมูล 8/16/32 บิต)
+      var a = by === 1 ? b : by === 2 ? new Uint16Array(b.buffer, b.byteOffset, w * h) : new Uint32Array(b.buffer, b.byteOffset, w * h);
+      var mask = by === 1 ? 255 : by === 2 ? 65535 : 0;
+      for (r = 0; r < h; r++) {
+        o = r * w;
+        for (i = 1; i < w; i++) a[o + i] = by === 4 ? (a[o + i] + a[o + i - 1]) >>> 0 : (a[o + i] + a[o + i - 1]) & mask;
+      }
+    } else if (L.pred === 3) { // floating point predictor (แยกไบต์ตามลำดับความสำคัญ แล้วบวกสะสม)
+      var rowB = w * by, out = new Uint8Array(b.length);
+      for (r = 0; r < h; r++) {
+        o = r * rowB;
+        for (i = 1; i < rowB; i++) b[o + i] = (b[o + i] + b[o + i - 1]) & 255;
+        for (var c = 0; c < w; c++) for (var k = 0; k < by; k++) out[o + c * by + k] = b[o + (by - k - 1) * w + c];
+      }
+      b = out;
+    } else if (L.pred !== 1) throw new Error('predictor ' + L.pred);
+    if (L.sf === 3 && by === 4) return new Float32Array(b.buffer, b.byteOffset, w * h);
+    if (by === 1) return b;
+    if (by === 2) return L.sf === 2 ? new Int16Array(b.buffer, b.byteOffset, w * h) : new Uint16Array(b.buffer, b.byteOffset, w * h);
+    throw new Error('ชนิดข้อมูลที่ยังไม่รองรับ');
+  }
+  function cogBlock(cog, li, tx, ty) {
+    var L = cog.levels[li], idx = ty * L.nx + tx, key = cog.url + '|' + li + '|' + idx;
+    var hit = COG_BLOCKS.get(key);
+    if (hit) { COG_BLOCKS.delete(key); COG_BLOCKS.set(key, hit); return hit; }
+    var p = (async function () {
+      var off = L.offsets[idx], n = L.counts[idx];
+      if (!n) return null; // ช่องว่าง = ไม่มีข้อมูลทั้งช่อง
+      var raw = new Uint8Array(await rangeGet(cog.url, off, off + n - 1));
+      var bytes = L.comp === 8 || L.comp === 32946 ? await inflate(raw) : L.comp === 1 ? raw : null;
+      if (!bytes) throw new Error('การบีบอัดแบบ ' + L.comp + ' ยังไม่รองรับ');
+      return unpredict(bytes, L);
+    })();
+    COG_BLOCKS.set(key, p);
+    if (COG_BLOCKS.size > COG_BLOCK_MAX) COG_BLOCKS.delete(COG_BLOCKS.keys().next().value);
+    p.catch(function () { COG_BLOCKS.delete(key); });
+    return p;
+  }
+  // ค่าที่จุด (ความละเอียดเต็ม) และค่ามากสุดในรัศมี rad ช่อง (ไม่นับ nodata)
+  async function cogPoint(cog, lon, lat, rad) {
+    var L = cog.levels[0];
+    var cx = Math.floor((lon - cog.west) / L.rx), cy = Math.floor((cog.north - lat) / L.ry);
+    if (cx < 0 || cy < 0 || cx >= L.w || cy >= L.h) return null;
+    rad = rad || 0;
+    var want = {};
+    for (var y = cy - rad; y <= cy + rad; y++) for (var x = cx - rad; x <= cx + rad; x++) {
+      if (x < 0 || y < 0 || x >= L.w || y >= L.h) continue;
+      var k = Math.floor(x / L.tw) + ',' + Math.floor(y / L.th);
+      (want[k] = want[k] || []).push([x, y]);
+    }
+    var v = null, max = null, nod = cog.nodata;
+    await Promise.all(Object.keys(want).map(function (k) {
+      var t = k.split(',').map(Number);
+      return cogBlock(cog, 0, t[0], t[1]).then(function (blk) {
+        want[k].forEach(function (p) {
+          var val = blk ? blk[(p[1] - t[1] * L.th) * L.tw + (p[0] - t[0] * L.tw)] : nod;
+          if (val === nod || val !== val) return;
+          if (p[0] === cx && p[1] === cy) v = val;
+          if (max == null || val > max) max = val;
+        });
+      });
+    }));
+    return { v: v, max: max };
+  }
+  // วาดภาพขนาด size×size สำหรับกรอบแผนที่ z/x/y (Web Mercator) จากไฟล์ COG หลายไฟล์ (พิกัดองศา) เลือกภาพย่อที่พอดี
+  async function cogRender(cogs, z, x, y, size, colorOf) {
+    var n = Math.pow(2, z), west = x / n * 360 - 180, east = (x + 1) / n * 360 - 180;
+    function latOf(yy) { var a = Math.PI * (1 - 2 * yy / n); return 180 / Math.PI * Math.atan(Math.sinh(a)); }
+    var north = latOf(y), south = latOf(y + 1), px = (east - west) / size;
+    var lons = [], lats = [], i, j;
+    for (i = 0; i < size; i++) lons.push(west + (i + 0.5) * px);
+    for (j = 0; j < size; j++) lats.push(latOf(y + (j + 0.5) / size));
+    var rgba = new Uint8ClampedArray(size * size * 4), any = false;
+    await Promise.all(cogs.map(async function (cog) {
+      if (cog.east <= west || cog.west >= east || cog.north <= south || cog.south >= north) return;
+      var li = 0;
+      for (var k = 1; k < cog.levels.length; k++) if (cog.levels[k].rx <= px * 1.01) li = k;
+      var L = cog.levels[li], cols = [], rows = [], need = {};
+      for (i = 0; i < size; i++) { var c = Math.floor((lons[i] - cog.west) / L.rx); cols.push(c >= 0 && c < L.w ? c : -1); }
+      for (j = 0; j < size; j++) { var r = Math.floor((cog.north - lats[j]) / L.ry); rows.push(r >= 0 && r < L.h ? r : -1); }
+      var cTiles = {}, rTiles = {};
+      cols.forEach(function (c) { if (c >= 0) cTiles[Math.floor(c / L.tw)] = 1; });
+      rows.forEach(function (r) { if (r >= 0) rTiles[Math.floor(r / L.th)] = 1; });
+      var blocks = {};
+      await Promise.all([].concat.apply([], Object.keys(rTiles).map(function (ty) {
+        return Object.keys(cTiles).map(function (tx) {
+          return cogBlock(cog, li, +tx, +ty).then(function (b) { blocks[tx + ',' + ty] = b; });
+        });
+      })));
+      for (j = 0; j < size; j++) {
+        var rr = rows[j];
+        if (rr < 0) continue;
+        var ty2 = Math.floor(rr / L.th), ry = rr - ty2 * L.th;
+        for (i = 0; i < size; i++) {
+          var cc = cols[i];
+          if (cc < 0) continue;
+          var tx2 = Math.floor(cc / L.tw), blk = blocks[tx2 + ',' + ty2];
+          if (!blk) continue;
+          var val = blk[ry * L.tw + (cc - tx2 * L.tw)];
+          if (val === cog.nodata || val !== val) continue;
+          var col = colorOf(val);
+          if (!col) continue;
+          var o = (j * size + i) * 4;
+          rgba[o] = col[0]; rgba[o + 1] = col[1]; rgba[o + 2] = col[2]; rgba[o + 3] = col[3];
+          any = true;
+        }
+      }
+    }));
+    return any ? rgba : null;
+  }
+  // ---------- น้ำในอดีต: อ่านค่าจากภาพของ JRC ที่จุด ----------
+  var GSW_CACHE = {};
+  function gswTile(layer, x, y) {
+    var k = layer + '/' + x + '/' + y;
+    if (!GSW_CACHE[k]) {
+      GSW_CACHE[k] = fetch(GSW_URL + layer + '/' + GSW_Z + '/' + x + '/' + y + '.png').then(function (r) {
+        if (r.status === 404 || r.status === 403) return null; // ไม่มีภาพ = ไม่เคยพบน้ำทั้งกรอบ
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.blob().then(function (b) { return createImageBitmap(b, { premultiplyAlpha: 'none' }).catch(function () { return createImageBitmap(b); }); }).then(function (bmp) {
+          var c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+          var g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0);
+          return { w: bmp.width, d: g.getImageData(0, 0, bmp.width, bmp.height).data };
+        });
+      });
+      GSW_CACHE[k].catch(function () { delete GSW_CACHE[k]; });
+    }
+    return GSW_CACHE[k];
+  }
+  function gswClass(r, g, b) {
+    var best = null, bd = 1e9;
+    GSW_TR.forEach(function (t) { var d = (t.c[0] - r) * (t.c[0] - r) + (t.c[1] - g) * (t.c[1] - g) + (t.c[2] - b) * (t.c[2] - b); if (d < bd) { bd = d; best = t.k; } });
+    return best;
+  }
+  // อ่านที่จุด + รัศมี 300 ม.: occurrence (ความถี่ที่มีน้ำ %) จากความทึบของสี, transitions (ประเภท), recurrence (% ของปีที่น้ำกลับมา)
+  function gswAt(lon, lat) {
+    var n = Math.pow(2, GSW_Z) * 256, r = Math.PI / 180;
+    var fx = (lon + 180) / 360 * n, fy = (1 - Math.log(Math.tan(lat * r) + 1 / Math.cos(lat * r)) / Math.PI) / 2 * n;
+    var cx = Math.floor(fx), cy = Math.floor(fy);
+    var mpp = 40075016 * Math.cos(lat * r) / n, R = Math.ceil(300 / mpp);
+    var keys = [];
+    for (var ty = Math.floor((cy - R) / 256); ty <= Math.floor((cy + R) / 256); ty++) {
+      for (var tx = Math.floor((cx - R) / 256); tx <= Math.floor((cx + R) / 256); tx++) keys.push([tx, ty]);
+    }
+    return Promise.all(keys.map(function (t) {
+      return Promise.all(['occurrence', 'transitions', 'recurrence'].map(function (l) { return gswTile(l, t[0], t[1]); }));
+    })).then(function (arr) {
+      var T = {};
+      keys.forEach(function (t, i) { T[t[0] + '/' + t[1]] = arr[i]; });
+      function px(li, gx, gy) {
+        var tx2 = Math.floor(gx / 256), ty2 = Math.floor(gy / 256), im = T[tx2 + '/' + ty2] && T[tx2 + '/' + ty2][li];
+        if (!im) return null;
+        var i = ((gy - ty2 * 256) * im.w + (gx - tx2 * 256)) * 4;
+        return im.d[i + 3] ? [im.d[i], im.d[i + 1], im.d[i + 2], im.d[i + 3]] : null;
+      }
+      var o = px(0, cx, cy), t = px(1, cx, cy), q = px(2, cx, cy);
+      var res = { occ: o ? Math.round(o[3] / 2.55) : 0, tr: t ? gswClass(t[0], t[1], t[2]) : null,
+        rec: q ? Math.max(0, Math.min(100, Math.round((255 - q[0]) / 102 * 100))) : null,
+        histNear: null, permNear: null, filledNear: null, occMax100: 0, wet: 0, n: 0, hist: 0, filled: 0 };
+      for (var dy = -R; dy <= R; dy++) for (var dx = -R; dx <= R; dx++) {
+        var dm = Math.sqrt(dx * dx + dy * dy) * mpp;
+        if (dm > 300) continue;
+        res.n++;
+        var tc = px(1, cx + dx, cy + dy);
+        if (!tc) continue;
+        res.wet++;
+        var k = gswClass(tc[0], tc[1], tc[2]);
+        if (GSW_PERM[k]) { if (res.permNear == null || dm < res.permNear) res.permNear = dm; }
+        else {
+          res.hist++;
+          if (res.histNear == null || dm < res.histNear) res.histNear = dm;
+          if (GSW_FILLED[k]) { res.filled++; if (res.filledNear == null || dm < res.filledNear) res.filledNear = dm; }
+        }
+        if (dm <= 100) { var oc = px(0, cx + dx, cy + dy); if (oc && !GSW_PERM[k]) res.occMax100 = Math.max(res.occMax100, Math.round(oc[3] / 2.55)); }
+      }
+      res.fHist = res.n ? res.hist / res.n : 0;     // สัดส่วนพื้นที่ในรัศมี 300 ม. ที่เคยมีน้ำท่วม/ขัง (ไม่นับแหล่งน้ำถาวร)
+      res.fFilled = res.n ? res.filled / res.n : 0; // สัดส่วนที่เคยเป็นที่น้ำขังแล้วแห้งหรือถูกถม
+      return res;
+    });
+  }
+  function gswLevel(g) {
+    if (!g) return null;
+    if (g.tr && GSW_PERM[g.tr]) return { lv: 'water', s: 0, t: 'จุดนี้เป็นแหล่งน้ำ' };
+    if (g.tr) {
+      if (g.occ >= 25 || g.tr === 'seas' || g.tr === 'perm2seas' || g.tr === 'newseas') return { lv: 'often', s: 3, t: 'มีน้ำขังบ่อย' };
+      return { lv: 'some', s: 2, t: 'เคยมีน้ำท่วมหรือน้ำขัง' };
+    }
+    if (g.occ > 0) return { lv: 'some', s: 2, t: 'เคยมีน้ำท่วมหรือน้ำขัง' };
+    if (g.fHist >= 0.25) return { lv: 'near', s: 1.5, t: 'รอบๆ เคยมีน้ำท่วมเป็นวงกว้าง' };
+    if (g.histNear != null && g.histNear <= 100) return { lv: 'near', s: 1, t: 'ใกล้จุดที่เคยมีน้ำ' };
+    if (g.histNear != null) return { lv: 'near2', s: 0.5, t: 'ในรัศมี 300 ม. เคยมีน้ำ' };
+    return { lv: 'none', s: 0, t: 'ไม่พบน้ำในอดีต' };
+  }
+  function trText(k) { var t = find(GSW_TR, function (x) { return x.k === k; }); return t ? t.t : ''; }
+  function mText(m) { return m < 50 ? 'ไม่ถึง 50 ม.' : 'ราว ' + Math.round(m / 10) * 10 + ' ม.'; }
+
+  // ---------- แบบจำลองน้ำท่วมใหญ่: ชั้นความลึกที่จุด ทุกระดับความถี่ (รอบ 10–500 ปี) ----------
+  function glofasUrl(rp, t) { return GLOFAS_BASE + 'hazard-rp' + rp + '/' + t + '/' + t + '_RP' + rp + '_depth_reclass.tif'; }
+  function glofasTilesFor(w, s, e, n) {
+    return GLOFAS_TILES.filter(function (t) {
+      var m = /_N(\d+)_E(\d+)/.exec(t), top = +m[1], left = +m[2];
+      return left - 0.1 < e && left + 10.1 > w && top - 10.1 < n && top + 0.1 > s;
+    });
+  }
+  function hazAt(lon, lat) {
+    var ts = glofasTilesFor(lon, lat, lon, lat);
+    if (!ts.length) return Promise.resolve(null);
+    return Promise.all(GLOFAS_RP.map(function (rp) {
+      return Promise.all(ts.map(function (t) { return cogOpen(glofasUrl(rp, t)).catch(function () { return null; }); })).then(function (cogs) {
+        var ok = cogs.filter(Boolean);
+        if (!ok.length) throw new Error('อ่านแบบจำลองไม่ได้');
+        var cog = find(ok, function (c) { return lon >= c.west && lon < c.east && lat > c.south && lat <= c.north; });
+        return cog ? cogPoint(cog, lon, lat, 1) : null;
+      }).then(function (r) { return { rp: rp, v: r ? r.v : null, max: r ? r.max : null }; });
+    }));
+  }
+  function chance20(rp) { return Math.round((1 - Math.pow(1 - 1 / rp, 20)) * 100); }
+  function hazLevel(h) {
+    if (!h) return null;
+    var first = find(h, function (x) { return x.v != null; }), near = find(h, function (x) { return x.max != null; });
+    if (first) return { lv: 'in', rp: first.rp, s: first.rp <= 20 ? 3 : first.rp <= 100 ? 2 : 1, t: 'ท่วมตั้งแต่ระดับรอบ ' + first.rp + ' ปี' };
+    if (near) return { lv: 'near', rp: near.rp, s: 1, t: 'ใกล้พื้นที่ท่วมรอบ ' + near.rp + ' ปี' };
+    return { lv: 'none', s: 0, t: 'แบบจำลองไม่พบน้ำท่วมจากแม่น้ำ' };
+  }
+  // ชั้นแผนที่ "พื้นที่น้ำท่วมใหญ่ รอบ 100 ปี": วาดเองจากไฟล์ COG ทีละกรอบ (ใช้ภาพย่อในไฟล์ตอนซูมออก)
+  var EMPTY_PNG = null;
+  function rgbaToPng(rgba, size) {
+    var img = new ImageData(rgba, size, size);
+    try {
+      if (typeof OffscreenCanvas !== 'undefined') {
+        var oc = new OffscreenCanvas(size, size), og = oc.getContext('2d');
+        if (og && oc.convertToBlob) { og.putImageData(img, 0, 0); return oc.convertToBlob({ type: 'image/png' }).then(function (b) { return b.arrayBuffer(); }); }
+      }
+    } catch (e) { /* ใช้ canvas ปกติแทน */ }
+    var c = document.createElement('canvas'); c.width = c.height = size; c.getContext('2d').putImageData(img, 0, 0);
+    return new Promise(function (ok, no) { c.toBlob(function (b) { if (b) ok(b.arrayBuffer()); else no(new Error('toBlob')); }, 'image/png'); });
+  }
+  function emptyPng() { if (!EMPTY_PNG) EMPTY_PNG = rgbaToPng(new Uint8ClampedArray(4), 1); return EMPTY_PNG; }
+  function hazTile(z, x, y) {
+    var n = Math.pow(2, z);
+    function latOf(yy) { return 180 / Math.PI * Math.atan(Math.sinh(Math.PI * (1 - 2 * yy / n))); }
+    var ts = glofasTilesFor(x / n * 360 - 180, latOf(y + 1), (x + 1) / n * 360 - 180, latOf(y));
+    if (!ts.length) return emptyPng();
+    return Promise.all(ts.map(function (t) { return cogOpen(glofasUrl(100, t)).catch(function () { return null; }); })).then(function (cogs) {
+      var ok = cogs.filter(Boolean);
+      if (!ok.length) throw new Error('อ่านแบบจำลองไม่ได้');
+      return cogRender(ok, z, x, y, 256, function (v) { return HAZ_RGBA[v] || null; });
+    }).then(function (rgba) {
+      if (HAZ.err) { HAZ.err = false; renderDataChips(); }
+      return rgba ? rgbaToPng(rgba, 256) : emptyPng();
+    }, function () {
+      if (!HAZ.err) { HAZ.err = true; renderDataChips(); }
+      return emptyPng();
+    });
+  }
+  if (!IN_ARTIFACT && window.maplibregl && maplibregl.addProtocol && typeof DecompressionStream !== 'undefined') {
+    maplibregl.addProtocol('cghaz', function (params) {
+      var m = /cghaz:\/\/rp100\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+      if (!m) return Promise.reject(new Error('bad url'));
+      return hazTile(+m[1], +m[2], +m[3]).then(function (buf) { return { data: buf }; });
+    });
+  }
+
+  // ---------- ชั้นแผนที่: น้ำในอดีต + แบบจำลองน้ำท่วม ----------
+  function belowData(map) { return map.getLayer('cg-thr-fill') ? 'cg-thr-fill' : undefined; }
+  function updateHist(v) {
+    if (!v || v.kind !== 'chat' || v.styleLoading || !v.map.getSource('cg-water')) return;
+    var map = v.map, on = !!state.data.hist && !IN_ARTIFACT;
+    if (on && !map.getSource('cg-hist')) {
+      map.addSource('cg-hist', { type: 'raster', tileSize: 256, maxzoom: GSW_Z, tiles: [GSW_URL + 'occurrence/{z}/{x}/{y}.png'], attribution: GSW_ATTR });
+      map.addLayer({ id: 'cg-hist', type: 'raster', source: 'cg-hist', paint: { 'raster-opacity': 0.85 } }, belowData(map));
+    }
+    if (map.getLayer('cg-hist')) map.setLayoutProperty('cg-hist', 'visibility', on ? 'visible' : 'none');
+  }
+  function updateHazard(v) {
+    if (!v || v.kind !== 'chat' || v.styleLoading || !v.map.getSource('cg-water')) return;
+    var map = v.map, on = !!state.data.hazard && !IN_ARTIFACT && typeof DecompressionStream !== 'undefined';
+    if (on && !map.getSource('cg-haz')) {
+      map.addSource('cg-haz', { type: 'raster', tileSize: 256, minzoom: 5, maxzoom: 12, tiles: ['cghaz://rp100/{z}/{x}/{y}'], attribution: GLOFAS_ATTR,
+        bounds: [97.2, 5.5, 105.8, 20.6] });
+      map.addLayer({ id: 'cg-haz', type: 'raster', source: 'cg-haz', paint: { 'raster-opacity': 0.9, 'raster-resampling': 'nearest' } }, belowData(map));
+    }
+    if (map.getLayer('cg-haz')) map.setLayoutProperty('cg-haz', 'visibility', on ? 'visible' : 'none');
+  }
+
+  // ---------- ผังเมือง: วางภาพจากเซิร์ฟเวอร์กรมโยธาฯ ทับแผนที่ (ไม่ต้องใช้ CORS) ----------
+  function mercX(lon) { return lon * 20037508.342789 / 180; }
+  function mercY(lat) { return Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 6378137; }
+  function placeZoneImg(v) {
+    var im = v.zoneImg;
+    if (!im || !im._b) return;
+    var map = v.map, b = im._b;
+    if (map.getPitch() > 1 || map.getZoom() < ZONE_MINZ - 0.01) { im.style.visibility = 'hidden'; return; }
+    var p1 = map.project([b[0], b[3]]), p2 = map.project([b[2], b[1]]);
+    im.style.visibility = 'visible';
+    im.style.left = p1.x + 'px'; im.style.top = p1.y + 'px';
+    im.style.width = (p2.x - p1.x) + 'px'; im.style.height = (p2.y - p1.y) + 'px';
+  }
+  function requestZone(v) {
+    var map = v.map, im = v.zoneImg;
+    if (!im) return;
+    if (map.getZoom() < ZONE_MINZ - 0.01 || map.getPitch() > 1) { placeZoneImg(v); return; }
+    var bb = map.getBounds(), b = [bb.getWest(), bb.getSouth(), bb.getEast(), bb.getNorth()];
+    var cv = map.getCanvas(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.min(2048, Math.round(cv.clientWidth * dpr)), h = Math.min(2048, Math.round(cv.clientHeight * dpr));
+    var url = ZONE_SVC + '/export?bbox=' + [mercX(b[0]), mercY(b[1]), mercX(b[2]), mercY(b[3])].map(function (x) { return x.toFixed(1); }).join(',') +
+      '&bboxSR=3857&imageSR=3857&size=' + w + ',' + h + '&dpi=' + Math.round(96 * dpr) + '&format=png32&transparent=true&f=image';
+    if (im._want === url) return;
+    im._want = url;
+    var pre = new Image();
+    pre.decoding = 'async';
+    pre.onload = function () {
+      if (im._want !== url || !v.zoneImg) return;
+      im.src = url; im._b = b;
+      placeZoneImg(v);
+      if (!ZONE.ok || ZONE.err) { ZONE.ok = true; ZONE.err = false; renderDataChips(); }
+    };
+    pre.onerror = function () {
+      if (im._want !== url) return;
+      if (!ZONE.err) { ZONE.err = true; renderDataChips(); }
+    };
+    pre.src = url;
+  }
+  function updateZoning(v) {
+    if (!v || v.kind !== 'chat') return;
+    var on = !!state.data.zoning && !IN_ARTIFACT, map = v.map;
+    if (!on) { if (v.zoneImg) { v.zoneImg.remove(); v.zoneImg = null; } return; }
+    if (!v.zoneImg) {
+      var im = v.zoneImg = document.createElement('img');
+      im.className = 'zone-ov'; im.alt = ''; im.setAttribute('aria-hidden', 'true');
+      var cc = map.getCanvasContainer(), cv = map.getCanvas();
+      cc.insertBefore(im, cv.nextSibling);
+      if (!v.zoneHooked) {
+        v.zoneHooked = true;
+        var raf = 0;
+        map.on('move', function () { if (!v.zoneImg || raf) return; raf = requestAnimationFrame(function () { raf = 0; placeZoneImg(v); }); });
+        map.on('moveend', function () { if (v.zoneImg) { clearTimeout(v.zoneT); v.zoneT = setTimeout(function () { requestZone(v); }, 250); } });
+        map.on('resize', function () { if (v.zoneImg) requestZone(v); });
+      }
+      loadZoneLegend();
+    }
+    requestZone(v);
+  }
+  // สัญลักษณ์สีจริงจากเซิร์ฟเวอร์ (ถ้าเซิร์ฟเวอร์อนุญาตให้อ่านข้ามเว็บ)
+  function loadZoneLegend() {
+    if (ZONE.legendTried) return;
+    ZONE.legendTried = true;
+    getJSON(ZONE_SVC + '/legend?f=json', 9000).then(function (j) {
+      var seen = {}, out = [];
+      ((j && j.layers) || []).forEach(function (l) {
+        (l.legend || []).forEach(function (g) {
+          var lab = String(g.label || '').trim();
+          if (!lab || seen[lab] || !g.imageData || out.length >= 40) return;
+          seen[lab] = 1;
+          out.push({ label: lab, img: 'data:' + (g.contentType || 'image/png') + ';base64,' + g.imageData });
+        });
+      });
+      if (out.length) { ZONE.legend = out; renderDataChips(); }
+    }).catch(function () { /* อ่านข้ามเว็บไม่ได้ ใช้คำอธิบายสีมาตรฐานแทน */ });
+  }
+  // ผังเมืองที่จุด (ต้องอ่านข้ามเว็บได้) ถ้าไม่ได้ ให้ลิงก์ไปเว็บกรมโยธาฯ
+  function zoningAt(lon, lat) {
+    var d = 0.004, url = ZONE_SVC + '/identify?f=json&geometryType=esriGeometryPoint&sr=4326&geometry=' + lon.toFixed(6) + ',' + lat.toFixed(6) +
+      '&layers=visible&tolerance=2&returnGeometry=false&imageDisplay=400,400,96&mapExtent=' + [lon - d, lat - d, lon + d, lat + d].map(function (x) { return x.toFixed(6); }).join(',');
+    return getJSON(url, 9000).then(function (j) {
+      return ((j && j.results) || []).slice(0, 4).map(function (r) {
+        var a = r.attributes || {}, extra = '';
+        Object.keys(a).forEach(function (k) { if (!extra && /ประเภท|สี|zone|class|lu_|landuse|type/i.test(k) && a[k] && String(a[k]).length < 60) extra = String(a[k]); });
+        return { layer: String(r.layerName || ''), value: String(r.value || ''), extra: extra };
+      });
+    });
+  }
+  function zoneLegendHtml() {
+    var h = '<div class="m-extra zone-leg"><div class="m-extra-head">ผังเมืองรวม · สีใช้ทำอะไร</div>';
+    if (ZONE.legend) {
+      h += ZONE.legend.slice(0, 24).map(function (g) { return '<div class="zl-row"><img src="' + esc(g.img) + '" alt="" width="18" height="18"><span>' + esc(g.label) + '</span></div>'; }).join('');
+      h += '<p class="fp-fine">สีจากเซิร์ฟเวอร์กรมโยธาธิการและผังเมือง</p>';
+    } else {
+      h += ZONE_LEG.map(function (z) {
+        return '<div class="zl-row"><i class="zl-sw' + (z[0] === 'hatch' ? ' hatch' : '') + '"' + (z[0] === 'hatch' ? '' : ' style="background:' + z[0] + '"') + '></i><span><b>' + esc(z[1]) + '</b> ' + esc(z[2]) + '</span></div>';
+      }).join('');
+      h += '<p class="fp-fine">สีโดยประมาณตามแบบที่ใช้ทั่วไป รหัสย่อยและข้อห้ามต่างกันในแต่ละผัง ดูรายละเอียดในกฎกระทรวงของผังนั้น</p>';
+    }
+    return h + '</div>';
+  }
+  function zoneStatusText() {
+    if (ZONE.err) return 'เซิร์ฟเวอร์ผังเมืองไม่ตอบตอนนี้ (บางครั้งเปิดได้เฉพาะในไทย)';
+    var v = views.chat;
+    if (v && v.map.getZoom() < ZONE_MINZ) return 'ซูมเข้าถึงระดับอำเภอเพื่อดูสีผังเมือง';
+    return ZONE.ok ? 'แสดงผังจากกรมโยธาฯ' : 'กำลังโหลด';
+  }
+  function zoneLinksHtml(lon, lat) {
+    var bkk = provinceAt(lon, lat) === 'bkk';
+    return '<a class="src-link" href="https://plludds.dpt.go.th/landuse/" target="_blank" rel="noopener">ระบบตรวจสอบผังเมือง กรมโยธาฯ' + ICO.ext + '</a>' +
+      (bkk ? '<a class="src-link" href="https://cityplangis.bangkok.go.th/cpdPortal/" target="_blank" rel="noopener">ผังเมืองกรุงเทพฯ (สำนักการวางผังฯ)' + ICO.ext + '</a>' : '');
+  }
+
+  // ---------- น้ำท่วมตอนนี้ที่จุด (ปื้นน้ำจาก Sentinel-1 ล่าสุด) ----------
+  function floodAtPoint(lon, lat) {
+    if (!floodReady()) return Promise.resolve(null);
+    var t = find(FLOOD.index.tiles, function (b) { return lon >= b.bbox[0] && lon < b.bbox[2] && lat >= b.bbox[1] && lat < b.bbox[3]; });
+    if (!t) return Promise.resolve({ covered: false });
+    var feats = FLOOD.tiles[t.id];
+    var p = feats ? Promise.resolve(feats) : fetch(FLOOD_BASE + t.file + '?v=' + encodeURIComponent(t.added || t.date))
+      .then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { return (j && j.features) || []; });
+    return p.then(function (fs) {
+      var hit = null, best = null;
+      fs.forEach(function (f) {
+        if (!f.geometry) return;
+        if (inGeom(lon, lat, f.geometry)) { if (!hit || (hit.kind === 'seasonal' && f.properties.kind !== 'seasonal')) hit = f.properties; return; }
+        var cs = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : [];
+        cs.forEach(function (poly) { (poly[0] || []).forEach(function (c) { var d = km(lon, lat, c[0], c[1]); if (d < 2 && (!best || d < best.d)) best = { d: d, p: f.properties }; }); });
+      });
+      return { covered: true, date: (hit && hit.date) || t.date || '', hit: hit, near: best };
+    });
+  }
+
+  // ---------- ชื่อสถานที่ (OpenStreetMap Nominatim ใช้เฉพาะตอนผู้ใช้กดตรวจ) ----------
+  function placeName(lon, lat) {
+    return getJSON(NOMI + 'reverse?format=jsonv2&zoom=16&accept-language=th&lat=' + lat.toFixed(5) + '&lon=' + lon.toFixed(5), 8000).then(function (j) {
+      var a = (j && j.address) || {}, parts = [];
+      [a.road, a.suburb || a.village || a.hamlet || a.quarter || a.neighbourhood, a.city_district || a.district || a.county || a.town || a.municipality, a.state || a.province || a.city]
+        .forEach(function (x) { if (x && parts.indexOf(x) < 0) parts.push(x); });
+      return parts.slice(-3).join(' · ');
+    });
+  }
+  function geocode(q) {
+    return getJSON(NOMI + 'search?format=jsonv2&limit=1&countrycodes=th&accept-language=th&q=' + encodeURIComponent(q), 9000).then(function (a) {
+      var r = a && a[0];
+      if (!r) return null;
+      var bb = (r.boundingbox || []).map(Number);
+      return { lon: +r.lon, lat: +r.lat, name: String(r.display_name || q).split(',').slice(0, 3).join(','), kind: r.addresstype || r.type || '',
+        bbox: bb.length === 4 ? [bb[2], bb[0], bb[3], bb[1]] : null };
+    });
+  }
+
+  // ---------- รวมผลตรวจทำเล ----------
+  function siteKey(lon, lat) { return lat.toFixed(5) + ',' + lon.toFixed(5); }
+  function siteRun(lon, lat, name) {
+    var key = siteKey(lon, lat), S = SITE.res[key];
+    if (S) { if (name && !S.given) S.given = name; return key; }
+    S = SITE.res[key] = { key: key, lon: lon, lat: lat, given: name || '', prov: provinceAt(lon, lat), name: '', ele: null, gsw: null, haz: null, zone: null, flood: null, st: {} };
+    function track(k, p) {
+      S.st[k] = 'loading';
+      p.then(function (x) { S[k] = x; S.st[k] = 'ok'; }, function () { S.st[k] = 'err'; }).then(function () { siteChanged(key); });
+    }
+    track('ele', elevationAt(lon, lat));
+    track('gsw', gswAt(lon, lat));
+    track('haz', typeof DecompressionStream !== 'undefined' ? hazAt(lon, lat) : Promise.reject(new Error('old browser')));
+    track('zone', zoningAt(lon, lat));
+    track('flood', floodAtPoint(lon, lat));
+    track('name', placeName(lon, lat));
+    return key;
+  }
+  function siteChanged(key) {
+    if (SITE.cur === key) renderSiteCard();
+    if (state.messages.some(function (m) { return m.key === 'site' && m.site === key; })) renderMsgs();
+  }
+  function siteVerdict(S) {
+    var g = gswLevel(S.gsw), h = hazLevel(S.haz), why = [], score = 0, known = 0;
+    if (g) { known++; score += g.s; if (g.s > 0) why.push(g.t + ' (ภาพดาวเทียม 1984–2024)'); }
+    if (g && g.lv === 'near' && S.gsw.fHist >= 0.25) why[why.length - 1] = 'ในรัศมี 300 ม. ราว ' + Math.round(S.gsw.fHist * 100) + '% ของพื้นที่เคยมีน้ำท่วมหรือน้ำขัง (ภาพดาวเทียม 1984–2024)';
+    if (S.gsw && S.gsw.tr && GSW_FILLED[S.gsw.tr]) { score += 1; why.push('จุดนี้เคยเป็นที่น้ำขังแล้วแห้งไปหรือถูกถม ควรตรวจการทรุดตัวและการระบายน้ำ'); }
+    else if (S.gsw && S.gsw.fFilled >= 0.15) { score += 0.5; why.push('รอบๆ ราว ' + Math.round(S.gsw.fFilled * 100) + '% ของพื้นที่เคยเป็นที่น้ำขังตามฤดูกาล แล้วแห้งไปหรือถูกถม (เช่น นาที่กลายเป็นหมู่บ้าน)'); }
+    if (h) { known++; score += h.s; if (h.s > 0) why.push(h.t + ' (แบบจำลองแม่น้ำ)'); }
+    if (S.ele) {
+      if (S.ele.pct <= 0.15) { score += 1; why.push('ต่ำกว่าพื้นที่รอบๆ เกือบทั้งหมด น้ำมักไหลมารวม'); }
+      else if (S.ele.pct >= 0.85) { score -= 1; why.push('สูงกว่าพื้นที่รอบๆ (ที่ดอน)'); }
+    }
+    if (S.flood && S.flood.hit && S.flood.hit.kind !== 'seasonal' && S.flood.hit.conf !== 'low') { score += 2; why.push('ภาพดาวเทียมล่าสุดพบน้ำท่วมตรงจุดนี้'); }
+    if (g && g.lv === 'water') return { lv: 'water', t: 'จุดนี้อยู่ในแหล่งน้ำ', why: ['ภาพดาวเทียมเห็นน้ำตรงนี้เกือบตลอด 41 ปี ลองแตะจุดบนบกใกล้ๆ อีกครั้ง'] };
+    if (!known) return null;
+    var lv = score >= 4 ? 'high' : score >= 2 ? 'mid' : 'low';
+    if (lv === 'low') why.push('ข้อมูลชุดนี้มองไม่เห็นน้ำท่วมขังในเมืองจากฝนหนักหรือระบายน้ำไม่ทัน (เช่น ตัวเมืองหาดใหญ่) ควรถามประวัติน้ำท่วมกับคนในพื้นที่ด้วย');
+    return { lv: lv, t: lv === 'high' ? 'พบสัญญาณเสี่ยงน้ำท่วมสูง' : lv === 'mid' ? 'พบสัญญาณเสี่ยงน้ำท่วมบางส่วน' : 'ไม่พบสัญญาณน้ำท่วมชัดเจน', why: why, partial: known < 2 };
+  }
+  var SV_C = { high: '#E5484D', mid: '#E0A526', low: '#2FA36B', water: '#2F7FE0' };
+  function siteTitle(S) {
+    return S.given || S.name || (S.prov && byId[S.prov] ? (byId[S.prov].full || byId[S.prov].name) : 'จุดที่เลือก');
+  }
+  function siteChipsHtml(S) {
+    function tile(lab, val, sub, st) {
+      return '<div class="sv-tile"><span class="sv-lab">' + lab + '</span><b>' + (st === 'loading' ? '<span class="sv-load">กำลังอ่าน…</span>' : st === 'err' ? 'อ่านไม่ได้' : esc(val)) + '</b>' +
+        (sub && st === 'ok' ? '<small>' + esc(sub) + '</small>' : '') + '</div>';
+    }
+    var g = gswLevel(S.gsw), h = hazLevel(S.haz), e = S.ele, f = S.flood;
+    var eleV = e ? 'ราว ' + Math.round(e.ele) + ' ม.' : '', eleS = e ? (e.pct <= 0.15 ? 'ที่ลุ่ม' : e.pct >= 0.85 ? 'ที่ดอน' : 'ระดับใกล้เคียงรอบๆ') : '';
+    var fV = !f ? 'ยังไม่มีข้อมูล' : !f.covered ? 'ยังไม่ได้ตรวจ' : f.hit ? (f.hit.kind === 'seasonal' ? 'มีน้ำตามฤดูกาล' : f.hit.conf === 'low' ? 'อาจมีน้ำ' : 'พบน้ำท่วม') : 'ไม่พบน้ำ';
+    var fS = f && f.covered && f.date ? 'ภาพ ' + ageText(f.date) : '';
+    var hS = h && h.rp ? 'โอกาสเกิดใน 20 ปี ~' + chance20(h.rp) + '%' : h && h.lv === 'none' ? 'เฉพาะแม่น้ำสายใหญ่' : '';
+    return '<div class="sv-grid">' +
+      tile('น้ำในอดีต 41 ปี', g ? g.t : '', g ? (g.lv === 'none' ? 'ในรัศมี 300 ม.' : 'ดาวเทียม Landsat') : '', S.st.gsw) +
+      tile('น้ำท่วมใหญ่ (แบบจำลอง)', h ? h.t : (S.st.haz === 'ok' ? 'นอกพื้นที่แบบจำลอง' : ''), hS, S.st.haz) +
+      tile('ความสูงพื้นดิน', eleV, eleS, S.st.ele) +
+      tile('น้ำตอนนี้ (ดาวเทียม)', fV, fS, S.st.flood) + '</div>';
+  }
+  function siteVerdictHtml(S) {
+    var busy = S.st.gsw === 'loading' || S.st.haz === 'loading' || S.st.ele === 'loading';
+    var V = busy ? null : siteVerdict(S);
+    if (!V) return busy ? '<div class="sv-verdict"><span class="sv-load">กำลังรวบรวมข้อมูล…</span></div>' : '<div class="sv-verdict">สรุปไม่ได้ตอนนี้ (โหลดข้อมูลหลักไม่ได้)</div>';
+    return '<div class="sv-verdict" style="--c:' + SV_C[V.lv] + '"><b><i></i>' + esc(V.t) + (V.partial ? ' (ข้อมูลยังไม่ครบ)' : '') + '</b><ul>' +
+      V.why.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul></div>';
+  }
+  function siteSectionsHtml(S) {
+    var h = '', g = S.gsw;
+    // 1) น้ำในอดีต
+    h += '<section class="sv-sec"><h3>น้ำในอดีต 41 ปี <small>ภาพดาวเทียม Landsat 1984–2024</small></h3>';
+    if (S.st.gsw === 'loading') h += '<p class="sv-load">กำลังอ่านภาพ…</p>';
+    else if (S.st.gsw === 'err') h += '<p>อ่านภาพดาวเทียมย้อนหลังไม่ได้ตอนนี้</p>';
+    else if (g) {
+      if (g.tr) {
+        h += '<p><b>' + esc(trText(g.tr)) + '</b></p>';
+        if (!GSW_PERM[g.tr]) h += '<p>ช่วงที่มีภาพ ดาวเทียมเห็นน้ำตรงนี้ราว ' + Math.max(1, g.occ) + '% ของเวลา' + (g.rec != null ? ' · ในปีที่มีน้ำ น้ำกลับมาซ้ำราว ' + g.rec + '% ของปี' : '') + '</p>';
+      } else if (g.occ > 0) {
+        h += '<p><b>เคยมีน้ำท่วมหรือน้ำขังตรงนี้</b> ดาวเทียมเห็นน้ำราว ' + g.occ + '% ของเวลา</p>';
+      } else {
+        h += '<p><b>ดาวเทียมไม่เคยเห็นน้ำขังตรงจุดนี้</b></p>';
+        if (g.histNear != null) h += '<p>แต่ห่างไป' + mText(g.histNear) + ' เคยมีน้ำท่วมหรือน้ำขัง' + (g.occMax100 ? ' (ในรัศมี 100 ม. มีน้ำราว ' + g.occMax100 + '% ของเวลา)' : '') + '</p>';
+        else h += '<p>ในรัศมี 300 ม. ก็ไม่พบน้ำท่วมหรือน้ำขังตลอด 41 ปี</p>';
+      }
+      if (g.fHist >= 0.05) h += '<p>ในรัศมี 300 ม. ราว ' + Math.round(g.fHist * 100) + '% ของพื้นที่เคยมีน้ำท่วมหรือน้ำขัง</p>';
+      if (g.permNear != null && !(g.tr && GSW_PERM[g.tr])) h += '<p>แหล่งน้ำถาวรใกล้สุด (แม่น้ำ คลอง บ่อ) ห่าง' + mText(g.permNear) + '</p>';
+      if (g.filledNear != null && !(g.tr && GSW_FILLED[g.tr])) h += '<p>ห่าง' + mText(g.filledNear) + ' มีจุดที่เคยเป็นที่น้ำขังแล้วแห้งไปหรือถูกถม' + (g.fFilled >= 0.05 ? ' (ราว ' + Math.round(g.fFilled * 100) + '% ของพื้นที่รอบๆ)' : '') + '</p>';
+      h += '<p class="sv-note">ดาวเทียมผ่านทุก 8–16 วันและมองผ่านเมฆไม่ได้ น้ำท่วมที่มาเร็วไปเร็ว น้ำท่วมขังบนถนนในเมือง หรือใต้ร่มไม้ อาจไม่ถูกบันทึก "ไม่พบ" จึงไม่ได้แปลว่าไม่เคยท่วม</p>';
+    }
+    h += '<button type="button" class="btn-ghost sv-btn" data-site-layer="hist">' + (state.data.hist ? 'ซ่อน' : 'เปิด') + 'ชั้นน้ำในอดีตบนแผนที่</button></section>';
+    // 2) แบบจำลองน้ำท่วมใหญ่ + โอกาสใน 20 ปี
+    h += '<section class="sv-sec"><h3>ถ้าเกิดน้ำท่วมใหญ่ <small>แบบจำลองน้ำล้นแม่น้ำ JRC GloFAS (90 ม.)</small></h3>';
+    if (S.st.haz === 'loading') h += '<p class="sv-load">กำลังอ่านแบบจำลอง…</p>';
+    else if (S.st.haz === 'err') h += '<p>อ่านแบบจำลองไม่ได้ตอนนี้' + (typeof DecompressionStream === 'undefined' ? ' (เบราว์เซอร์นี้เก่าเกินไป)' : '') + '</p>';
+    else if (!S.haz) h += '<p>จุดนี้อยู่นอกพื้นที่ของแบบจำลอง</p>';
+    else {
+      h += '<table class="sv-table"><thead><tr><th>ระดับน้ำท่วม</th><th>โอกาสเจอใน 20 ปี</th><th>ที่จุดนี้</th></tr></thead><tbody>' +
+        S.haz.map(function (x) {
+          var at = x.v != null ? HAZ_T[x.v] || 'ท่วม' : x.max != null ? 'ไม่ท่วม (ใกล้ๆ ' + (HAZ_T[x.max] || 'ท่วม').replace('ลึก', 'ลึก') + ')' : 'ไม่ท่วม';
+          return '<tr' + (x.v != null ? ' class="hit"' : '') + '><td>รอบ ' + x.rp + ' ปี</td><td>~' + chance20(x.rp) + '%</td><td>' + esc(at) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      h += '<p class="sv-note">"รอบ 100 ปี" คือน้ำท่วมขนาดที่มีโอกาสเกิด 1% ในแต่ละปี ในช่วง 20 ปีจึงมีโอกาสเจออย่างน้อยหนึ่งครั้งราว 18% ตัวเลขนี้คิดจากภูมิอากาศปัจจุบัน ' +
+        'รายงาน IPCC AR6 ประเมินว่าฝนตกหนักมีแนวโน้มรุนแรงและบ่อยขึ้นเมื่อโลกร้อนขึ้น โอกาสจริงในอนาคตจึงอาจสูงกว่านี้ ' +
+        'แบบจำลองนี้ครอบเฉพาะแม่น้ำสายใหญ่ ไม่รวมคันกั้นน้ำ ระบบระบายน้ำ น้ำป่าจากลำห้วยเล็ก และน้ำท่วมขังจากฝนในเมือง</p>';
+    }
+    h += '<button type="button" class="btn-ghost sv-btn" data-site-layer="hazard">' + (state.data.hazard ? 'ซ่อน' : 'เปิด') + 'พื้นที่น้ำท่วมรอบ 100 ปีบนแผนที่</button></section>';
+    // 3) ความสูง
+    h += '<section class="sv-sec"><h3>ความสูงพื้นดิน <small>แผนที่ความสูงราว 30 ม.</small></h3>';
+    if (S.st.ele === 'loading') h += '<p class="sv-load">กำลังอ่าน…</p>';
+    else if (!S.ele) h += '<p>อ่านค่าความสูงไม่ได้ตอนนี้</p>';
+    else h += '<p><b>ราว ' + Math.round(S.ele.ele) + ' ม. จากระดับน้ำทะเล</b> · ' + esc(eleText(S.ele)) + '</p><p>รัศมี 1 กม.: ต่ำสุด ' + Math.round(S.ele.min) + ' · กลาง ' + Math.round(S.ele.med) + ' · สูงสุด ' + Math.round(S.ele.max) + ' ม.</p>' +
+      '<p class="sv-note">ค่าจากเรดาร์ดาวเทียม (SRTM) รวมความสูงของต้นไม้และอาคาร ที่ราบลุ่มอาจคลาดเคลื่อนหลายเมตร ใช้ดูว่าเป็นที่ลุ่มหรือที่ดอนเทียบกับรอบๆ ไม่ใช่ค่ารังวัด</p>';
+    h += '</section>';
+    // 4) ผังเมือง
+    h += '<section class="sv-sec"><h3>ผังเมืองรวม <small>กรมโยธาธิการและผังเมือง</small></h3>';
+    if (S.st.zone === 'loading') h += '<p class="sv-load">กำลังถามเซิร์ฟเวอร์ผังเมือง…</p>';
+    else if (S.st.zone === 'ok' && S.zone && S.zone.length) h += S.zone.map(function (z) { return '<p><b>' + esc(z.value || z.extra || '-') + '</b> <span class="sv-dim">' + esc(z.layer) + (z.extra && z.extra !== z.value ? ' · ' + esc(z.extra) : '') + '</span></p>'; }).join('');
+    else if (S.st.zone === 'ok') h += '<p>ไม่พบผังเมืองรวมที่ประกาศใช้ตรงจุดนี้ในเซิร์ฟเวอร์ของกรมโยธาฯ</p>';
+    else h += '<p>อ่านผังเมืองที่จุดนี้จากเว็บนี้ไม่ได้ ลองเปิดชั้นผังเมืองบนแผนที่ หรือตรวจที่เว็บของหน่วยงานด้านล่าง</p>';
+    h += '<div class="sv-links">' + zoneLinksHtml(S.lon, S.lat) + '</div>';
+    h += '<button type="button" class="btn-ghost sv-btn" data-site-layer="zoning">' + (state.data.zoning ? 'ซ่อน' : 'เปิด') + 'สีผังเมืองบนแผนที่</button>';
+    h += '<p class="sv-note">ข้อมูลผังเมืองบนเว็บใช้อ้างอิงทางกฎหมายไม่ได้ ก่อนซื้อหรือขออนุญาตก่อสร้าง ให้ขอหนังสือรับรองการใช้ประโยชน์ที่ดินจากสำนักงานโยธาธิการและผังเมืองจังหวัดหรือเขต</p></section>';
+    // 5) สถานการณ์ตอนนี้รอบจุด (ใช้ส่วนเดียวกับ "รอบตัวฉัน")
+    var p = S.prov && byId[S.prov];
+    if (p) h += '<section class="sv-sec"><h3>ตอนนี้รอบจุดนี้ <small>ระดับน้ำ ฝน พยากรณ์ กล้อง</small></h3>' + localHtml({ place: p, near: { lon: S.lon, lat: S.lat }, nearLabel: 'ใกล้จุดนี้' }) + '</section>';
+    // 6) ตรวจต่อ
+    var ll = S.lat.toFixed(6) + ',' + S.lon.toFixed(6);
+    h += '<section class="sv-sec"><h3>ตรวจต่อที่แหล่งข้อมูลจริง</h3><div class="sv-links">' +
+      '<a class="src-link" href="https://www.google.com/maps/search/?api=1&query=' + ll + '" target="_blank" rel="noopener">Google Maps' + ICO.ext + '</a>' +
+      '<a class="src-link" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + ll + '" target="_blank" rel="noopener">Street View' + ICO.ext + '</a>' +
+      '<a class="src-link" href="https://landsmaps.dol.go.th/" target="_blank" rel="noopener">LandsMaps กรมที่ดิน' + ICO.ext + '</a>' +
+      '<a class="src-link" href="https://asset.led.go.th/newbidreg/" target="_blank" rel="noopener">ค้นทรัพย์ขายทอดตลาด กรมบังคับคดี' + ICO.ext + '</a>' +
+      '</div><p class="sv-note">ChatGeo ไม่ได้เก็บประกาศขายทอดตลาดไว้เอง ถ้าเจอทรัพย์ที่สนใจ คัดลอกพิกัดหรือลิงก์ Google Maps ของทรัพย์นั้นมาวางในแชทเพื่อตรวจทำเลได้</p></section>';
+    h += '<div class="sv-share"><button type="button" class="btn-ghost sv-btn" data-site-copy="' + esc(S.key) + '">คัดลอกลิงก์รายงานนี้</button></div>';
+    h += '<p class="sv-foot">สรุปจากข้อมูลเปิดและแบบจำลองระดับโลก เพื่อใช้คัดกรองเบื้องต้น ไม่ใช่การประเมินอย่างเป็นทางการ และไม่ใช่คำแนะนำการลงทุน ' +
+      'ควรดูหน้างานหลังฝนหนัก ถามคนในพื้นที่ และตรวจเอกสารกับหน่วยงาน · ' + GSW_ATTR + ' · ' + GLOFAS_ATTR + ' · ' + DEM_ATTR + ' · ชื่อสถานที่ © OpenStreetMap</p>';
+    return h;
+  }
+  function renderSiteCard() {
+    var el = $('siteCard');
+    if (!el) return;
+    var S = SITE.cur && SITE.res[SITE.cur];
+    if (!S) { el.hidden = true; return; }
+    el.hidden = false;
+    $('siteTitle').textContent = siteTitle(S);
+    $('siteSub').textContent = S.lat.toFixed(5) + ', ' + S.lon.toFixed(5) + (S.given && S.name ? ' · ' + S.name : '');
+    var keepScroll = $('siteBody').scrollTop;
+    $('siteBody').innerHTML = siteVerdictHtml(S) + siteChipsHtml(S) + siteSectionsHtml(S);
+    $('siteBody').scrollTop = keepScroll;
+  }
+  function siteMarker(lon, lat) {
+    var v = views.chat;
+    if (!v) return;
+    if (!SITE.marker) {
+      var el = document.createElement('div');
+      el.className = 'site-pin';
+      el.setAttribute('aria-label', 'จุดที่ตรวจทำเล');
+      SITE.marker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([lon, lat]).addTo(v.map);
+    } else SITE.marker.setLngLat([lon, lat]).addTo(v.map);
+  }
+  function sitePadding() {
+    var v = views.chat, W = v ? v.el.clientWidth : 800;
+    // จอเล็ก: การ์ดอยู่ครึ่งล่างของจอ (ทับแชท) แผนที่ไม่ถูกบัง
+    return window.innerWidth <= 860 ? { top: 56, bottom: 16, left: 16, right: 16 } : { top: 60, bottom: 40, left: 40, right: Math.min(424, W * 0.5 + 12) };
+  }
+  function openSite(lon, lat, opt) {
+    opt = opt || {};
+    if (!isFinite(lon) || !isFinite(lat)) return null;
+    setSitePick(false);
+    if (state.page !== 'chat') setPage('chat');
+    var key = siteRun(lon, lat, opt.name);
+    SITE.cur = key;
+    var pc = $('pinCard'); if (pc) pc.hidden = true;
+    var v = views.chat;
+    if (v && v.popup) { v.popup.remove(); v.popup = null; }
+    siteMarker(lon, lat);
+    renderSiteCard();
+    if (v) {
+      var z = Math.max(v.map.getZoom(), opt.zoom || 14);
+      v.map.easeTo({ center: [lon, lat], zoom: Math.min(z, 16), padding: sitePadding(), duration: reduceMotion ? 0 : 900 });
+    }
+    try { history.replaceState(null, '', location.pathname + location.search + '#site=' + lat.toFixed(5) + ',' + lon.toFixed(5)); } catch (e) { /* ข้าม */ }
+    return key;
+  }
+  function closeSite() {
+    SITE.cur = null;
+    renderSiteCard();
+    if (SITE.marker) { SITE.marker.remove(); }
+    var v = views.chat;
+    if (v) v.map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: reduceMotion ? 0 : 400 });
+    if (/^#site=/.test(location.hash)) writeHash(false);
+  }
+  function setSitePick(on, hint) {
+    SITE.pick = !!on;
+    var v = views.chat, el = $('sitePick');
+    if (v) v.el.classList.toggle('picking', SITE.pick);
+    if (el) {
+      el.hidden = !SITE.pick;
+      if (SITE.pick) $('sitePickText').textContent = hint || 'แตะจุดบนแผนที่ที่อยากตรวจทำเล';
+    }
+    var b = $('btnSite');
+    if (b) b.setAttribute('aria-pressed', String(SITE.pick));
+  }
+  // พิกัดหรือลิงก์ Google Maps ในข้อความ
+  function parseCoords(t) {
+    t = String(t || '');
+    var m = /@(-?\d{1,2}\.\d+),\s*(-?\d{2,3}\.\d+)/.exec(t) || /!3d(-?\d{1,2}\.\d+)!4d(-?\d{2,3}\.\d+)/.exec(t) ||
+      /[?&](?:q|query|ll|destination|center)=(-?\d{1,2}\.\d+)(?:,|%2C)\s*(-?\d{2,3}\.\d+)/i.exec(t) ||
+      /(-?\d{1,3}\.\d{2,})\s*[,\s]\s*(-?\d{1,3}\.\d{2,})/.exec(t);
+    if (!m) return null;
+    var a = parseFloat(m[1]), b = parseFloat(m[2]);
+    if (a > 90 && b <= 90) { var x = a; a = b; b = x; } // ใส่ลองจิจูดมาก่อน
+    if (!(a >= 4 && a <= 22 && b >= 96 && b <= 107)) return { out: true, lat: a, lon: b };
+    return { lat: a, lon: b };
+  }
+  var SITE_RE = /ตรวจทำเล|เช็[คก]ทำเล|ทำเล|อสังหา|ที่ดิน|ซื้อ(บ้าน|คอนโด|ทาวน์|ที่)|บ้านมือสอง|บังคับคดี|ขายทอดตลาด|ทรัพย์ npa|\bnpa\b|น้ำเคยท่วม|เคยน้ำท่วม|เคยท่วม|ท่วมซ้ำ|น้ำท่วมย้อนหลัง|ผังเมือง|ผังสี|สีผัง|น้ำท่วม(ใน)?อนาคต|ความเสี่ยงน้ำท่วม|เสี่ยงน้ำท่วม|ท่วมไหมถ้า|maps\.app\.goo\.gl|google\.[a-z.]+\/maps|goo\.gl\/maps/i;
+  var SITE_STRIP = ['ตรวจทำเล', 'เช็คทำเล', 'เช็กทำเล', 'ทำเล', 'อสังหาริมทรัพย์', 'อสังหา', 'ที่ดิน', 'บ้านมือสอง', 'ทรัพย์บังคับคดี', 'บังคับคดี', 'ขายทอดตลาด',
+    'น้ำท่วมย้อนหลัง', 'น้ำเคยท่วม', 'เคยน้ำท่วม', 'เคยท่วม', 'ท่วมซ้ำ', 'ผังเมือง', 'ผังสี', 'สีผัง', 'น้ำท่วมในอนาคต', 'น้ำท่วมอนาคต', 'ความเสี่ยงน้ำท่วม', 'เสี่ยงน้ำท่วม',
+    'ซื้อบ้าน', 'ซื้อคอนโด', 'ซื้อที่', 'น่าซื้อ', 'ดีไหม', 'ไหม', 'มั้ย', 'หน่อย', 'ครับ', 'ค่ะ', 'คะ', 'ช่วย', 'อยากรู้', 'อยาก', 'ตรวจ', 'เช็ค', 'เช็ก', 'ให้', 'ดู', 'แถว', 'ย่าน', 'บริเวณ', 'ว่า', 'เป็นยังไง', 'ยังไง', 'อย่างไร', 'น้ำท่วม', 'ท่วม'];
+  var HERE_RE = /ตรงนี้|ที่นี่|ที่ฉันอยู่|ตำแหน่งฉัน|ตำแหน่งของฉัน|แถวนี้/;
+  function siteQuery(text) {
+    if (state.page !== 'chat') setPage('chat');
+    state.messages.push({ role: 'user', text: text });
+    var m = { role: 'bot', key: 'site', status: 'wait', q: text };
+    state.messages.push(m);
+    renderMsgs();
+    function done(st, extra) { m.status = st; Object.keys(extra || {}).forEach(function (k) { m[k] = extra[k]; }); renderMsgs(); }
+    var c = parseCoords(text);
+    if (c && c.out) { done('out'); return; }
+    if (c) { done('ok', { site: openSite(c.lon, c.lat, { name: 'พิกัดที่ให้มา' }) }); return; }
+    if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(text)) { done('short'); return; }
+    if (HERE_RE.test(text)) {
+      if (me.lon != null) { done('ok', { site: openSite(me.lon, me.lat, { name: 'ตำแหน่งของคุณ' }) }); return; }
+      if (!navigator.geolocation) { done('pick'); setSitePick(true); return; }
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        me.lon = pos.coords.longitude; me.lat = pos.coords.latitude; showMeMarker();
+        done('ok', { site: openSite(me.lon, me.lat, { name: 'ตำแหน่งของคุณ' }) });
+      }, function () { done('pick'); setSitePick(true); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 });
+      return;
+    }
+    var rest = text;
+    SITE_STRIP.forEach(function (w) { rest = rest.split(w).join(' '); });
+    rest = rest.replace(/[?？!,.]/g, ' ').replace(/\s+/g, ' ').trim();
+    var place = findPlace(text);
+    if (place && place.id === 'world') place = null;
+    function pickIn(p, name) {
+      state.data.hazard = true; saveData(); eachView(refreshLive); renderDataChips();
+      if (p) goTo(p.id);
+      done('pick', { where: name || '' });
+      setSitePick(true, 'แตะจุดที่อยากตรวจ' + (name ? 'ใน' + name : 'บนแผนที่'));
+    }
+    var onlyPlace = place && rest.replace(place.name, '').replace(SHORT[place.id] || '\u0000', '').replace(/จังหวัด|จ\./g, '').trim().length < 2;
+    if (rest.replace(/\s/g, '').length < 2 || onlyPlace) { pickIn(place, place ? place.name : ''); return; }
+    geocode(rest).then(function (r) {
+      if (!r) { place ? pickIn(place, place.name) : done('notfound', { what: rest }); if (!place) setSitePick(true); return; }
+      if (/^(state|province|country|region)$/.test(r.kind) && r.bbox) {
+        var v = views.chat;
+        if (v) v.map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding: 40, duration: reduceMotion ? 0 : 900 });
+        done('pick', { where: r.name.split(',')[0] });
+        setSitePick(true, 'แตะจุดที่อยากตรวจใน' + r.name.split(',')[0]);
+        return;
+      }
+      var big = /^(county|district|municipality|city|town)$/.test(r.kind);
+      done('ok', { site: openSite(r.lon, r.lat, { name: r.name.split(',')[0], zoom: big ? 13 : 15 }), geo: r.name, big: big });
+    }).catch(function () { if (place) pickIn(place, place.name); else { done('notfound', { what: rest }); setSitePick(true); } });
+  }
+  function siteAnswer(m) {
+    var head = 'ตรวจทำเล (ทดลอง)';
+    if (m.status === 'wait') return { title: head, text: 'กำลังหาตำแหน่ง…' };
+    if (m.status === 'out') return { title: head, text: 'พิกัดนี้อยู่นอกประเทศไทย ตอนนี้ตรวจทำเลได้เฉพาะในไทย ลองวางพิกัดแบบ ละติจูด, ลองจิจูด เช่น 13.7563, 100.5018' };
+    if (m.status === 'short') return { title: head, text: 'ลิงก์ย่อของ Google Maps (maps.app.goo.gl) อ่านพิกัดไม่ได้ ให้เปิดลิงก์นั้น แล้วกดค้างที่หมุดเพื่อคัดลอกตัวเลขพิกัด (เช่น 13.7563, 100.5018) มาวางแทน หรือแตะจุดบนแผนที่ก็ได้' };
+    if (m.status === 'notfound') return { title: head, text: 'หาสถานที่ "' + (m.what || '') + '" ไม่เจอ ลองพิมพ์ชื่อตำบล อำเภอ หรือโครงการให้ชัดขึ้น วางพิกัด หรือแตะจุดบนแผนที่ได้เลย' };
+    if (m.status === 'pick') return { title: head, text: 'แตะจุดบนแผนที่' + (m.where ? 'ใน' + m.where : '') + ' ที่อยากตรวจ ระบบจะบอกว่าน้ำเคยท่วมไหมตลอด 41 ปี โอกาสเจอน้ำท่วมใหญ่ใน 20 ปีตามแบบจำลอง ความสูงพื้นดิน และผังเมือง ' +
+      'เปิดชั้น "พื้นที่น้ำท่วมใหญ่ (แบบจำลอง)" ให้แล้ว สีม่วงคือพื้นที่ที่น้ำล้นแม่น้ำท่วมถึงในแบบจำลอง หรือจะวางพิกัด ลิงก์ Google Maps หรือพิมพ์ชื่อตำบลก็ได้' };
+    var S = SITE.res[m.site];
+    if (!S) return { title: head, text: 'ปิดรายงานนี้ไปแล้ว ลองถามใหม่อีกครั้ง' };
+    var V = S.st.gsw === 'loading' || S.st.haz === 'loading' || S.st.ele === 'loading' ? null : siteVerdict(S);
+    var txt = (m.big ? 'ใช้จุดกลางของ' + siteTitle(S) + ' ถ้าอยากตรวจแปลงจริง แตะตรงแปลงนั้นบนแผนที่อีกครั้ง ' : '') +
+      (!V ? 'กำลังอ่านภาพดาวเทียมย้อนหลังและแบบจำลองน้ำท่วม…'
+        : V.lv === 'water' ? V.t + ' ' + V.why[0]
+        : V.lv === 'low' ? 'ภาพรวมจากข้อมูลเปิด: ไม่พบสัญญาณน้ำท่วมชัดเจนจากดาวเทียมย้อนหลังและแบบจำลอง แต่ดาวเทียมมองไม่เห็นน้ำท่วมขังในเมือง ควรถามประวัติน้ำท่วมกับคนในพื้นที่ด้วย'
+        : 'ภาพรวมจากข้อมูลเปิด: ' + V.t + ' เพราะ' + V.why.slice(0, 2).join(' และ'));
+    return { title: 'ตรวจทำเล · ' + siteTitle(S), text: txt,
+      html: siteChipsHtml(S) + '<button type="button" class="btn-ghost sv-open" data-site-open="' + esc(S.key) + '">เปิดรายงานเต็ม' + ICO.arrow + '</button>' };
+  }
+
+  function siteLegendHtml() {
+    var h = '';
+    if (state.data.hist) {
+      h += '<div class="rain-legend" aria-label="สีน้ำในอดีต"><span>น้ำในอดีต</span><span class="sp"></span><span>นานๆ ครั้ง</span><i style="background:linear-gradient(90deg,rgba(255,0,0,.3),rgba(140,0,120,.75),#0000FF)"></i><span>เกือบตลอด</span></div>' +
+        '<p class="fp-fine">ภาพดาวเทียม Landsat 1984–2024 · สีแดงจาง = เคยมีน้ำท่วมหรือน้ำขังบางช่วง สีน้ำเงิน = แหล่งน้ำถาวร · ' + GSW_ATTR + '</p>';
+    }
+    if (state.data.hazard) {
+      h += '<div class="haz-legend" aria-label="ความลึกน้ำในแบบจำลอง">' + [1, 2, 3].map(function (k) {
+        var c = HAZ_RGBA[k];
+        return '<span><i style="background:rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (c[3] / 255).toFixed(2) + ')"></i>' + HAZ_T[k] + '</span>';
+      }).join('') + '</div>' +
+        '<p class="fp-fine">พื้นที่ที่น้ำล้นแม่น้ำท่วมถึงในแบบจำลอง ถ้าเกิดน้ำท่วมใหญ่ระดับรอบ 100 ปี (โอกาสราว 18% ใน 20 ปี) เฉพาะแม่น้ำสายใหญ่ ไม่รวมคันกั้นน้ำ · ' +
+        'กด "ตรวจทำเล" หรือคลิกขวาที่แผนที่เพื่อดูรายจุด · ' + GLOFAS_ATTR + '</p>';
+    }
+    if (state.data.zoning) h += zoneLegendHtml() + '<p class="fp-fine">' + esc(zoneStatusText()) + ' · ' + ZONE_ATTR + '</p>';
+    return h;
+  }
+  if ($('btnSite')) {
+    if (IN_ARTIFACT) $('btnSite').hidden = true;
+    $('btnSite').addEventListener('click', function () {
+      if (SITE.pick) { setSitePick(false); return; }
+      if (state.page !== 'chat') setPage('chat');
+      setSitePick(true);
+    });
+  }
+  if ($('sitePickX')) $('sitePickX').addEventListener('click', function () { setSitePick(false); });
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-site-open], [data-site-layer], [data-site-ll], [data-site-close], [data-site-copy]');
+    if (!t) return;
+    e.preventDefault();
+    if (t.hasAttribute('data-site-copy')) {
+      var C = SITE.res[t.getAttribute('data-site-copy')];
+      if (!C) return;
+      var url = location.origin + location.pathname + '#site=' + C.lat.toFixed(5) + ',' + C.lon.toFixed(5);
+      var ok = function () { toast('คัดลอกลิงก์แล้ว ส่งให้คนอื่นเปิดรายงานเดียวกันได้'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, function () { toast(url); });
+      else toast(url);
+      return;
+    }
+    if (t.hasAttribute('data-site-close')) { closeSite(); return; }
+    if (t.hasAttribute('data-site-open')) { var S = SITE.res[t.getAttribute('data-site-open')]; if (S) openSite(S.lon, S.lat); return; }
+    if (t.hasAttribute('data-site-ll')) { var a = t.getAttribute('data-site-ll').split(',').map(Number); openSite(a[0], a[1]); return; }
+    var id = t.getAttribute('data-site-layer');
+    state.data[id] = !state.data[id];
+    saveData(); eachView(refreshLive); renderDataChips(); renderSiteCard();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (SITE.pick) { e.preventDefault(); setSitePick(false); return; }
+    var modal = ($('helpModal') && !$('helpModal').hidden) || ($('ccModal') && !$('ccModal').hidden) || ($('palette') && !$('palette').hidden);
+    if (SITE.cur && !modal) closeSite();
+  });
+
   // ปุ่มเปิดปิดชั้นข้อมูลในเมนู "ชั้นข้อมูล"
   var DATA_ROWS = [
     { id: 'water', name: 'ระดับน้ำในแม่น้ำ', src: 'ThaiWater (สสน.)' },
@@ -3571,8 +4486,11 @@
     { id: 'wind', name: 'ลม (เส้นเคลื่อนไหว)', src: 'Open-Meteo' },
     { id: 'fc', name: 'พยากรณ์อากาศ 3 วัน', src: 'Open-Meteo' },
     { id: 'flood', name: 'น้ำจากดาวเทียม (ทดลอง)', src: 'Sentinel-1' },
+    { id: 'hist', name: 'น้ำในอดีต 41 ปี (1984–2024)', src: 'Landsat · JRC' },
+    { id: 'hazard', name: 'พื้นที่น้ำท่วมใหญ่ (แบบจำลอง)', src: 'JRC GloFAS · รอบ 100 ปี' },
     { id: 'cctv', name: 'กล้อง CCTV + AI (ทดลอง)', src: 'หาดใหญ่ · เขื่อน กฟผ.' },
     { id: 'terrain', name: 'ความสูงพื้นดิน', src: 'Terrain Tiles' },
+    { id: 'zoning', name: 'ผังเมืองรวม (ทดลอง)', src: 'กรมโยธาธิการและผังเมือง' },
     { id: 'sat', name: 'ภาพดาวเทียม', src: 'Sentinel-2 · EOX' }
   ];
   function dataSub(r) {
@@ -3586,6 +4504,9 @@
     if (r.id === 'cloud') return r.src + ' · ช้ากว่าจริงราว 1 ชม.';
     if (r.id === 'wind') return r.src + (WIND.grid ? ' · ' + ccTime(WIND.grid.time) : ' · ยังไม่มีข้อมูล (ระบบดึงทุกชั่วโมง)');
     if (r.id === 'terrain') return 'เงาภูเขา · กดแผนที่ดูความสูง ที่ลุ่ม/ที่ดอน';
+    if (r.id === 'hist') return r.src + ' · ภาพย้อนหลัง ไม่ใช่ตอนนี้';
+    if (r.id === 'hazard') return typeof DecompressionStream === 'undefined' ? 'เบราว์เซอร์นี้เก่าเกินไป' : r.src + (HAZ.err ? ' · โหลดไม่ได้ตอนนี้' : '');
+    if (r.id === 'zoning') return state.data.zoning ? zoneStatusText() : r.src + ' · ซูมระดับอำเภอ';
     if (r.id === 'cctv') {
       if (!CCTV.loaded) return r.src + ' · กำลังโหลด';
       if (!ccReady()) return r.src + ' · โหลดรายชื่อกล้องไม่ได้';
@@ -3608,7 +4529,7 @@
       RAIN_C.join(',') + ')"></i><span>150+ มม.</span></div>' : '') +
       (state.data.water || state.data.rain ? '<p class="fp-fine">ซูมออกจะเห็นเฉพาะสถานีที่น้ำผิดปกติและฝน 35 มม.ขึ้นไป ซูมเข้าเพื่อดูครบทุกสถานี</p>' : '') +
       (state.data.flood && floodReady() ? floodLegendHtml() : '') +
-      (state.data.cctv && ccReady() ? ccLegendHtml() : '') + wxLegendHtml();
+      (state.data.cctv && ccReady() ? ccLegendHtml() : '') + wxLegendHtml() + siteLegendHtml();
   }
   function saveData() { try { localStorage.setItem('cg-data', JSON.stringify(state.data)); } catch (e) { /* ข้าม */ } }
   if ($('dataChips')) {
@@ -3742,7 +4663,7 @@
     function dist(o) { return km(cx, cy, o.lon, o.lat); }
     var showDist = !!near;
     function where(o) { return (o.prov ? 'จ.' + esc(o.prov) : '') + (showDist ? ' · ห่าง ' + Math.round(dist(o)) + ' กม.' : ''); }
-    function head(kind, inside) { return kind + (near ? 'ใกล้คุณ' : inside ? 'ใน' + esc(p.name) : 'ใกล้' + esc(p.name)); }
+    function head(kind, inside) { return kind + (near ? (opt.nearLabel || 'ใกล้คุณ') : inside ? 'ใน' + esc(p.name) : 'ใกล้' + esc(p.name)); }
     var h = '';
     if (LIVE.water.length) {
       var W = near ? [] : LIVE.water.filter(function (o) { return inLocal(p, o); }).sort(function (a, b) { return b.lv - a.lv || (b.pct || 0) - (a.pct || 0); });
@@ -3869,6 +4790,7 @@
   loadRadar();
   loadWind();
   if (location.hash === '#help') setTimeout(openHelp, 300);
+  if (start.site && !IN_ARTIFACT) setTimeout(function () { openSite(start.site.lon, start.site.lat); }, 300);
   setInterval(function () {
     if (document.hidden) return;
     if (state.data.radar) loadRadar(); // เรดาร์ใหม่ทุก 10 นาที
