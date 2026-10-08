@@ -355,18 +355,26 @@ def main(argv):
     ap.add_argument('--budget', type=float, default=300.0, help='เวลาสูงสุด (นาที) ที่จะเริ่มกรอบใหม่')
     ap.add_argument('--areas', default='', help='วิเคราะห์พื้นที่จาก flood_areas.json คั่นด้วยจุลภาค')
     ap.add_argument('--force', action='store_true', help='รันใหม่แม้ไม่มีภาพใหม่')
+    ap.add_argument('--as-of', default='', help='วิเคราะห์ย้อนหลัง ณ วันที่ YYYY-MM-DD (ใช้เฉพาะภาพถึงวันนั้น) ไว้เก็บประวัติ')
     ap.add_argument('--out', default=os.path.join(tempfile.gettempdir(), 'chatgeo-flood'), help='โฟลเดอร์ผลลัพธ์')
     a = ap.parse_args(argv)
+    now = None
+    if a.as_of:
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', a.as_of):
+            raise SystemExit('--as-of ต้องเป็นรูปแบบ YYYY-MM-DD')
+        # ช่วงค้นภาพใช้แค่วันที่ (pystac-client นับถึงสิ้นวันนั้น)
+        now = datetime.strptime(a.as_of, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        log('โหมดย้อนหลัง: ใช้ภาพถึงวันที่', a.as_of)
     cl = client()
 
     if a.grid_check:
         only = [x.strip() for x in a.tiles.split(',') if x.strip()] or None
-        todo = grid_check(cl, a.data, only, a.force)
+        todo = grid_check(cl, a.data, only, a.force, now=now)
         if a.todo:
             os.makedirs(os.path.dirname(os.path.abspath(a.todo)), exist_ok=True)
             with open(a.todo, 'w', encoding='utf-8') as fh:
                 fh.write('\n'.join(todo) + ('\n' if todo else ''))
-        if a.data:
+        if a.data and not a.as_of:
             # รายชื่อกรอบทั้งหมด ไว้ให้หน้าเว็บรู้ว่าตรวจไปแล้วกี่กรอบจากทั้งหมด
             os.makedirs(a.data, exist_ok=True)
             grid = [{'id': k, 'bbox': list(bb), 'aoi': list(aoi), 'name': tile_name(bb)} for k, (bb, aoi) in sorted(grid_tiles().items())]
@@ -378,7 +386,7 @@ def main(argv):
     if a.grid_run:
         with open(a.todo, encoding='utf-8') as fh:
             todo = [x.strip() for x in fh if x.strip()]
-        write_errors(a.out, grid_run(cl, todo, a.out, a.budget))
+        write_errors(a.out, grid_run(cl, todo, a.out, a.budget, now=now))
         return 0
 
     if a.areas:

@@ -1,0 +1,708 @@
+{
+ "v": 1,
+ "checked": "2026-10-08",
+ "sources": {
+  "hatyai": {
+   "name": "HatyaiCityClimate.Org (SCCCRN)",
+   "url": "https://www.hatyaicityclimate.org/",
+   "map": "https://www.hatyaicityclimate.org/flood/map/camera",
+   "license": "CC BY-SA 3.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/3.0/deed.th",
+   "thumbs": true
+  },
+  "egat": {
+   "name": "การไฟฟ้าฝ่ายผลิตแห่งประเทศไทย (กฟผ.)",
+   "url": "https://egatwater.egat.co.th/RealTimeCCTV",
+   "license": "",
+   "thumbs": false
+  }
+ },
+ "sites": [
+  {
+   "id": "hy-upper",
+   "name": "คลองอู่ตะเภาตอนบน (บางศาลา–ม่วงก็อง)",
+   "area": "หาดใหญ่",
+   "prov": "สงขลา",
+   "lat": 6.9312,
+   "lon": 100.4399,
+   "approx": true,
+   "src": "hatyai",
+   "cams": [
+    {
+     "id": "hy-bangsala",
+     "name": "สะพานบางศาลา",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/bangsala.jpg"
+    },
+    {
+     "id": "hy-muangkong",
+     "name": "สะพานม่วงก็อง",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/muangkong.jpg"
+    }
+   ]
+  },
+  {
+   "id": "hy-city",
+   "name": "ในเมืองหาดใหญ่",
+   "area": "หาดใหญ่",
+   "prov": "สงขลา",
+   "lat": 7.004,
+   "lon": 100.469,
+   "approx": true,
+   "src": "hatyai",
+   "cams": [
+    {
+     "id": "hy-hatyainai",
+     "name": "หาดใหญ่ใน (คลองอู่ตะเภา)",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/hatyainai.jpg"
+    },
+    {
+     "id": "hy-klongwha",
+     "name": "สะพานประชาอุทิศ (คลองหวะ)",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/klongwha.jpg"
+    },
+    {
+     "id": "hy-klongwha2",
+     "name": "สี่แยกคลองหวะ",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/klongwha2.jpg"
+    },
+    {
+     "id": "hy-road30m",
+     "name": "ถนนราษฎร์ยินดี (เหล็กใต้ 30 เมตร)",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/road30m.jpg"
+    },
+    {
+     "id": "hy-kalyanamit",
+     "name": "กัลยาณมิตร",
+     "kind": "mixed",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/kalyanamit.jpg"
+    }
+   ]
+  },
+  {
+   "id": "hy-phatong",
+   "name": "พะตง",
+   "area": "หาดใหญ่",
+   "prov": "สงขลา",
+   "lat": 6.918,
+   "lon": 100.425,
+   "approx": true,
+   "src": "hatyai",
+   "cams": [
+    {
+     "id": "hy-khuankhirat",
+     "name": "ควนขี้แรด (เขต ต.พะตง)",
+     "kind": "mixed",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khuankhirat.jpg"
+    },
+    {
+     "id": "hy-patongkn",
+     "name": "ท้ายวัดควนเนียง ต.พะตง",
+     "kind": "mixed",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/patongkn.jpg"
+    },
+    {
+     "id": "hy-tunglung",
+     "name": "ป้อมตำรวจ ตลาดทุ่งลุง",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/tunglung.jpg"
+    },
+    {
+     "id": "hy-tunglan",
+     "name": "ทุ่งลาน",
+     "kind": "mixed",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/tunglan.jpg"
+    }
+   ]
+  },
+  {
+   "id": "hy-khuanlang",
+   "name": "ควนลัง",
+   "area": "หาดใหญ่",
+   "prov": "สงขลา",
+   "lat": 6.99,
+   "lon": 100.43,
+   "approx": true,
+   "src": "hatyai",
+   "cams": [
+    {
+     "id": "hy-klongetum",
+     "name": "คลองอิตำ",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/klongetum.jpg"
+    },
+    {
+     "id": "hy-klongnon",
+     "name": "คลองนนท์",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/klongnon.jpg"
+    }
+   ]
+  },
+  {
+   "id": "hy-r1",
+   "name": "ประตูระบายน้ำคลอง ร.1 (กรมชลประทาน)",
+   "area": "หาดใหญ่",
+   "prov": "สงขลา",
+   "lat": 6.97,
+   "lon": 100.46,
+   "approx": true,
+   "note": "ประตูระบายน้ำ 5 จุดกระจายตามคลอง ร.1 รอบเมืองหาดใหญ่",
+   "src": "hatyai",
+   "cams": [
+    {
+     "id": "hy-utapao",
+     "name": "ประตูระบายน้ำคลองอู่ตะเภา",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/utapao.jpg"
+    },
+    {
+     "id": "hy-khlongs1r1",
+     "name": "ประตูระบายน้ำคลอง ร.1",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khlongs1r1.jpg"
+    },
+    {
+     "id": "hy-nhakaun",
+     "name": "ประตูระบายน้ำคลองชลประทาน",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/nhakaun.jpg"
+    },
+    {
+     "id": "hy-bangyheeus",
+     "name": "ประตูระบายน้ำบ้านบางหยี (ด้านหน้า)",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/bangyheeus.jpg"
+    },
+    {
+     "id": "hy-bangyheeds",
+     "name": "ประตูระบายน้ำบ้านบางหยี (ด้านหลัง)",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/bangyheeds.jpg"
+    }
+   ]
+  },
+  {
+   "id": "hy-khohong",
+   "name": "คอหงส์",
+   "area": "หาดใหญ่",
+   "prov": "สงขลา",
+   "lat": 7.015,
+   "lon": 100.493,
+   "approx": true,
+   "src": "hatyai",
+   "cams": [
+    {
+     "id": "hy-khgamling",
+     "name": "อ่างเก็บน้ำแก้มลิงคลองเรียน",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khgamling.jpg"
+    },
+    {
+     "id": "hy-khklongr6",
+     "name": "ต้นคลองเรียน–คลอง ร.6",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khklongr6.jpg"
+    },
+    {
+     "id": "hy-khsoi1plugtong",
+     "name": "ถนนปลักธง (ป้อม อปพร.)",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khsoi1plugtong.jpg"
+    },
+    {
+     "id": "hy-khtaisoi",
+     "name": "ท้ายซอยถนนปลักธง",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khtaisoi.jpg"
+    },
+    {
+     "id": "hy-khnailhong",
+     "name": "ปากซอยนายหลง ปลักธง 1",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khnailhong.jpg"
+    },
+    {
+     "id": "hy-khtwinburana",
+     "name": "สะพานซอยถวิลบูรณะ",
+     "kind": "mixed",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khtwinburana.jpg"
+    },
+    {
+     "id": "hy-khpholpichaihu",
+     "name": "ถนนพลพิชัย (หน้า ม.หาดใหญ่)",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khpholpichaihu.jpg"
+    },
+    {
+     "id": "hy-khkarnjanavanij6",
+     "name": "ริมคลอง ร.5 ท้ายซอยกาญจนวนิช 6",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khkarnjanavanij6.jpg"
+    },
+    {
+     "id": "hy-khparinyavillage",
+     "name": "ริมคลอง ร.5 ท้ายซอย ม.ปริญญา",
+     "kind": "water",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khparinyavillage.jpg"
+    },
+    {
+     "id": "hy-khpookong",
+     "name": "ถนนอนุสรณ์ปู่คง",
+     "kind": "road",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/khpookong.jpg"
+    }
+   ]
+  },
+  {
+   "id": "hy-phawong",
+   "name": "พะวง",
+   "area": "หาดใหญ่",
+   "prov": "สงขลา",
+   "lat": 7.12,
+   "lon": 100.53,
+   "approx": true,
+   "src": "hatyai",
+   "cams": [
+    {
+     "id": "hy-kuanhin",
+     "name": "ควนหิน",
+     "kind": "mixed",
+     "img": "https://hatyaicityclimate.org/floodphoto/last/kuanhin.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-bb",
+   "name": "เขื่อนภูมิพล",
+   "area": "เขื่อนภูมิพล",
+   "prov": "ตาก",
+   "lat": 17.2425,
+   "lon": 98.9722,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-bb-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BB/1.jpg"
+    },
+    {
+     "id": "egat-bb-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BB/2.jpg"
+    },
+    {
+     "id": "egat-bb-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BB/3.jpg"
+    },
+    {
+     "id": "egat-bb-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BB/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-sk",
+   "name": "เขื่อนสิริกิติ์",
+   "area": "เขื่อนสิริกิติ์",
+   "prov": "อุตรดิตถ์",
+   "lat": 17.7639,
+   "lon": 100.5633,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-sk-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SK/1.jpg"
+    },
+    {
+     "id": "egat-sk-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SK/2.jpg"
+    },
+    {
+     "id": "egat-sk-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SK/3.jpg"
+    },
+    {
+     "id": "egat-sk-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SK/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-snr",
+   "name": "เขื่อนศรีนครินทร์",
+   "area": "เขื่อนศรีนครินทร์",
+   "prov": "กาญจนบุรี",
+   "lat": 14.4086,
+   "lon": 99.1283,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-snr-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SNR/1.jpg"
+    },
+    {
+     "id": "egat-snr-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SNR/2.jpg"
+    },
+    {
+     "id": "egat-snr-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SNR/3.jpg"
+    },
+    {
+     "id": "egat-snr-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SNR/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-vrk",
+   "name": "เขื่อนวชิราลงกรณ",
+   "area": "เขื่อนวชิราลงกรณ",
+   "prov": "กาญจนบุรี",
+   "lat": 14.7994,
+   "lon": 98.5969,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-vrk-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/VRK/1.jpg"
+    },
+    {
+     "id": "egat-vrk-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/VRK/2.jpg"
+    },
+    {
+     "id": "egat-vrk-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/VRK/3.jpg"
+    },
+    {
+     "id": "egat-vrk-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/VRK/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-ur",
+   "name": "เขื่อนอุบลรัตน์",
+   "area": "เขื่อนอุบลรัตน์",
+   "prov": "ขอนแก่น",
+   "lat": 16.7754,
+   "lon": 102.6183,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-ur-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/UR/1.jpg"
+    },
+    {
+     "id": "egat-ur-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/UR/3.jpg"
+    },
+    {
+     "id": "egat-ur-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/UR/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-srd",
+   "name": "เขื่อนสิรินธร",
+   "area": "เขื่อนสิรินธร",
+   "prov": "อุบลราชธานี",
+   "lat": 15.2063,
+   "lon": 105.4292,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-srd-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SRD/1.jpg"
+    },
+    {
+     "id": "egat-srd-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SRD/2.jpg"
+    },
+    {
+     "id": "egat-srd-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/SRD/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-clb",
+   "name": "เขื่อนจุฬาภรณ์",
+   "area": "เขื่อนจุฬาภรณ์",
+   "prov": "ชัยภูมิ",
+   "lat": 16.5363,
+   "lon": 101.65,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-clb-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/CLB/1.jpg"
+    },
+    {
+     "id": "egat-clb-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/CLB/2.jpg"
+    },
+    {
+     "id": "egat-clb-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/CLB/3.jpg"
+    },
+    {
+     "id": "egat-clb-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/CLB/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-np",
+   "name": "เขื่อนน้ำพุง",
+   "area": "เขื่อนน้ำพุง",
+   "prov": "สกลนคร",
+   "lat": 16.9752,
+   "lon": 103.9742,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-np-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/NP/1.jpg"
+    },
+    {
+     "id": "egat-np-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/NP/2.jpg"
+    },
+    {
+     "id": "egat-np-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/NP/3.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-rpb",
+   "name": "เขื่อนรัชชประภา",
+   "area": "เขื่อนรัชชประภา",
+   "prov": "สุราษฎร์ธานี",
+   "lat": 8.973,
+   "lon": 98.8067,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-rpb-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/RPB/1.jpg"
+    },
+    {
+     "id": "egat-rpb-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/RPB/2.jpg"
+    },
+    {
+     "id": "egat-rpb-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/RPB/3.jpg"
+    },
+    {
+     "id": "egat-rpb-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/RPB/4.jpg"
+    }
+   ]
+  },
+  {
+   "id": "egat-blg",
+   "name": "เขื่อนบางลาง",
+   "area": "เขื่อนบางลาง",
+   "prov": "ยะลา",
+   "lat": 6.1564,
+   "lon": 101.2736,
+   "src": "egat",
+   "cams": [
+    {
+     "id": "egat-blg-1",
+     "name": "มุมที่ 1",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BLG/1.jpg"
+    },
+    {
+     "id": "egat-blg-2",
+     "name": "มุมที่ 2",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BLG/2.jpg"
+    },
+    {
+     "id": "egat-blg-3",
+     "name": "มุมที่ 3",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BLG/3.jpg"
+    },
+    {
+     "id": "egat-blg-4",
+     "name": "มุมที่ 4",
+     "kind": "dam",
+     "img": "https://egatwater.egat.co.th/assets/CCTV/images/BLG/4.jpg"
+    }
+   ]
+  }
+ ],
+ "links": [
+  {
+   "name": "กล้องจราจร กทม. (สำนักการจราจรและขนส่ง)",
+   "url": "https://cpudapp.bangkok.go.th/bmatraffic/",
+   "provs": [
+    "กรุงเทพมหานคร"
+   ]
+  },
+  {
+   "name": "กล้องลุ่มเจ้าพระยา (กรมชลประทาน)",
+   "url": "https://wmsc.rid.go.th/cctv2/",
+   "provs": [
+    "นครสวรรค์",
+    "อุทัยธานี",
+    "ชัยนาท",
+    "สิงห์บุรี",
+    "อ่างทอง",
+    "ลพบุรี",
+    "สระบุรี",
+    "สุพรรณบุรี",
+    "พระนครศรีอยุธยา",
+    "ปทุมธานี",
+    "นนทบุรี",
+    "กรุงเทพมหานคร",
+    "สมุทรปราการ"
+   ],
+   "note": "ต้นทางแจ้งว่าเปิดได้เฉพาะ Firefox"
+  },
+  {
+   "name": "กล้อง CCTV เทศบาลนครขอนแก่น",
+   "url": "https://portal.kkmuni.go.th/kk_camera_map/",
+   "provs": [
+    "ขอนแก่น"
+   ]
+  },
+  {
+   "name": "แผนที่ข้อมูลเทศบาลนครนนทบุรี (มีกล้อง CCTV)",
+   "url": "https://nkndatamap.nakornnont.go.th/public",
+   "provs": [
+    "นนทบุรี"
+   ]
+  },
+  {
+   "name": "NST Smart City CCTV (เทศบาลนครนครศรีธรรมราช)",
+   "url": "https://nstcctv.nakhoncity.org/",
+   "provs": [
+    "นครศรีธรรมราช"
+   ]
+  },
+  {
+   "name": "กล้องสดเมืองพัทยา",
+   "url": "https://livestream.pattaya.go.th/",
+   "provs": [
+    "ชลบุรี"
+   ],
+   "note": "ดูที่เว็บเมืองพัทยาเท่านั้น ข้อกำหนดห้ามนำภาพไปเผยแพร่ต่อ"
+  },
+  {
+   "name": "Hatyai City Climate (กล้องน้ำท่วมหาดใหญ่)",
+   "url": "https://www.hatyaicityclimate.org/",
+   "provs": [
+    "สงขลา"
+   ]
+  },
+  {
+   "name": "กล้องเขื่อน กฟผ.",
+   "url": "https://egatwater.egat.co.th/RealTimeCCTV",
+   "provs": [
+    "กาญจนบุรี",
+    "ขอนแก่น",
+    "ชัยภูมิ",
+    "ตาก",
+    "ยะลา",
+    "สกลนคร",
+    "สุราษฎร์ธานี",
+    "อุตรดิตถ์",
+    "อุบลราชธานี"
+   ]
+  },
+  {
+   "name": "กล้อง CCTV ระดับน้ำ ThaiWater (สสน.)",
+   "url": "https://www.thaiwater.net/water/cctv",
+   "provs": "*"
+  },
+  {
+   "name": "กล้องทางหลวง (กรมทางหลวง)",
+   "url": "https://highwaytraffic.go.th/DOHWeb/Home.aspx",
+   "provs": "*"
+  },
+  {
+   "name": "กล้องจราจร iTIC",
+   "url": "https://live.iticfoundation.org",
+   "provs": "*"
+  }
+ ]
+}

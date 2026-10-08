@@ -56,7 +56,7 @@
     return x.getImageData(0, 0, w, h);
   }
   function readDataPrefs() {
-    var d = { water: true, rain: true, fc: true, sat: false, flood: true };
+    var d = { water: true, rain: true, fc: true, sat: false, flood: true, cctv: true };
     try {
       var j = JSON.parse(localStorage.getItem('cg-data') || 'null');
       if (j) Object.keys(d).forEach(function (k) { if (typeof j[k] === 'boolean') d[k] = j[k]; });
@@ -471,7 +471,7 @@
     var raf = 0;
     map.on('zoom', function () {
       if (raf) return;
-      raf = requestAnimationFrame(function () { raf = 0; updateLabels(v); updateFcMarkers(v); });
+      raf = requestAnimationFrame(function () { raf = 0; updateLabels(v); updateFcMarkers(v); updateCctvMarkers(v); });
     });
     updateLabels(v);
     views[kind] = v;
@@ -1113,6 +1113,9 @@
     }
     var terms = wordsOf(rest.replace(FOREIGN_RE, ' ').replace(/ประเทศ/g, ' '));
     var r = { q: t, place: place, topic: topic, impact: impact, list: [], missing: '', prefix: '', label: '', sat: /ดาวเทียม|satellite/i.test(t) };
+    // กล้อง CCTV: ถามถึงกล้องตรงๆ หรือเอ่ยชื่อจุดที่มีกล้อง (เช่น หาดใหญ่ เขื่อนภูมิพล)
+    r.camQ = CC_RE.test(t);
+    r.cam = ccMatch(t);
 
     var pool = D.STORIES.slice().sort(byRank), scope = null;
     if (place) {
@@ -1158,6 +1161,7 @@
   // ขยับแผนที่ไปยังข่าวที่ใช้ตอบ: เรื่องเดียวเปิดหมุด หลายเรื่องซูมให้เห็นทั้งหมด
   function showQueryOnMap(r) {
     var list = r.list;
+    if (ccFirst(r) && ccQueryOnMap(r)) return;
     if (r.topic === 'flood' && r.sat && (!r.place || r.place.id === HOME) && floodReady()) {
       var tp = topFloodProvinces(1)[0];
       if (tp) { showFloodProvince(PID_BY_NAME[tp.name]); return; }
@@ -1281,8 +1285,10 @@
           (topFloodProvinces(1).length ? 'นี่คือจังหวัดที่น่าจะมีน้ำท่วมมากที่สุดตอนนี้' : 'ภาพล่าสุดยังไม่พบน้ำท่วมผิดปกติที่ชัดเจน') +
           (list.length ? ' ส่วนข่าวน้ำท่วมเช้านี้มี ' + list.length + ' เรื่อง พิมพ์ว่า "น้ำท่วม" เพื่อดูข่าว' : '') };
     }
+    if (ccFirst(r)) return cctvAnswer(r);
     var loc = r.place && isLocalPlace(r.place) && (!r.topic || r.topic === 'flood') ? localHtml({ place: r.place }) : '';
     if (!loc && r.topic === 'flood' && (!r.place || r.place.id === HOME)) loc = floodSummaryHtml();
+    if (r.cam && !(r.place && isLocalPlace(r.place) && loc)) loc += ccBlockHtml(r.cam.cams, r.cam.label, r.cam.sites.length === 1 ? 'site:' + r.cam.sites[0].id : 'all', { showSite: r.cam.sites.length > 1, max: 4 });
     if (!list.length) {
       return { title: r.label || (loc ? r.place.name : ''), html: loc, text: r.missing
         ? 'เช้านี้ยังไม่มีข่าวใน' + r.missing + (loc ? ' แต่นี่คือสถานการณ์น้ำ ฝน และพยากรณ์ตอนนี้' : ' ลองซูมดูพื้นที่บนแผนที่ หรือถามเรื่องอื่นได้ครับ')
@@ -1348,6 +1354,7 @@
     var p = pal();
     var list = [{ q: 'รอบตัวฉันตอนนี้เป็นยังไง', layer: 'weather', near: true }]
       .concat(floodReady() ? [{ q: 'ดาวเทียมเห็นน้ำท่วมที่ไหนบ้าง', layer: 'weather' }] : [])
+      .concat(ccReady() ? [{ q: CCTV.idx ? 'กล้องไหนเห็นน้ำท่วมบ้าง' : 'ดูกล้อง CCTV หาดใหญ่', layer: 'weather' }] : [])
       .concat(suggestions());
     $('suggest').innerHTML = list.map(function (q) {
       return '<button type="button" class="q-chip" data-q="' + esc(q.q) + '"><span class="dot" style="background:' + (p[q.layer] || p.accent) + '"></span>' + esc(q.q) + '</button>';
@@ -2321,6 +2328,8 @@
     if (map.getLayer('cg-thp-line')) map.setPaintProperty('cg-thp-line', 'line-opacity', state.data.sat ? 0.55 : 0.28);
     buildFcMarkers(v);
     updateFloodTiles(v);
+    updateFloodChip(v);
+    updateCctvMarkers(v);
   }
   // ป้ายพยากรณ์วันนี้ที่เมืองตัวแทนของแต่ละภาค
   function buildFcMarkers(v) {
@@ -2408,6 +2417,72 @@
     var ma = TH_MON_S[a.getUTCMonth()], mb = TH_MON_S[b.getUTCMonth()];
     if (ds[0] === ds[ds.length - 1]) return b.getUTCDate() + ' ' + mb;
     return ma === mb ? a.getUTCDate() + '–' + b.getUTCDate() + ' ' + mb : a.getUTCDate() + ' ' + ma + ' – ' + b.getUTCDate() + ' ' + mb;
+  }
+  // อายุของภาพ นับเป็นวันตามเวลาไทย
+  var FL_OLD_DAYS = 4;
+  function daysAgo(ymd) {
+    var d = parseYMD(ymd);
+    if (!d) return null;
+    var now = new Date(Date.now() + 7 * 3600e3);
+    return Math.max(0, Math.round((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - d.getTime()) / 86400e3));
+  }
+  function ageText(ymd) {
+    var n = daysAgo(ymd);
+    return n == null ? '' : n === 0 ? 'วันนี้' : n === 1 ? 'เมื่อวาน' : n + ' วันก่อน';
+  }
+  // '1–2 ต.ค. (6 วันก่อน)'
+  function dateAge(dates) {
+    var ds = (dates || []).filter(Boolean).sort();
+    return ds.length ? shortDates(ds) + ' (' + ageText(ds[ds.length - 1]) + ')' : '';
+  }
+  function floodOldNote(ymd) {
+    var n = daysAgo(ymd);
+    return n != null && n >= FL_OLD_DAYS ? 'ภาพดาวเทียมช้ากว่าความจริง ' + n + ' วัน สถานการณ์ตอนนี้อาจต่างไป ดูระดับน้ำ ThaiWater ประกอบ' : '';
+  }
+  // น้ำเพิ่มหรือลด เทียบกับภาพก่อนหน้าของจังหวัดเดียวกัน (ต่างกันไม่ถึง 2 ตร.กม. หรือ 10% ถือว่าใกล้เคียง)
+  function floodDelta(cur, prev, from) {
+    if (prev == null || !from) return null;
+    var d = (+cur || 0) - (+prev || 0), base = Math.max(+cur || 0, +prev || 0);
+    return { d: d, from: from, flat: Math.abs(d) < Math.max(2, base * 0.1) };
+  }
+  function provDelta(r) { return r && r.prev ? floodDelta(r.flood_high, r.prev.flood_high, r.prev.date) : null; }
+  function deltaText(dl) {
+    if (!dl) return '';
+    return dl.flat ? 'ใกล้เคียงภาพ ' + shortDates([dl.from]) :
+      (dl.d > 0 ? 'น้ำเพิ่ม ' : 'น้ำลด ') + fmtKm2(Math.abs(dl.d)) + ' ตร.กม. จากภาพ ' + shortDates([dl.from]);
+  }
+  function deltaBadge(dl) {
+    if (!dl || dl.flat) return '';
+    return ' <span class="fl-d ' + (dl.d > 0 ? 'up' : 'down') + '" title="' + esc(deltaText(dl)) + '">' + (dl.d > 0 ? '▲' : '▼') + fmtKm2(Math.abs(dl.d)) + '</span>';
+  }
+  // ป้ายมุมซ้ายล่างของแผนที่: ภาพดาวเทียมเก่าแค่ไหน
+  function updateFloodChip(v) {
+    if (!v || v.kind !== 'chat') return;
+    if (!v.flAge) {
+      v.flAge = document.createElement('div');
+      v.flAge.className = 'fl-age';
+      v.el.appendChild(v.flAge);
+      // ยกป้ายให้อยู่เหนือแถบแหล่งที่มาของแผนที่ (แถบนี้สูงไม่เท่ากันตามขนาดจอ และย่อ/ขยายได้)
+      var at = v.el.querySelector('.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib');
+      var lift = function () {
+        var r = at && at.getBoundingClientRect(), box = v.el.getBoundingClientRect();
+        // ถ้าแถบกว้างมาถึงฝั่งซ้าย ให้ยกขึ้นเหนือแถบ ไม่งั้นวางชิดล่างตามปกติ
+        v.flAge.style.bottom = (r && r.height && r.left - box.left < v.flAge.offsetWidth + 24 ? Math.round(box.bottom - r.top) + 6 : 10) + 'px';
+      };
+      v.flAgeLift = lift;
+      if (at && window.ResizeObserver) new ResizeObserver(lift).observe(at);
+      window.addEventListener('resize', lift);
+    }
+    var show = !!(state.data.flood && floodReady());
+    v.flAge.hidden = !show;
+    if (!show) return;
+    var I = FLOOD.index, n = daysAgo(I.date_max);
+    v.flAge.classList.toggle('old', n != null && n >= FL_OLD_DAYS);
+    // อายุภาพมาก่อนวันที่ จอแคบตัดท้ายแล้วยังเห็นว่าเก่าแค่ไหน
+    var age = ageText(I.date_max);
+    v.flAge.textContent = 'น้ำจากดาวเทียม · ภาพ' + (age ? (n > 1 ? 'เมื่อ ' : '') + age : '') + ' (' + shortDates([I.date_min, I.date_max].filter(Boolean)) + ')';
+    v.flAge.title = floodOldNote(I.date_max) || 'ภาพเรดาร์ Sentinel-1 ล่าสุดที่ประมวลผลแล้ว';
+    v.flAgeLift();
   }
   function floodCoverage() {
     var I = FLOOD.index || {};
@@ -2512,8 +2587,10 @@
     box.innerHTML = '<div class="pop-meta">ดาวเทียม Sentinel-1 · ทดลอง' + (t.name ? ' · ' + esc(t.name) : '') + '</div>' +
       '<div class="pop-title">' + title + '</div>' +
       '<div class="pop-stat"><i class="sq' + (low ? ' faint' : '') + '" style="background:' + (seasonal ? FL_C.seasonal : FL_C.flood) + '"></i>' +
-      '<b>ราว ' + fmtKm2(p.area_km2) + ' ตร.กม.</b> · ภาพวันที่ ' + esc(when) + '</div>' +
+      '<b>ราว ' + fmtKm2(p.area_km2) + ' ตร.กม.</b></div>' +
+      '<div class="pop-sub">ภาพวันที่ ' + esc(when) + ' (' + esc(ageText(p.date || t.date)) + ')</div>' +
       '<div class="pop-sub">' + why + '</div>' +
+      (floodOldNote(p.date || t.date) ? '<div class="pop-sub pop-warn">' + esc(floodOldNote(p.date || t.date)) + '</div>' : '') +
       '<div class="pop-sub">ต้นแบบทดลอง ไม่ใช่ประกาศเตือนภัย ควรดูคู่กับ GISTDA และ ThaiWater · <a href="' + NB_URL + '" target="_blank" rel="noopener">วิธีทำ</a></div>';
     if (v.popup) v.popup.remove();
     v.popup = new maplibregl.Popup({ className: 'cg-popup', offset: 4, maxWidth: '290px', focusAfterOpen: false })
@@ -2526,7 +2603,9 @@
       '<div class="pop-title">จ.' + esc(p.name) + '</div>' +
       '<div class="pop-stat"><i class="sq" style="background:' + FL_C.flood + '"></i><b>น่าจะท่วมราว ' + fmtKm2(r.flood_high) + ' ตร.กม.</b></div>' +
       (r.flood_low >= 0.1 ? '<div class="pop-sub">ไม่แน่ใจ (ปื้นเล็ก) ' + fmtKm2(r.flood_low) + ' ตร.กม. · มีน้ำเกือบทุกปี ' + fmtKm2(r.seasonal) + ' ตร.กม.</div>' : '') +
-      '<div class="pop-sub">ภาพวันที่ ' + esc(shortDates([r.date_min, r.date_max])) + '</div>' +
+      '<div class="pop-sub">ภาพวันที่ ' + esc(dateAge([r.date_min, r.date_max])) + '</div>' +
+      '<div class="pop-sub">' + (r.prev ? deltaBadge(provDelta(r)) + ' ' + esc(deltaText(provDelta(r))) : 'ยังไม่มีภาพก่อนหน้าให้เทียบว่าน้ำเพิ่มหรือลด') + '</div>' +
+      (floodOldNote(r.date_max) ? '<div class="pop-sub pop-warn">' + esc(floodOldNote(r.date_max)) + '</div>' : '') +
       '<button type="button" class="btn-ghost fl-go" data-flood-prov="' + esc(p.id) + '">ซูมดูปื้นน้ำ</button>';
     if (v.popup) v.popup.remove();
     v.popup = new maplibregl.Popup({ className: 'cg-popup', offset: 4, maxWidth: '260px', focusAfterOpen: false })
@@ -2544,9 +2623,9 @@
       '<div class="rain-legend" aria-label="สีรายจังหวัด"><span>ซูมออก: จังหวัดที่น่าจะท่วม</span><span class="sp"></span><span>' + FL_PROV_MIN + '</span>' +
       '<i style="background:linear-gradient(90deg,rgba(229,72,77,.16),rgba(229,72,77,.55))"></i><span>150+ ตร.กม.</span></div>' +
       (top.length ? '<div class="fl-areas">' + top.map(function (r) {
-        return '<button type="button" class="fl-go" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '">จ.' + esc(r.name) + ' ' + fmtKm2(r.flood_high) + ' ตร.กม.</button>';
+        return '<button type="button" class="fl-go" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '">จ.' + esc(r.name) + ' ' + fmtKm2(r.flood_high) + ' ตร.กม.' + deltaBadge(provDelta(r)) + '</button>';
       }).join('') + '</div>' : '') +
-      '<p class="fp-fine">' + floodCoverage() + ' · ภาพ ' + esc(shortDates([I.date_min, I.date_max])) +
+      '<p class="fp-fine">' + floodCoverage() + ' · ภาพ ' + esc(dateAge([I.date_min, I.date_max])) +
       ' · ซูมถึงระดับจังหวัดเพื่อดูปื้นน้ำ · ระบบเช็กภาพใหม่วันละ 2 รอบ · ต้นแบบทดลอง ไม่ใช่ประกาศเตือนภัยทางการ</p>';
   }
   // จังหวัดที่เกี่ยวกับคำถาม: จังหวัดเดียว ทั้งภาค หรือจังหวัดที่ผู้ใช้อยู่
@@ -2568,35 +2647,50 @@
   function floodHtml(opt) {
     var tg = floodReady() ? floodTarget(opt) : null;
     if (!tg) return '';
-    var I = FLOOD.index, s = { h: 0, l: 0, s: 0 }, dates = [], best = null;
+    var I = FLOOD.index, s = { h: 0, l: 0, s: 0, ph: 0 }, dates = [], best = null, from = '', hasPrev = false;
     tg.provs.forEach(function (q) {
       var r = FLOOD.provByName[q.name];
       if (!r) return;
       s.h += r.flood_high; s.l += r.flood_low; s.s += r.seasonal;
+      // จังหวัดที่ยังไม่มีภาพก่อนหน้า ถือว่าเท่าเดิม
+      s.ph += r.prev ? r.prev.flood_high : r.flood_high;
+      if (r.prev) { hasPrev = true; if (r.prev.date > from) from = r.prev.date; }
       dates.push(r.date_min, r.date_max);
       if (!best || r.flood_high > best.flood_high) best = r;
     });
     var covered = dates.length || tg.provs.some(function (q) {
       return I.tiles.some(function (t) { return q.lon >= t.bbox[0] && q.lon < t.bbox[2] && q.lat >= t.bbox[1] && q.lat < t.bbox[3]; });
     });
-    var head = '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ' + esc(tg.label) + (dates.length ? ' · ภาพ ' + esc(shortDates(dates)) : '') + '</div>';
+    var head = '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ' + esc(tg.label) + (dates.length ? ' · ภาพ ' + esc(dateAge(dates)) : '') + '</div>';
     if (!covered) return head + '<div class="m-row m-none"><span></span><div><span>ยังไม่ได้ตรวจพื้นที่นี้ (' + floodCoverage() + ')</span></div></div></div>';
     var rows = '';
     if (s.h >= 0.1) rows += '<div class="m-row"><i class="sq" style="background:' + FL_C.flood + '"></i><div><b>น่าจะท่วม</b> <span>ราว ' + fmtKm2(s.h) + ' ตร.กม.</span></div></div>';
     if (s.l >= 0.1) rows += '<div class="m-row"><i class="sq faint" style="background:' + FL_C.flood + '"></i><div><b>ไม่แน่ใจ</b> <span>ปื้นเล็กราว ' + fmtKm2(s.l) + ' ตร.กม. อาจเป็นนาหรือบ่อ</span></div></div>';
     if (s.s >= 0.1) rows += '<div class="m-row"><i class="sq" style="background:' + FL_C.seasonal + '"></i><div><b>มีน้ำเกือบทุกปี</b> <span>ราว ' + fmtKm2(s.s) + ' ตร.กม. เช่น นาหรือทุ่งรับน้ำ</span></div></div>';
     if (!rows) rows = '<div class="m-row m-none"><span></span><div><span>ภาพล่าสุดไม่พบน้ำผิดปกติใน' + esc(tg.label) + '</span></div></div>';
+    var dl = hasPrev ? floodDelta(s.h, s.ph, from) : null;
+    if (dl) rows += '<div class="m-row"><span></span><div><b>เทียบภาพก่อน</b> <span>' + deltaBadge(dl) + ' ' + esc(deltaText(dl)) + '</span></div></div>';
+    var old = floodOldNote(dates.sort()[dates.length - 1]);
+    if (old) rows += '<div class="m-row m-none"><span></span><div><span>' + esc(old) + '</span></div></div>';
     var pid = best && PID_BY_NAME[best.name];
     return head + rows + (pid ? '<div class="m-row m-act"><span></span><div><button type="button" class="btn-ghost fl-go" data-flood-prov="' + esc(pid) + '">ดูบนแผนที่</button></div></div>' : '') + '</div>';
   }
   function floodSummaryHtml() {
     if (!floodReady()) return '';
     var I = FLOOD.index, top = topFloodProvinces(5);
-    return '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ' + floodCoverage() + ' · ภาพ ' + esc(shortDates([I.date_min, I.date_max])) + '</div>' +
+    var ups = ((I.provinces) || []).map(function (r) { return { r: r, dl: provDelta(r) }; })
+      .filter(function (x) { return x.dl && !x.dl.flat && x.dl.d > 0 && PID_BY_NAME[x.r.name]; })
+      .sort(function (a, b) { return b.dl.d - a.dl.d; }).slice(0, 3);
+    var old = floodOldNote(I.date_max);
+    return '<div class="m-extra"><div class="m-extra-head">น้ำจากดาวเทียม Sentinel-1 (ทดลอง) · ' + floodCoverage() + ' · ภาพ ' + esc(dateAge([I.date_min, I.date_max])) + '</div>' +
       (top.length ? top.map(function (r) {
         return '<div class="m-row"><i class="sq" style="background:' + FL_C.flood + '"></i><div><b>จ.' + esc(r.name) + '</b> <span>น่าจะท่วมราว ' + fmtKm2(r.flood_high) +
-          ' ตร.กม. · ภาพ ' + esc(shortDates([r.date_min, r.date_max])) + '</span> <button type="button" class="btn-ghost fl-go" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '">ดู</button></div></div>';
-      }).join('') : '<div class="m-row m-none"><span></span><div><span>ภาพล่าสุดยังไม่พบน้ำท่วมผิดปกติที่ชัดเจน</span></div></div>') + '</div>';
+          ' ตร.กม.' + deltaBadge(provDelta(r)) + ' · ภาพ ' + esc(shortDates([r.date_min, r.date_max])) + '</span> <button type="button" class="btn-ghost fl-go" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '">ดู</button></div></div>';
+      }).join('') : '<div class="m-row m-none"><span></span><div><span>ภาพล่าสุดยังไม่พบน้ำท่วมผิดปกติที่ชัดเจน</span></div></div>') +
+      (ups.length ? '<div class="m-row"><span></span><div><b>น้ำเพิ่มมากสุด</b> <span>' + ups.map(function (x) {
+        return 'จ.' + esc(x.r.name) + deltaBadge(x.dl);
+      }).join(' · ') + ' (เทียบภาพก่อนหน้า)</span></div></div>' : '') +
+      (old ? '<div class="m-row m-none"><span></span><div><span>' + esc(old) + '</span></div></div>' : '') + '</div>';
   }
   // ปุ่ม "ดูบนแผนที่" ของน้ำจากดาวเทียม (แชท การ์ดหน้าสรุป และ popup)
   document.addEventListener('click', function (e) {
@@ -2604,12 +2698,461 @@
     if (g) { e.preventDefault(); if (views.chat && views.chat.popup) { views.chat.popup.remove(); views.chat.popup = null; } showFloodProvince(g.getAttribute('data-flood-prov')); }
   });
 
+  /* ---------- กล้อง CCTV + AI ดูภาพ (ทดลอง) ---------- */
+  // รายชื่อกล้องอยู่ใน data/cctv.json (ขึ้นเว็บพร้อมหน้าเว็บ) · ผล AI รายชั่วโมงอยู่ใน branch cctv-data
+  // (GitHub Actions .github/workflows/cctv.yml) ภาพจริงโหลดจากเว็บของหน่วยงานเจ้าของกล้องโดยตรง
+  // AI ดูแค่ฉาก (น้ำ ถนน อากาศ จำนวนรถ) ไม่จดจำใบหน้า ไม่อ่านทะเบียน ไม่ติดตามคน
+  var CCTV_BASE = 'https://raw.githubusercontent.com/Choonahakarn/chatgeo/cctv-data/';
+  var CCTV = { reg: null, idx: null, hist: null, histAt: 0, histP: null, cams: {}, site: {}, siteOf: {}, loaded: false };
+  var CC_L = {
+    flood: { t: 'น่าจะมีน้ำท่วม', c: '#E5484D', r: 0 },
+    high: { t: 'น้ำค่อนข้างสูง', c: '#F2803A', r: 1 },
+    watch: { t: 'น้ำมากกว่าปกติเล็กน้อย', c: '#D99A1E', r: 2 },
+    spill: { t: 'กำลังระบายน้ำ', c: '#3B82F6', r: 3 },
+    normal: { t: 'ปกติ', c: '#2FA36B', r: 4 },
+    night: { t: 'มืด อ่านยาก', c: '#7A8BA6', r: 5 },
+    pending: { t: 'รอ AI', c: '#8A93A3', r: 6 },
+    stale: { t: 'ภาพค้าง', c: '#8A93A3', r: 7 },
+    offline: { t: 'ไม่มีภาพ', c: '#8A93A3', r: 8 },
+    none: { t: 'ยังไม่มีผล AI', c: '#8A93A3', r: 9 }
+  };
+  var CC_WET = ['flood', 'high', 'watch'];
+  var CC_SITE_Z = 9.5; // ซูมน้อยกว่านี้ รวมจุดในพื้นที่เดียวกัน (เช่น หาดใหญ่) เป็นหมุดเดียว
+  var CC_ICO = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h13l5-3v12l-5-3H3z"/><circle cx="9" cy="10" r="2"/></svg>';
+  function ccReady() { return !!(CCTV.reg && CCTV.reg.sites && CCTV.reg.sites.length); }
+  function ccRec(id) { return (CCTV.idx && CCTV.idx.cams && CCTV.idx.cams[id]) || null; }
+  function ccLab(id) { var r = ccRec(id); return r && CC_L[r.label] ? r.label : 'none'; }
+  function ccSrc(c) { var s = CCTV.siteOf[c.id]; return (CCTV.reg.sources || {})[s && s.src] || {}; }
+  function ccParse(s) {
+    var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 7, +m[5])) : null;
+  }
+  // '13:35 น.' ถ้าเป็นวันนี้ ไม่งั้น '7 ต.ค. 13:35 น.'
+  function ccTime(s) {
+    var d = ccParse(s);
+    if (!d) return '';
+    var b = new Date(d.getTime() + 7 * 3600e3), n = new Date(Date.now() + 7 * 3600e3);
+    var hm = ('0' + b.getUTCHours()).slice(-2) + ':' + ('0' + b.getUTCMinutes()).slice(-2) + ' น.';
+    return b.toISOString().slice(0, 10) === n.toISOString().slice(0, 10) ? hm : b.getUTCDate() + ' ' + TH_MON_S[b.getUTCMonth()] + ' ' + hm;
+  }
+  function ccHoursAgo(s) { var d = ccParse(s); return d ? (Date.now() - d.getTime()) / 3600e3 : null; }
+  function ccOldNote() {
+    var h = CCTV.idx && ccHoursAgo(CCTV.idx.updated);
+    return h != null && h >= 3 ? 'ผล AI ไม่ได้อัปเดตมาราว ' + Math.round(h) + ' ชม. ภาพในป๊อปอัปยังเป็นภาพล่าสุดจากต้นทาง' : '';
+  }
+  function ccImg(c, full) {
+    var r = ccRec(c.id);
+    if (!full && ccSrc(c).thumbs && r && r.thumb) return CCTV_BASE + 'thumbs/' + c.id + '.jpg?v=' + r.thumb;
+    return c.img + (c.img.indexOf('?') < 0 ? '?' : '&') + 't=' + Math.floor(Date.now() / 600000);
+  }
+  function ccChip(l) { var L = CC_L[l] || CC_L.none; return '<span class="cc-lab" style="--c:' + L.c + '">' + esc(L.t) + '</span>'; }
+  function ccWorst(cams) {
+    return cams.reduce(function (w, c) { var l = ccLab(c.id); return CC_L[l].r < CC_L[w].r ? l : w; }, 'none');
+  }
+  function ccSorted(cams) {
+    return cams.slice().sort(function (a, b) { return CC_L[ccLab(a.id)].r - CC_L[ccLab(b.id)].r; });
+  }
+  function ccAllCams() { return Object.keys(CCTV.cams).map(function (k) { return CCTV.cams[k]; }); }
+  function loadCctv() {
+    if (IN_ARTIFACT) return;
+    var get = function (u) { return fetch(u).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).catch(function () { return null; }); };
+    Promise.all([CCTV.reg ? Promise.resolve(CCTV.reg) : get('data/cctv.json'), get(CCTV_BASE + 'index.json')]).then(function (a) {
+      var reg = a[0];
+      if (reg && Array.isArray(reg.sites)) {
+        CCTV.reg = reg;
+        reg.sites.forEach(function (s) {
+          CCTV.site[s.id] = s;
+          s.cams.forEach(function (c) { CCTV.cams[c.id] = c; CCTV.siteOf[c.id] = s; });
+        });
+      }
+      CCTV.idx = a[1] && a[1].v === 1 && a[1].cams ? a[1] : CCTV.idx;
+      CCTV.loaded = true;
+      eachView(buildCctvMarkers);
+      renderDataChips();
+      renderLiveCards();
+      renderSuggest();
+      if (!$('ccModal').hidden) renderCcModal();
+      if (state.messages.some(function (m) { return m.key === 'near' || m.key === 'place' || m.key === 'q'; })) renderMsgs();
+    });
+  }
+  function loadCctvHist() {
+    if (CCTV.histP && Date.now() - CCTV.histAt < 600e3) return CCTV.histP;
+    CCTV.histAt = Date.now();
+    CCTV.histP = fetch(CCTV_BASE + 'history.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (j) { CCTV.hist = j && j.cams ? j : { cams: {} }; return CCTV.hist; })
+      .catch(function () { CCTV.hist = CCTV.hist || { cams: {} }; return CCTV.hist; });
+    return CCTV.histP;
+  }
+
+  // หมุดบนแผนที่: ซูมออกรวมเป็นหมุดรายพื้นที่ ซูมเข้าแยกรายจุด
+  function buildCctvMarkers(v) {
+    if (!v || v.kind !== 'chat' || !ccReady()) return;
+    (v.ccMarkers || []).forEach(function (m) { m.mk.remove(); });
+    var groups = {};
+    CCTV.reg.sites.forEach(function (s) { (groups[s.area] = groups[s.area] || []).push(s); });
+    var list = [];
+    Object.keys(groups).forEach(function (area) {
+      var ss = groups[area];
+      var mk = function (sites, level) {
+        var cams = [].concat.apply([], sites.map(function (s) { return s.cams; }));
+        var lon = sites.reduce(function (t, s) { return t + s.lon; }, 0) / sites.length;
+        var lat = sites.reduce(function (t, s) { return t + s.lat; }, 0) / sites.length;
+        var w = ccWorst(cams), L = CC_L[w];
+        var name = level === 'area' ? area : sites[0].name;
+        var el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'cc-pin' + (CC_WET.indexOf(w) >= 0 ? ' wet' : '');
+        el.style.setProperty('--c', L.c);
+        el.innerHTML = CC_ICO + '<b>' + cams.length + '</b>';
+        el.title = 'กล้อง ' + name + ' ' + cams.length + ' ตัว · ' + L.t;
+        el.setAttribute('aria-label', 'กล้อง CCTV ' + name + ' ' + cams.length + ' ตัว สถานะ ' + L.t);
+        el.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          if (level === 'area' && sites.length > 1) {
+            var b = sites.reduce(function (bb, s) { return [Math.min(bb[0], s.lon), Math.min(bb[1], s.lat), Math.max(bb[2], s.lon), Math.max(bb[3], s.lat)]; }, [999, 999, -999, -999]);
+            v.map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 90, maxZoom: 11.5, duration: reduceMotion ? 0 : 900 });
+          } else openCctvSitePopup(v, sites[0]);
+        });
+        list.push({ mk: new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).addTo(v.map), level: level, multi: sites.length > 1 });
+      };
+      if (ss.length > 1) mk(ss, 'area');
+      ss.forEach(function (s) { mk([s], ss.length > 1 ? 'site' : 'one'); });
+    });
+    v.ccMarkers = list;
+    updateCctvMarkers(v);
+  }
+  function updateCctvMarkers(v) {
+    if (!v || !v.ccMarkers) return;
+    var z = v.map.getZoom(), on = !!state.data.cctv;
+    v.ccMarkers.forEach(function (m) {
+      var show = on && z >= 4.5 && (m.level === 'one' || (m.level === 'area' ? z < CC_SITE_Z : z >= CC_SITE_Z));
+      m.mk.getElement().classList.toggle('off', !show);
+    });
+  }
+  function ccTile(c, ctx) {
+    var r = ccRec(c.id), l = ccLab(c.id), s = CCTV.siteOf[c.id];
+    return '<button type="button" class="cc-tile" data-cc-cam="' + esc(c.id) + '"' + (ctx ? ' data-cc-ctx="' + esc(ctx) + '"' : '') + '>' +
+      '<span class="cc-img"><img loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" src="' + esc(ccImg(c)) + '" onerror="this.parentNode.classList.add(\'err\')"></span>' +
+      ccChip(l) + '<span class="cc-name">' + esc(c.name) + '</span>' +
+      (ctx && ctx.indexOf('site:') !== 0 ? '<span class="cc-sub">' + esc(s.name) + '</span>' : '') +
+      '<span class="cc-sub">' + (r && (r.ai || r.seen) ? 'AI ' + esc(ccTime(r.ai || r.seen)) : 'ยังไม่มีผล AI') + '</span></button>';
+  }
+  function ccCredit(src) {
+    return 'ภาพ: <a href="' + esc(src.url) + '" target="_blank" rel="noopener">' + esc(src.name) + '</a>' +
+      (src.license ? ' (<a href="' + esc(src.license_url || src.url) + '" target="_blank" rel="noopener">' + esc(src.license) + '</a>)' : '');
+  }
+  function openCctvSitePopup(v, s, noPan) {
+    // แผนที่เตี้ย (มือถือ) ป๊อปอัปจะล้นจอ เปิดเป็นจอรวมของจุดนี้แทน
+    if (v.map.getContainer().clientHeight < 460) { openCcModal('wall', 'site:' + s.id); return; }
+    var src = CCTV.reg.sources[s.src] || {};
+    // ป๊อปอัปสูง: เลื่อนจุดลงไปด้านล่างของแผนที่ แล้วเปิดป๊อปอัปเหนือจุด
+    if (!noPan) v.map.easeTo({ center: [s.lon, s.lat], offset: [0, Math.round(v.map.getContainer().clientHeight * 0.32)], duration: reduceMotion ? 0 : 500 });
+    var box = document.createElement('div');
+    box.innerHTML = '<div class="pop-meta">กล้อง CCTV + AI (ทดลอง) · จ.' + esc(s.prov) + '</div>' +
+      '<div class="pop-title">' + esc(s.name) + '</div>' +
+      (s.approx ? '<div class="pop-sub">ตำแหน่งโดยประมาณ ต้นทางไม่มีพิกัด' + (src.map ? ' · <a href="' + esc(src.map) + '" target="_blank" rel="noopener">แผนที่กล้องต้นทาง</a>' : '') + '</div>' : '') +
+      (s.note ? '<div class="pop-sub">' + esc(s.note) + '</div>' : '') +
+      '<div class="cc-grid">' + ccSorted(s.cams).map(function (c) { return ccTile(c, 'site:' + s.id); }).join('') + '</div>' +
+      (ccOldNote() ? '<div class="pop-sub pop-warn">' + esc(ccOldNote()) + '</div>' : '') +
+      '<div class="pop-sub">' + ccCredit(src) + ' · AI ตัวเล็กอาจผิด ดูภาพประกอบเสมอ</div>' +
+      '<button type="button" class="btn-ghost cc-wall-btn" data-cc-wall="site:' + esc(s.id) + '">เปิดจอรวม</button>';
+    if (v.popup) v.popup.remove();
+    v.popup = new maplibregl.Popup({ className: 'cg-popup cc-popup', anchor: 'bottom', offset: 18, maxWidth: '340px', focusAfterOpen: false })
+      .setLngLat([s.lon, s.lat]).setDOMContent(box).addTo(v.map);
+  }
+  function showCctvSite(id) {
+    var s = CCTV.site[id], v = views.chat;
+    if (!s || !v) return;
+    if (!state.data.cctv) { state.data.cctv = true; saveData(); renderDataChips(); eachView(updateCctvMarkers); }
+    if (state.page !== 'chat') setPage('chat');
+    closeCcModal(true);
+    v.map.flyTo({ center: [s.lon, s.lat], offset: [0, Math.round(v.map.getContainer().clientHeight * 0.32)], zoom: Math.max(v.map.getZoom(), s.approx ? 11 : 10), duration: reduceMotion ? 0 : 900, essential: true });
+    setTimeout(function () { openCctvSitePopup(v, s, true); }, reduceMotion ? 0 : 950);
+  }
+
+  // หน้าต่างกล้อง: โหมดจอรวม (หลายกล้อง) และโหมดดูกล้องเดียว
+  var ccView = { mode: 'wall', filter: 'all', cam: null, ctx: null, opener: null };
+  function ccFilterCams(f) {
+    var all = ccAllCams();
+    if (f === 'wet') return all.filter(function (c) { return CC_WET.indexOf(ccLab(c.id)) >= 0; });
+    if (f.indexOf('site:') === 0) return (CCTV.site[f.slice(5)] || { cams: [] }).cams.slice();
+    if (f.indexOf('src:') === 0) return all.filter(function (c) { return CCTV.siteOf[c.id].src === f.slice(4); });
+    if (f.indexOf('prov:') === 0) return all.filter(function (c) { return CCTV.siteOf[c.id].prov === f.slice(5); });
+    return all;
+  }
+  function ccFilterName(f) {
+    if (f === 'wet') return 'AI เห็นน้ำ';
+    if (f.indexOf('site:') === 0) return (CCTV.site[f.slice(5)] || {}).name || '';
+    if (f === 'src:hatyai') return 'หาดใหญ่';
+    if (f === 'src:egat') return 'เขื่อน กฟผ.';
+    if (f.indexOf('prov:') === 0) return 'จ.' + f.slice(5);
+    return 'ทั้งหมด';
+  }
+  function openCcModal(mode, arg, ctx) {
+    if (!ccReady()) { toast('กำลังโหลดรายชื่อกล้อง ลองอีกครั้งในไม่กี่วินาที'); return; }
+    if (!$('ccModal').hidden && ccView.mode === mode && mode === 'cam' && ccView.cam === arg) return;
+    if ($('ccModal').hidden) ccView.opener = document.activeElement;
+    ccView.mode = mode;
+    if (mode === 'wall') ccView.filter = arg || 'all';
+    else { ccView.cam = arg; ccView.ctx = ctx || ccView.ctx || ccView.filter; loadCctvHist().then(function () { if (!$('ccModal').hidden && ccView.mode === 'cam') renderCcHist(); }); }
+    $('ccModal').hidden = false;
+    renderCcModal();
+    setTimeout(function () { var b = $('ccModal').querySelector('[data-cc-close].pal-x'); if (b) b.focus(); }, 0);
+  }
+  function closeCcModal(silent) {
+    if ($('ccModal').hidden) return;
+    $('ccModal').hidden = true;
+    $('ccBody').innerHTML = '';
+    if (!silent && ccView.opener && ccView.opener.focus) ccView.opener.focus();
+  }
+  function renderCcModal() {
+    if (ccView.mode === 'cam') return renderCcCam();
+    var f = ccView.filter, cams = ccSorted(ccFilterCams(f));
+    var tabs = ['all', 'wet', 'src:hatyai', 'src:egat'];
+    if (tabs.indexOf(f) < 0) tabs.push(f);
+    $('ccTitle').textContent = 'จอรวมกล้อง CCTV + AI (ทดลอง)';
+    $('ccBody').innerHTML = '<div class="cc-tabs" role="group" aria-label="เลือกกล้อง">' + tabs.map(function (t) {
+      return '<button type="button" class="q-chip" data-cc-filter="' + esc(t) + '" aria-pressed="' + (t === f) + '">' + esc(ccFilterName(t)) + ' <b>' + ccFilterCams(t).length + '</b></button>';
+    }).join('') + '</div>' +
+      (ccOldNote() ? '<p class="cc-note pop-warn">' + esc(ccOldNote()) + '</p>' : '') +
+      (cams.length ? '<div class="cc-wall">' + cams.map(function (c) { return ccTile(c, f); }).join('') + '</div>'
+        : '<p class="cc-note">ตอนนี้ AI ยังไม่เห็นน้ำผิดปกติในกล้องไหน' + (CCTV.idx ? ' (ดูเมื่อ ' + esc(ccTime(CCTV.idx.updated)) + ')' : '') + '</p>') +
+      '<p class="cc-note">' + ccFootNote() + '</p>';
+  }
+  function ccFootNote() {
+    var srcs = CCTV.reg.sources || {};
+    return Object.keys(srcs).map(function (k) { return ccCredit(srcs[k]); }).join(' · ') +
+      ' · AI ดูทุกชั่วโมง' + (CCTV.idx ? ' (ล่าสุด ' + esc(ccTime(CCTV.idx.updated)) + ')' : '') +
+      ' ด้วยโมเดลขนาดเล็กบน GitHub Actions ดูแค่สภาพน้ำ ถนน อากาศ และนับรถ ไม่จดจำใบหน้า ไม่อ่านทะเบียน · ต้นแบบทดลอง ไม่ใช่ประกาศเตือนภัย';
+  }
+  function renderCcCam() {
+    var c = CCTV.cams[ccView.cam];
+    if (!c) { ccView.mode = 'wall'; return renderCcModal(); }
+    var s = CCTV.siteOf[c.id], src = ccSrc(c), r = ccRec(c.id) || {}, l = ccLab(c.id);
+    var list = ccSorted(ccFilterCams(ccView.ctx || 'all'));
+    var i = list.map(function (x) { return x.id; }).indexOf(c.id);
+    var prev = i > 0 ? list[i - 1] : null, next = i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+    var times = [];
+    if (r.img_t) times.push('ภาพจากต้นทาง ' + ccTime(r.img_t));
+    if (r.ai) times.push('AI ดูเมื่อ ' + ccTime(r.ai));
+    else if (r.seen) times.push('ตรวจเมื่อ ' + ccTime(r.seen));
+    $('ccTitle').textContent = c.name + ' · ' + s.name;
+    $('ccBody').innerHTML = '<div class="cc-view">' +
+      '<div class="cc-big"><img referrerpolicy="no-referrer" alt="ภาพล่าสุดจากกล้อง ' + esc(c.name) + '" src="' + esc(ccImg(c, true)) + '" onerror="this.parentNode.classList.add(\'err\')"><span class="cc-err">โหลดภาพจากต้นทางไม่ได้ตอนนี้</span></div>' +
+      '<div class="cc-info">' +
+        '<div class="cc-line">' + ccChip(l) + (r.veh != null ? '<span class="cc-veh">รถราว ' + r.veh + ' คัน</span>' : '') + '</div>' +
+        (r.th ? '<p class="cc-th">' + esc(r.th) + '</p>' : '<p class="cc-th">ยังไม่มีผลจาก AI สำหรับกล้องนี้ ดูภาพสดจากต้นทางได้ด้านบน</p>') +
+        (r.en ? '<p class="cc-en"><span>คำบรรยายจาก AI (อังกฤษ)</span>' + esc(r.en) + '</p>' : '') +
+        '<p class="cc-note">' + esc(times.join(' · ')) + (times.length ? ' · ' : '') + 'จ.' + esc(s.prov) + (s.approx ? ' · ตำแหน่งโดยประมาณ' : '') + '</p>' +
+        '<div class="cc-hist" id="ccHist"><div class="cc-hist-head">ย้อนหลัง 48 ชม.</div><div class="cc-note">กำลังโหลด…</div></div>' +
+        '<div class="cc-acts">' +
+          '<a class="btn-ghost" href="' + esc(c.img) + '" target="_blank" rel="noopener">ภาพเต็มจากต้นทาง' + ICO.ext + '</a>' +
+          '<button type="button" class="btn-ghost" data-cc-site="' + esc(s.id) + '">ดูบนแผนที่</button>' +
+          '<button type="button" class="btn-ghost" data-cc-wall="' + esc(ccView.ctx || 'all') + '">กลับจอรวม</button>' +
+        '</div>' +
+        '<p class="cc-note">' + ccCredit(src) + ' · AI ตัวเล็กอาจผิด ใช้ประกอบการดูภาพเท่านั้น</p>' +
+      '</div>' +
+      (prev ? '<button type="button" class="cc-nav prev" data-cc-cam="' + esc(prev.id) + '" aria-label="กล้องก่อนหน้า: ' + esc(prev.name) + '">‹</button>' : '') +
+      (next ? '<button type="button" class="cc-nav next" data-cc-cam="' + esc(next.id) + '" aria-label="กล้องถัดไป: ' + esc(next.name) + '">›</button>' : '') +
+      '</div>';
+    if (CCTV.hist) renderCcHist();
+  }
+  // แถบสีรายชั่วโมง: แต่ละช่องคือผลหนึ่งรอบ (ป้ายและคะแนน AI)
+  function renderCcHist() {
+    var el = $('ccHist');
+    if (!el || !CCTV.hist) return;
+    var pts = (CCTV.hist.cams || {})[ccView.cam] || [];
+    if (!pts.length) { el.innerHTML = '<div class="cc-hist-head">ย้อนหลัง 48 ชม.</div><div class="cc-note">ยังไม่มีประวัติของกล้องนี้</div>'; return; }
+    var wet = pts.filter(function (p) { return CC_WET.indexOf(p[1]) >= 0; }).length;
+    var vs = pts.filter(function (p) { return p[3] != null; }).map(function (p) { return p[3]; });
+    el.innerHTML = '<div class="cc-hist-head">ย้อนหลัง ' + pts.length + ' รอบ (' + esc(ccTime(pts[0][0])) + ' ถึง ' + esc(ccTime(pts[pts.length - 1][0])) + ')' +
+      (wet ? ' · AI เห็นน้ำ ' + wet + ' รอบ' : ' · ไม่เห็นน้ำผิดปกติ') + (vs.length ? ' · รถ ' + Math.min.apply(null, vs) + '–' + Math.max.apply(null, vs) + ' คัน' : '') + '</div>' +
+      '<div class="cc-strip">' + pts.map(function (p) {
+        var L = CC_L[p[1]] || CC_L.none;
+        var tip = ccTime(p[0]) + ' · ' + L.t + (p[2] != null ? ' · คะแนน ' + p[2] : '') + (p[3] != null ? ' · รถ ' + p[3] + ' คัน' : '');
+        return '<i style="background:' + L.c + '" title="' + esc(tip) + '"></i>';
+      }).join('') + '</div>' +
+      '<div class="cc-strip-ax"><span>' + esc(ccTime(pts[0][0])) + '</span><span>ล่าสุด</span></div>';
+  }
+  $('ccModal').addEventListener('click', function (e) {
+    if (e.target.closest('[data-cc-close]')) { closeCcModal(); return; }
+    var f = e.target.closest('[data-cc-filter]');
+    if (f) { ccView.filter = f.getAttribute('data-cc-filter'); renderCcModal(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if ($('ccModal').hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeCcModal(); }
+    else if (ccView.mode === 'cam' && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      var b = $('ccModal').querySelector('.cc-nav.' + (e.key === 'ArrowRight' ? 'next' : 'prev'));
+      if (b) b.click();
+    }
+  });
+  // ปุ่มกล้องจากทุกที่ (แชท ป๊อปอัป จอรวม การ์ดหน้าสรุป)
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-cc-cam],[data-cc-wall],[data-cc-site]');
+    if (!t) return;
+    e.preventDefault();
+    if (t.hasAttribute('data-cc-cam')) openCcModal('cam', t.getAttribute('data-cc-cam'), t.getAttribute('data-cc-ctx'));
+    else if (t.hasAttribute('data-cc-wall')) { setFilterOpen(false); openCcModal('wall', t.getAttribute('data-cc-wall')); }
+    else showCctvSite(t.getAttribute('data-cc-site'));
+  });
+
+  // แชท: หยิบกล้องที่เกี่ยวกับคำถามมาตอบ (ไม่ใช้ AI ตอบ ใช้เฉพาะผลที่บันทึกไว้ อ้างชื่อกล้องและเวลาทุกครั้ง)
+  var CC_RE = /กล้อง|cctv|ซีซีทีวี|ภาพสด|จอรวม/i;
+  var CC_WET_RE = /น้ำท่วม|ท่วม|น้ำขัง|น้ำสูง|น้ำล้น|เห็นน้ำ|flood/i;
+  var CC_GENERIC = ['ประตูระบายน้ำ', 'สะพาน', 'ริมคลอง', 'ท้ายซอย', 'ด้านหน้า', 'ด้านหลัง', 'คลองอู่ตะเภา'];
+  function ccMatch(t) {
+    if (!ccReady()) return null;
+    t = String(t || '');
+    var hit = [], seen = {};
+    CCTV.reg.sites.forEach(function (s) {
+      var names = [s.name, s.area].concat(s.area === s.name ? [s.name.replace(/^เขื่อน/, '')] : []);
+      s.name.split(/[()–\s]+/).forEach(function (w) { if (w.length >= 4) names.push(w); });
+      if (names.some(function (n) { return n && n.length >= 3 && t.indexOf(n) >= 0; })) {
+        // ชื่อพื้นที่ย่อย (เช่น คอหงส์) ตรงกว่าชื่อพื้นที่ใหญ่ (หาดใหญ่)
+        var solo = CCTV.reg.sites.filter(function (x) { return x.area === s.area; }).length === 1;
+        var exact = solo || [s.name].concat(s.name.split(/[()–\s]+/)).some(function (n) { return n.length >= 3 && n !== s.area && t.indexOf(n) >= 0; });
+        hit.push({ s: s, exact: exact });
+      }
+      s.cams.forEach(function (c) {
+        if (c.kind === 'dam' || seen[c.id]) return;
+        var parts = [c.name].concat(c.name.split(/[()–\s]+/)).filter(function (w) { return w.length >= 5 && CC_GENERIC.indexOf(w) < 0; });
+        if (parts.some(function (w) { return t.indexOf(w) >= 0; })) { seen[c.id] = 1; hit.push({ s: s, cam: c, exact: true }); }
+      });
+    });
+    var exact = hit.filter(function (h) { return h.exact; });
+    var use = exact.length ? exact : hit;
+    if (!use.length) return null;
+    var sites = [], cams = [];
+    use.forEach(function (h) {
+      if (sites.indexOf(h.s) < 0) sites.push(h.s);
+      (h.cam ? [h.cam] : h.s.cams).forEach(function (c) { if (cams.indexOf(c) < 0) cams.push(c); });
+    });
+    return { sites: sites, cams: cams, exact: exact.length > 0, label: use.length === 1 && use[0].cam ? use[0].cam.name : sites.length === 1 ? sites[0].name : sites[0].area };
+  }
+  // ตอบด้วยกล้องก่อนข่าว: ถามถึงกล้อง, เอ่ยชื่อจุดเจาะจง (เช่น คอหงส์ เขื่อนภูมิพล), ถามว่าน้ำท่วมไหม หรือไม่มีข่าวในพื้นที่นั้น
+  function ccFirst(r) {
+    return !!(r.camQ || (r.cam && (r.cam.exact || !r.list.length || r.missing || CC_WET_RE.test(r.q))));
+  }
+  // ลิงก์กล้องของหน่วยงานอื่นในจังหวัด (เปิดที่เว็บต้นทาง ไม่ดึงภาพมาแสดง)
+  function ccLinksHtml(provNames, withAll) {
+    if (!ccReady()) return '';
+    var L = (CCTV.reg.links || []).filter(function (l) {
+      return l.provs === '*' ? withAll : (l.provs || []).some(function (p) { return provNames.indexOf(p) >= 0; });
+    });
+    if (!L.length) return '';
+    return '<div class="m-row"><span></span><div><b>กล้องของหน่วยงาน (เปิดที่เว็บต้นทาง)</b> <span>' + L.map(function (l) {
+      return '<a class="src-link" href="' + esc(l.url) + '" target="_blank" rel="noopener" title="' + esc(l.note || '') + '">' + esc(l.name) + ICO.ext + '</a>';
+    }).join(' ') + '</span></div></div>';
+  }
+  function ccRowsHtml(cams, max, showSite) {
+    var list = ccSorted(cams), more = list.length - max;
+    return list.slice(0, max).map(function (c) {
+      var r = ccRec(c.id), l = ccLab(c.id), s = CCTV.siteOf[c.id];
+      return '<div class="m-row"><i class="cc-dot" style="background:' + CC_L[l].c + '"></i><div><button type="button" class="pt-title" data-cc-cam="' + esc(c.id) + '">' + esc(c.name) + '</button> ' +
+        '<span>' + (showSite ? esc(s.name) + ' · ' : '') + esc(CC_L[l].t) + (r && r.th && l !== 'none' ? ' · ' + esc(r.th) : '') +
+        (r && (r.ai || r.seen) ? ' · ' + esc(ccTime(r.ai || r.seen)) : '') + '</span></div></div>';
+    }).join('') + (more > 0 ? '<div class="m-row m-none"><span></span><div><span>และอีก ' + more + ' กล้อง</span></div></div>' : '');
+  }
+  function ccBlockHtml(cams, label, wall, opt) {
+    opt = opt || {};
+    var wet = cams.filter(function (c) { return CC_WET.indexOf(ccLab(c.id)) >= 0; }).length;
+    var head = '<div class="m-extra"><div class="m-extra-head">กล้อง CCTV + AI (ทดลอง) · ' + esc(label) + ' · ' + cams.length + ' กล้อง' +
+      (CCTV.idx ? ' · AI ดูเมื่อ ' + esc(ccTime(CCTV.idx.updated)) : ' · ยังไม่มีผล AI') + '</div>';
+    var rows = ccRowsHtml(cams, opt.max || 6, opt.showSite);
+    var old = ccOldNote();
+    return head + (CCTV.idx ? '<div class="m-row"><span></span><div><b>' + (wet ? 'AI เห็นน้ำผิดปกติ ' + wet + ' กล้อง' : 'AI ยังไม่เห็นน้ำผิดปกติ') + '</b> <span>ใน ' + cams.length + ' กล้อง กดชื่อกล้องเพื่อดูภาพจริงประกอบเสมอ</span></div></div>' : '') +
+      rows + (old ? '<div class="m-row m-none"><span></span><div><span>' + esc(old) + '</span></div></div>' : '') +
+      (opt.links || '') +
+      '<div class="m-row m-act"><span></span><div><button type="button" class="btn-ghost" data-cc-wall="' + esc(wall) + '">เปิดจอรวม</button>' +
+      (opt.site ? ' <button type="button" class="btn-ghost" data-cc-site="' + esc(opt.site) + '">ดูบนแผนที่</button>' : '') + '</div></div></div>';
+  }
+  // กล้องในจังหวัด/ภาค หรือใกล้ตำแหน่งผู้ใช้ (ต่อท้ายคำตอบรายพื้นที่)
+  function ccLocalHtml(opt) {
+    if (!ccReady()) return '';
+    var tg = floodTarget(opt);
+    if (!tg) return '';
+    var names = tg.provs.map(function (q) { return q.name; });
+    var cams = ccAllCams().filter(function (c) { return names.indexOf(CCTV.siteOf[c.id].prov) >= 0; });
+    if (opt.near) {
+      cams = ccAllCams().filter(function (c) { var s = CCTV.siteOf[c.id]; return km(opt.near.lon, opt.near.lat, s.lon, s.lat) <= 60; });
+    }
+    var links = ccLinksHtml(names, false);
+    if (!cams.length) {
+      return links ? '<div class="m-extra"><div class="m-extra-head">กล้อง CCTV · ' + esc(tg.label) + '</div>' + links + '</div>' : '';
+    }
+    var wall = names.length === 1 ? 'prov:' + names[0] : 'all';
+    var sites = cams.map(function (c) { return CCTV.siteOf[c.id].id; }).filter(function (x, i, a) { return a.indexOf(x) === i; });
+    return ccBlockHtml(cams, opt.near ? 'ใกล้คุณ' : tg.label, wall, { showSite: sites.length > 1, links: links, max: 5, site: sites.length === 1 ? sites[0] : '' });
+  }
+  function cctvAnswer(r) {
+    if (!ccReady()) return { title: 'กล้อง CCTV', text: CCTV.loaded ? 'โหลดรายชื่อกล้องไม่สำเร็จ ลองรีเฟรชหน้าอีกครั้ง' : 'กำลังโหลดรายชื่อกล้อง ลองถามอีกครั้งในไม่กี่วินาทีครับ' };
+    var m = r.cam, wetQ = CC_WET_RE.test(r.q);
+    var aiNote = CCTV.idx ? '' : ' ตอนนี้ยังไม่มีผลจาก AI (ระบบดูภาพจะเริ่มทำงานหลังเปิดใช้) แต่กดดูภาพสดจากต้นทางได้';
+    if (m && m.sites.length) {
+      var s0 = m.sites[0];
+      var wet = m.cams.filter(function (c) { return CC_WET.indexOf(ccLab(c.id)) >= 0; });
+      var spill = m.cams.filter(function (c) { return ccLab(c.id) === 'spill'; });
+      var txt = (m.cams.length === 1 ? 'กล้อง' + m.cams[0].name + ' (' + s0.name + ')' : m.label + ' มีกล้องที่ ChatGeo ดูภาพได้ ' + m.cams.length + ' ตัว') +
+        (CCTV.idx ? (wet.length ? ' AI เห็นน้ำผิดปกติ ' + wet.length + ' กล้อง: ' + ccSorted(wet).slice(0, 3).map(function (c) { return c.name + ' (' + CC_L[ccLab(c.id)].t + ')'; }).join(', ')
+          : ' AI ยังไม่เห็นน้ำผิดปกติ') + (spill.length ? ' และเห็นน้ำไหลผ่านทางระบายน้ำ ' + spill.length + ' มุม' : '') + ' จากภาพที่ดูเมื่อ ' + ccTime(CCTV.idx.updated) : aiNote) +
+        ' AI ตัวเล็กอาจผิด กดชื่อกล้องเพื่อดูภาพจริงประกอบ';
+      var prov = PID_BY_NAME[s0.prov] && byId[PID_BY_NAME[s0.prov]];
+      var wall = m.sites.length === 1 ? 'site:' + s0.id : 'prov:' + s0.prov;
+      return { title: 'กล้อง CCTV · ' + m.label,
+        text: txt,
+        html: ccBlockHtml(m.cams, m.label, wall, { showSite: m.sites.length > 1, max: 8, site: m.sites.length === 1 ? s0.id : '' }) +
+          (prov && isLocalPlace(prov) && wetQ ? localHtml({ place: prov }) : '') };
+    }
+    if (r.place && isLocalPlace(r.place)) {
+      var loc = ccLocalHtml({ place: r.place });
+      var tg = floodTarget({ place: r.place }) || { provs: [] };
+      var nm = tg.provs.map(function (q) { return q.name; });
+      var n = ccAllCams().filter(function (c) { return nm.indexOf(CCTV.siteOf[c.id].prov) >= 0; }).length;
+      return { title: 'กล้อง CCTV · ' + r.place.name,
+        text: n ? r.place.name + ' มีกล้องที่ ChatGeo ดูภาพได้ ' + n + ' ตัว' + aiNote
+          : 'ChatGeo ยังไม่มีกล้องที่ดึงภาพมาให้ AI ดูใน' + r.place.name + ' ตอนนี้มีที่หาดใหญ่และเขื่อน กฟผ. 10 เขื่อน ส่วนกล้องของหน่วยงานอื่นเปิดดูที่เว็บต้นทางได้ตามลิงก์ด้านล่าง',
+        html: (loc || '') + (n ? '' : '<div class="m-extra"><div class="m-extra-head">กล้องทั่วประเทศ (เปิดที่เว็บต้นทาง)</div>' + ccLinksHtml([], true) + '</div>') };
+    }
+    var all = ccAllCams(), wetAll = all.filter(function (c) { return CC_WET.indexOf(ccLab(c.id)) >= 0; });
+    if (wetQ) {
+      return { title: 'กล้องที่ AI เห็นน้ำผิดปกติ',
+        text: !CCTV.idx ? aiNote.trim()
+          : wetAll.length ? 'จาก ' + all.length + ' กล้อง AI เห็นน้ำผิดปกติ ' + wetAll.length + ' กล้อง (ภาพที่ดูเมื่อ ' + ccTime(CCTV.idx.updated) + ') AI ตัวเล็กอาจผิด กดชื่อกล้องเพื่อดูภาพจริง'
+            : 'จาก ' + all.length + ' กล้อง AI ยังไม่เห็นน้ำผิดปกติ (ภาพที่ดูเมื่อ ' + ccTime(CCTV.idx.updated) + ')',
+        html: ccBlockHtml(wetAll.length ? wetAll : all, wetAll.length ? 'AI เห็นน้ำ' : 'ทุกกล้อง', wetAll.length ? 'wet' : 'all', { showSite: true, max: 8 }) };
+    }
+    return { title: 'กล้อง CCTV + AI (ทดลอง)',
+      text: 'ChatGeo ดึงภาพจากกล้อง ' + all.length + ' ตัว (หาดใหญ่ และเขื่อน กฟผ. 10 เขื่อน) ให้ AI ดูทุกชั่วโมงว่ามีน้ำท่วม น้ำสูง หรือฝนตกไหม ' +
+        'ถามชื่อพื้นที่ได้ เช่น "หาดใหญ่น้ำท่วมไหม" "เขื่อนภูมิพลเป็นยังไง" หรือ "กล้องไหนเห็นน้ำท่วม"' + aiNote,
+      html: ccBlockHtml(all, 'ทุกกล้อง', 'all', { showSite: true, max: 6, links: ccLinksHtml([], true) }) };
+  }
+  function ccQueryOnMap(r) {
+    var m = r.cam;
+    if (!m || !m.sites.length || !views.chat) return false;
+    if (!state.data.cctv) { state.data.cctv = true; saveData(); renderDataChips(); eachView(updateCctvMarkers); }
+    if (m.sites.length === 1) { showCctvSite(m.sites[0].id); return true; }
+    var b = m.sites.reduce(function (bb, s) { return [Math.min(bb[0], s.lon), Math.min(bb[1], s.lat), Math.max(bb[2], s.lon), Math.max(bb[3], s.lat)]; }, [999, 999, -999, -999]);
+    views.chat.map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, maxZoom: 11, duration: reduceMotion ? 0 : 900 });
+    return true;
+  }
+  function ccLegendHtml() {
+    var n = ccAllCams().length;
+    return '<div class="fl-legend cc-legend" aria-label="สีป้ายกล้อง">' + ['flood', 'high', 'watch', 'spill', 'normal', 'stale'].map(function (k) {
+      return '<span><i class="cc-dot" style="background:' + CC_L[k].c + '"></i>' + CC_L[k].t + '</span>';
+    }).join('') + '</div>' +
+      '<div class="fl-areas"><button type="button" class="fl-go" data-cc-wall="all">เปิดจอรวม ' + n + ' กล้อง</button>' +
+      (CCTV.idx && ccFilterCams('wet').length ? '<button type="button" class="fl-go" data-cc-wall="wet">AI เห็นน้ำ ' + ccFilterCams('wet').length + ' กล้อง</button>' : '') + '</div>' +
+      '<p class="fp-fine">ภาพจาก HatyaiCityClimate.Org และ กฟผ. · AI ตัวเล็กดูทุกชั่วโมง ดูแค่น้ำ ถนน อากาศ และนับรถ ไม่จดจำใบหน้า ไม่อ่านทะเบียน · ต้นแบบทดลอง</p>';
+  }
+
   // ปุ่มเปิดปิดชั้นข้อมูลในเมนู "ชั้นข้อมูล"
   var DATA_ROWS = [
     { id: 'water', name: 'ระดับน้ำในแม่น้ำ', src: 'ThaiWater (สสน.)' },
     { id: 'rain', name: 'ฝนสะสม 24 ชม.', src: 'ThaiWater (สสน.)' },
     { id: 'fc', name: 'พยากรณ์อากาศ 3 วัน', src: 'Open-Meteo' },
     { id: 'flood', name: 'น้ำจากดาวเทียม (ทดลอง)', src: 'Sentinel-1' },
+    { id: 'cctv', name: 'กล้อง CCTV + AI (ทดลอง)', src: 'หาดใหญ่ · เขื่อน กฟผ.' },
     { id: 'sat', name: 'ภาพดาวเทียม', src: 'Sentinel-2 · EOX' }
   ];
   function dataSub(r) {
@@ -2617,7 +3160,12 @@
     if (r.id === 'flood') {
       if (!FLOOD.index) return r.src + ' · กำลังโหลด';
       if (!floodReady()) return r.src + ' · ยังไม่มีข้อมูล';
-      return r.src + ' · ภาพ ' + shortDates([FLOOD.index.date_min, FLOOD.index.date_max]) + ' · ตรวจ ' + FLOOD.index.tiles.length + '/' + (FLOOD.index.tiles_total || FLOOD.index.tiles.length) + ' กรอบ';
+      return r.src + ' · ภาพ ' + dateAge([FLOOD.index.date_min, FLOOD.index.date_max]) + ' · ตรวจ ' + FLOOD.index.tiles.length + '/' + (FLOOD.index.tiles_total || FLOOD.index.tiles.length) + ' กรอบ';
+    }
+    if (r.id === 'cctv') {
+      if (!CCTV.loaded) return r.src + ' · กำลังโหลด';
+      if (!ccReady()) return r.src + ' · โหลดรายชื่อกล้องไม่ได้';
+      return ccAllCams().length + ' กล้อง · ' + (CCTV.idx ? 'AI ดูเมื่อ ' + ccTime(CCTV.idx.updated) : 'ยังไม่มีผล AI');
     }
     var n = (LIVE[r.id] || []).length;
     return r.src + (LIVE.src[r.id] ? ' · ' + (n ? n + ' จุด' : 'ดึงข้อมูลไม่ได้ตอนนี้') : ' · กำลังโหลด');
@@ -2635,7 +3183,8 @@
     }).join('') + '</div>' : '') + (state.data.rain ? '<div class="rain-legend" aria-label="สีปริมาณฝน"><span>ฝน</span><span class="sp"></span><span>10</span><i style="background:linear-gradient(90deg,' +
       RAIN_C.join(',') + ')"></i><span>150+ มม.</span></div>' : '') +
       (state.data.water || state.data.rain ? '<p class="fp-fine">ซูมออกจะเห็นเฉพาะสถานีที่น้ำผิดปกติและฝน 35 มม.ขึ้นไป ซูมเข้าเพื่อดูครบทุกสถานี</p>' : '') +
-      (state.data.flood && floodReady() ? floodLegendHtml() : '');
+      (state.data.flood && floodReady() ? floodLegendHtml() : '') +
+      (state.data.cctv && ccReady() ? ccLegendHtml() : '');
   }
   function saveData() { try { localStorage.setItem('cg-data', JSON.stringify(state.data)); } catch (e) { /* ข้าม */ } }
   if ($('dataChips')) {
@@ -2659,7 +3208,8 @@
     if (!wc || !fc) return;
     var W = LIVE.water, R = LIVE.rain;
     var FA = floodReady() ? topFloodProvinces(3) : [];
-    wc.hidden = !W.length && !R.length && !FA.length;
+    var CW = ccReady() && CCTV.idx ? ccSorted(ccFilterCams('wet')).slice(0, 3) : [];
+    wc.hidden = !W.length && !R.length && !FA.length && !CW.length;
     if (!wc.hidden) {
       var over = W.filter(function (o) { return o.lv === 5; }).length, high = W.filter(function (o) { return o.lv === 4; }).length;
       var worst = W.slice().sort(function (a, b) { return b.lv - a.lv || (b.pct || 0) - (a.pct || 0); }).slice(0, 3);
@@ -2683,10 +3233,18 @@
         }).join('');
       }
       if (FA.length) {
-        h += '<div class="live-sub">น้ำท่วมจากดาวเทียม Sentinel-1 (ทดลอง) · มากสุด</div>' + FA.map(function (r) {
-          return '<button type="button" class="live-row" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '"><i class="sq" style="background:' + FL_C.flood + '"></i>' +
-            '<span class="lr-name">จ.' + esc(r.name) + ' <small>ภาพ ' + esc(shortDates([r.date_min, r.date_max])) + '</small></span>' +
-            '<span class="lr-val">' + fmtKm2(r.flood_high) + ' ตร.กม.</span></button>';
+        var fAge = ageText(FLOOD.index.date_max);
+        h += '<div class="live-sub">น้ำท่วมจากดาวเทียม (ทดลอง) · มากสุด' + (fAge ? ' · ภาพ' + (daysAgo(FLOOD.index.date_max) > 1 ? 'เมื่อ ' : '') + esc(fAge) : '') + '</div>' + FA.map(function (r) {
+          return '<button type="button" class="live-row" data-flood-prov="' + esc(PID_BY_NAME[r.name]) + '" title="ภาพ ' + esc(dateAge([r.date_min, r.date_max])) + '"><i class="sq" style="background:' + FL_C.flood + '"></i>' +
+            '<span class="lr-name">จ.' + esc(r.name) + '</span>' +
+            '<span class="lr-val">' + fmtKm2(r.flood_high) + ' ตร.กม.' + deltaBadge(provDelta(r)) + '</span></button>';
+        }).join('');
+      }
+      if (CW.length) {
+        h += '<div class="live-sub">กล้อง CCTV ที่ AI เห็นน้ำ (ทดลอง) · ' + esc(ccTime(CCTV.idx.updated)) + '</div>' + CW.map(function (c) {
+          var l = ccLab(c.id);
+          return '<button type="button" class="live-row" data-cc-cam="' + esc(c.id) + '" data-cc-ctx="wet"><i class="cc-dot" style="background:' + CC_L[l].c + '"></i>' +
+            '<span class="lr-name">' + esc(c.name) + ' <small>' + esc(CCTV.siteOf[c.id].name) + '</small></span><span class="lr-val">' + esc(CC_L[l].t) + '</span></button>';
         }).join('');
       }
       h += '<button type="button" class="btn-ghost live-map" data-live="map">ดูบนแผนที่</button>';
@@ -2754,7 +3312,7 @@
   function localHtml(opt) {
     var p = opt.place, near = opt.near;
     if (!LIVE.src.water && !LIVE.src.rain && !LIVE.src.fc) {
-      return '<div class="m-extra"><div class="m-extra-head">กำลังโหลดข้อมูลน้ำ ฝน และพยากรณ์…</div></div>' + floodHtml(opt);
+      return '<div class="m-extra"><div class="m-extra-head">กำลังโหลดข้อมูลน้ำ ฝน และพยากรณ์…</div></div>' + floodHtml(opt) + ccLocalHtml(opt);
     }
     var cx = near ? near.lon : (p.bx != null ? p.bx : p.lon), cy = near ? near.lat : (p.by != null ? p.by : p.lat);
     function dist(o) { return km(cx, cy, o.lon, o.lat); }
@@ -2793,7 +3351,7 @@
           ' · โอกาสฝน ' + Math.round(d.prob || 0) + '% · ' + Math.round(d.tmin) + '–' + Math.round(d.tmax) + '°C</span></div></div>';
       }).join('') + '</div>';
     }
-    return h + floodHtml(opt);
+    return h + floodHtml(opt) + ccLocalHtml(opt);
   }
   function nearAnswer(m) {
     var p = m.prov && byId[m.prov];
@@ -2878,6 +3436,8 @@
   renderDataChips();
   loadLive();
   loadFloodIndex();
+  loadCctv();
+  setInterval(function () { if (!document.hidden) loadCctv(); }, 10 * 60e3); // ผล AI อัปเดตทุกชั่วโมง เช็กทุก 10 นาที
   if (IN_ARTIFACT) {
     setTimeout(function () {
       toast('ในแอป Claude ใช้แผนที่โลกแบบออฟไลน์ ซูมถึงระดับถนนไม่ได้ ถ้าอยากเห็นถนนจริงจาก OpenStreetMap ให้เปิดไฟล์ index.html ในเครื่อง');

@@ -6,7 +6,10 @@
       python3 scripts/add_flood.py --rebuild                             สร้าง data/flood/index.json ใหม่อย่างเดียว
       python3 scripts/add_flood.py --grid SRC_DIR --dest DATA_DIR        โหมดทั้งประเทศ (GitHub Actions ใช้):
             เอาไฟล์กรอบ SRC_DIR/*.geojson จาก scripts/flood_s1.py --grid-run ไปไว้ที่ DATA_DIR/tiles/
-            แล้วสร้าง DATA_DIR/index.json (รายการกรอบ + สรุปรายจังหวัดรวมทุกกรอบ)
+            แล้วสร้าง DATA_DIR/index.json (รายการกรอบ + สรุปรายจังหวัดรวมทุกกรอบ + ค่าภาพก่อนหน้าไว้เทียบ)
+            และเก็บตัวเลขรายจังหวัดของทุกรอบไว้ใน DATA_DIR/history.json
+      python3 scripts/add_flood.py --grid SRC_DIR --dest DATA_DIR --history-only
+            ผลย้อนหลัง (flood_s1.py --as-of): เก็บเข้า history.json อย่างเดียว ไม่แทนผลปัจจุบัน
 
 สิ่งที่ทำ
 1. ตรวจและทำความสะอาดไฟล์: เก็บเฉพาะรูปหลายเหลี่ยมในประเทศไทย ปัดพิกัดเหลือ 4 ตำแหน่ง ตัดปื้นเล็กกว่า 0.05 ตร.กม.
@@ -274,10 +277,11 @@ def rebuild_index():
 TILE_RE = re.compile(r'^t(\d{2,3})_(\d{1,2})$')
 
 
-def grid_publish(src, dest):
-    """โหมดทั้งประเทศ: ทำความสะอาดไฟล์กรอบใหม่ วางใน dest/tiles/ แล้วสร้าง dest/index.json"""
+def grid_publish(src, dest, history_only=False):
+    """โหมดทั้งประเทศ: ทำความสะอาดไฟล์กรอบใหม่ วางใน dest/tiles/ แล้วสร้าง dest/index.json
+    history_only: ผลย้อนหลัง ไม่เขียนไฟล์กรอบ เก็บแค่ตัวเลขรายจังหวัดลง history.json"""
     os.makedirs(os.path.join(dest, 'tiles'), exist_ok=True)
-    n = 0
+    n, hist_rows = 0, []
     for path in sorted(glob.glob(os.path.join(src, '*.geojson'))):
         tid = os.path.basename(path)[:-8]
         if not TILE_RE.match(tid):
@@ -287,17 +291,103 @@ def grid_publish(src, dest):
             doc = json.load(fh)
         name = clean((doc.get('properties') or {}).get('name') or tid, 80)
         out = normalize(doc, tid, name, min_seasonal=0.1)
-        write_json(os.path.join(dest, 'tiles', tid + '.geojson'), out)
         t = out['properties']['totals']
-        print('  %s %s ภาพ %s · น่าจะท่วม %.1f · ไม่แน่ใจ %.1f · ทุกปี %.1f · %d ปื้น' % (
-            tid, name, out['properties']['date'], t['flood_high'], t['flood_low'], t['seasonal'], len(out['features'])))
+        print('  %s%s %s ภาพ %s · น่าจะท่วม %.1f · ไม่แน่ใจ %.1f · ทุกปี %.1f · %d ปื้น' % (
+            '(ย้อนหลัง) ' if history_only else '', tid, name, out['properties']['date'], t['flood_high'], t['flood_low'],
+            t['seasonal'], len(out['features'])))
+        if history_only:
+            hist_rows.append(out['properties'])
+        else:
+            write_json(os.path.join(dest, 'tiles', tid + '.geojson'), out)
         n += 1
-    print('อัปเดต %d กรอบ' % n)
+    print('%s %d กรอบ' % ('เก็บผลย้อนหลัง' if history_only else 'อัปเดต', n))
+    if history_only and hist_rows:
+        provs, _ = aggregate_provinces(hist_rows)
+        hist = load_history(dest)
+        for r in provs:
+            upsert_point(hist, r['name'], r.get('zone', ''), r['date_max'], r)
+        dates = [p.get('date') for p in hist_rows if p.get('date')]
+        tot = {k: round(sum((p.get('totals') or {}).get(k) or 0 for p in hist_rows), 1) for k in ('flood_high', 'flood_low', 'seasonal')}
+        # ยอดรวมทั้งประเทศของรอบย้อนหลังนับเฉพาะเมื่อครบทุกกรอบเท่านั้น
+        if dates and len(hist_rows) >= len(glob.glob(os.path.join(dest, 'tiles', '*.geojson'))):
+            upsert_total(hist, max(dates), tot)
+        save_history(dest, hist)
     rebuild_grid_index(dest)
 
 
+HIST_KEEP = 60
+
+
+def load_history(dest):
+    try:
+        with open(os.path.join(dest, 'history.json'), encoding='utf-8') as fh:
+            h = json.load(fh)
+    except (OSError, ValueError):
+        h = {}
+    h.setdefault('v', 1)
+    h.setdefault('provinces', {})
+    h.setdefault('zones', {})
+    h.setdefault('total', [])
+    return h
+
+
+def save_history(dest, h):
+    write_json(os.path.join(dest, 'history.json'), h)
+
+
+def _upsert(points, d, vals):
+    """ใส่จุดของวันที่ d เรียงตามวันที่ ถ้ามีวันเดียวกันอยู่แล้วให้แทน"""
+    pt = {'d': d, 'fh': round(vals.get('flood_high') or 0, 1), 'fl': round(vals.get('flood_low') or 0, 1),
+          's': round(vals.get('seasonal') or 0, 1)}
+    points[:] = [p for p in points if p.get('d') != d] + [pt]
+    points.sort(key=lambda p: p['d'])
+    del points[:-HIST_KEEP]
+
+
+def upsert_point(hist, name, zone, d, vals):
+    if not d:
+        return
+    _upsert(hist['provinces'].setdefault(name, []), d, vals)
+    if zone:
+        hist['zones'][name] = zone
+
+
+def upsert_total(hist, d, vals):
+    if d:
+        _upsert(hist['total'], d, vals)
+
+
+def prev_point(points, d):
+    """จุดล่าสุดที่เก่ากว่าวันที่ d (ไว้เทียบว่าน้ำเพิ่มหรือลด)"""
+    older = [p for p in points if p.get('d', '') < d]
+    if not older:
+        return None
+    p = older[-1]
+    return {'date': p['d'], 'flood_high': p['fh'], 'flood_low': p['fl'], 'seasonal': p['s']}
+
+
+def aggregate_provinces(tile_props):
+    """รวมสรุปรายจังหวัดจากหลายกรอบ"""
+    prov = {}
+    for p in tile_props:
+        for r in p.get('provinces') or []:
+            q = prov.setdefault(r['name'], {'name': r['name'], 'zone': r.get('zone', ''), 'flood_high': 0.0, 'flood_low': 0.0,
+                                            'seasonal': 0.0, 'date_min': p.get('date'), 'date_max': p.get('date'), 'tiles': []})
+            for k in ('flood_high', 'flood_low', 'seasonal'):
+                q[k] += r.get(k) or 0
+            q['date_min'] = min(q['date_min'], p.get('date'))
+            q['date_max'] = max(q['date_max'], p.get('date'))
+            if p.get('id'):
+                q['tiles'].append(p['id'])
+    provs = sorted(prov.values(), key=lambda r: (-r['flood_high'], -r['flood_low'], -r['seasonal']))
+    for r in provs:
+        for k in ('flood_high', 'flood_low', 'seasonal'):
+            r[k] = round(r[k], 1)
+    return provs, prov
+
+
 def rebuild_grid_index(dest):
-    tiles, prov = [], {}
+    tiles, props = [], []
     for path in sorted(glob.glob(os.path.join(dest, 'tiles', '*.geojson'))):
         tid = os.path.basename(path)[:-8]
         m = TILE_RE.match(tid)
@@ -309,6 +399,8 @@ def rebuild_grid_index(dest):
         except (OSError, ValueError):
             print('ข้ามไฟล์ที่อ่านไม่ได้:', path)
             continue
+        p['id'] = tid
+        props.append(p)
         x, y = int(m.group(1)), int(m.group(2))
         tiles.append({
             'id': tid, 'file': 'tiles/%s.geojson' % tid, 'name': p.get('name') or tid, 'bbox': [x, y, x + 1, y + 1],
@@ -316,32 +408,40 @@ def rebuild_grid_index(dest):
             'added': p.get('added', ''), 'baseline_years': p.get('baseline_years', 0), 'has_seasonal': bool(p.get('has_seasonal')),
             'totals': p.get('totals') or {},
         })
-        for r in p.get('provinces') or []:
-            q = prov.setdefault(r['name'], {'name': r['name'], 'zone': r.get('zone', ''), 'flood_high': 0.0, 'flood_low': 0.0,
-                                            'seasonal': 0.0, 'date_min': p.get('date'), 'date_max': p.get('date'), 'tiles': []})
-            for k in ('flood_high', 'flood_low', 'seasonal'):
-                q[k] += r.get(k) or 0
-            q['date_min'] = min(q['date_min'], p.get('date'))
-            q['date_max'] = max(q['date_max'], p.get('date'))
-            q['tiles'].append(tid)
-    provs = sorted(prov.values(), key=lambda r: (-r['flood_high'], -r['flood_low'], -r['seasonal']))
-    for r in provs:
-        for k in ('flood_high', 'flood_low', 'seasonal'):
-            r[k] = round(r[k], 1)
+    provs, by_name = aggregate_provinces(props)
     tot = {k: round(sum((t['totals'].get(k) or 0) for t in tiles), 1) for k in ('flood_high', 'flood_low', 'seasonal')}
+    dates = [t['date'] for t in tiles if t.get('date')]
+    date_max = max(dates) if dates else ''
+    # ประวัติรายจังหวัด: ใส่ค่าปัจจุบัน แล้วหาค่าภาพก่อนหน้าไว้เทียบ
+    hist = load_history(dest)
+    for name, pts in hist['provinces'].items():
+        if name not in by_name and pts and date_max:
+            # จังหวัดที่เคยมีน้ำแต่รอบนี้ไม่เหลือปื้นเลย ให้เป็นศูนย์ จะได้บอกว่าน้ำลด
+            r = {'name': name, 'zone': hist['zones'].get(name, ''), 'flood_high': 0.0, 'flood_low': 0.0, 'seasonal': 0.0,
+                 'date_min': date_max, 'date_max': date_max, 'tiles': []}
+            provs.append(r)
+            by_name[name] = r
+    for r in provs:
+        upsert_point(hist, r['name'], r.get('zone', ''), r['date_max'], r)
+        pv = prev_point(hist['provinces'].get(r['name'], []), r['date_max'])
+        if pv:
+            r['prev'] = pv
+    upsert_total(hist, date_max, tot)
+    prev_tot = prev_point(hist['total'], date_max)
+    save_history(dest, hist)
     total = None
     try:
         with open(os.path.join(dest, 'grid.json'), encoding='utf-8') as fh:
             total = len(json.load(fh).get('tiles') or [])
     except (OSError, ValueError):
         pass
-    dates = [t['date'] for t in tiles if t.get('date')]
     idx = {'v': 4, 'updated': dt.datetime.now(dt.timezone(dt.timedelta(hours=7))).isoformat(timespec='minutes'),
-           'grid': 1, 'tiles_total': total or len(tiles), 'date_min': min(dates) if dates else '', 'date_max': max(dates) if dates else '',
-           'totals': tot, 'tiles': tiles, 'provinces': provs}
+           'grid': 1, 'tiles_total': total or len(tiles), 'date_min': min(dates) if dates else '', 'date_max': date_max,
+           'totals': tot, 'prev_totals': prev_tot, 'tiles': tiles, 'provinces': provs}
     write_json(os.path.join(dest, 'index.json'), idx)
-    print('index.json: ตรวจแล้ว %d/%s กรอบ · ภาพ %s ถึง %s · น่าจะท่วมรวม %.1f ตร.กม. · %d จังหวัดมีข้อมูล' % (
-        len(tiles), total or '?', idx['date_min'], idx['date_max'], tot['flood_high'], len(provs)))
+    n_prev = sum(1 for r in provs if r.get('prev'))
+    print('index.json: ตรวจแล้ว %d/%s กรอบ · ภาพ %s ถึง %s · น่าจะท่วมรวม %.1f ตร.กม. · %d จังหวัดมีข้อมูล · %d จังหวัดมีภาพก่อนหน้าให้เทียบ' % (
+        len(tiles), total or '?', idx['date_min'], idx['date_max'], tot['flood_high'], len(provs), n_prev))
 
 
 def main(argv):
@@ -351,7 +451,7 @@ def main(argv):
         dest = argv[argv.index('--dest') + 1] if '--dest' in argv else None
         if not dest:
             raise SystemExit('ต้องระบุ --dest โฟลเดอร์ข้อมูล (branch flood-data)')
-        grid_publish(src, dest)
+        grid_publish(src, dest, history_only='--history-only' in argv)
         return 0
     os.makedirs(DIR, exist_ok=True)
     if '--rebuild' in argv:

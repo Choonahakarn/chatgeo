@@ -23,6 +23,10 @@ on:
         description: 'เวลาสูงสุดที่จะเริ่มกรอบใหม่ (นาที)'
         required: false
         default: '300'
+      as_of:
+        description: 'วิเคราะห์ย้อนหลัง ณ วันที่ YYYY-MM-DD เก็บไว้เทียบว่าน้ำเพิ่มหรือลด (เว้นว่าง = ปกติ)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -39,6 +43,7 @@ jobs:
       TILES: ${{ inputs.tiles }}
       FORCE: ${{ inputs.force && '--force' || '' }}
       BUDGET: ${{ inputs.budget || '300' }}
+      AS_OF: ${{ inputs.as_of }}
       OUT: /tmp/chatgeo-flood
       DATA: /tmp/flood-data
       REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
@@ -62,7 +67,8 @@ jobs:
         id: check
         run: |
           pip install -q pystac-client planetary-computer shapely
-          python scripts/flood_s1.py --grid-check --data "$DATA" --todo "$OUT/todo.txt" --tiles "$TILES" $FORCE
+          # โหมดย้อนหลังต้องวิเคราะห์ทุกกรอบ (ไม่เทียบกับผลปัจจุบัน)
+          python scripts/flood_s1.py --grid-check --data "$DATA" --todo "$OUT/todo.txt" --tiles "$TILES" $FORCE ${AS_OF:+--as-of $AS_OF --force}
 
       - name: ติดตั้งไลบรารีวิเคราะห์ภาพ
         if: steps.check.outputs.count != '0'
@@ -70,11 +76,11 @@ jobs:
 
       - name: วิเคราะห์
         if: steps.check.outputs.count != '0'
-        run: python scripts/flood_s1.py --grid-run --todo "$OUT/todo.txt" --out "$OUT" --budget "$BUDGET"
+        run: python scripts/flood_s1.py --grid-run --todo "$OUT/todo.txt" --out "$OUT" --budget "$BUDGET" ${AS_OF:+--as-of $AS_OF}
 
       - name: รวมผลและสรุปรายจังหวัด
         if: steps.check.outputs.count != '0'
-        run: python scripts/add_flood.py --grid "$OUT/tiles" --dest "$DATA"
+        run: python scripts/add_flood.py --grid "$OUT/tiles" --dest "$DATA" ${AS_OF:+--history-only}
 
       - name: เก็บลง branch flood-data
         if: steps.check.outputs.count != '0'
