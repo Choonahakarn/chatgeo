@@ -3613,7 +3613,24 @@
   var ZONE_SVC = 'https://onedpt.dpt.go.th/arcgis/rest/services/TOWNPLAN/CPLLU_NON/MapServer';
   var ZONE_ATTR = 'ผังเมือง: <a href="https://plludds.dpt.go.th/landuse/" target="_blank" rel="noopener">กรมโยธาธิการและผังเมือง</a> (ใช้อ้างอิงทางกฎหมายไม่ได้)';
   var ZONE_MINZ = 11;
-  var ZONE = { ok: false, err: false, legend: null, legendTried: false };
+  // บริการนี้ (ตรวจจาก ?f=pjson 8 ต.ค. 2569) มีเฉพาะร่างผังเมืองรวมจังหวัดที่กำลังทำ/รับฟังความเห็น 2 จังหวัด
+  // ทุกชั้นปิดไว้เป็นค่าเริ่มต้น จึงต้องระบุชั้นเอง: "แผนผังแสดงการใช้ประโยชน์ที่ดินอนาคต" ทุกขั้น (ปิดประกาศ 15/30/90 วัน) ของทุกฉบับ
+  var ZONE_LU = [6, 21, 36, 55, 70, 85, 105, 120, 135, 154, 169, 184];
+  var ZONE_FLOOD = [18, 33, 48, 67, 82, 97, 117, 132, 147, 166, 181, 196]; // "พื้นที่เสี่ยงอุทกภัย" ในแผนผังน้ำของร่างผัง
+  var ZONE_PROVS = ['phetchaburi', 'saraburi'];
+  var ZONE = { ok: false, err: false, legend: null, legendTried: false, outside: false };
+  function zoneProvBox() {
+    if (ZONE.box !== undefined) return ZONE.box;
+    var bb = null;
+    ZONE_PROVS.forEach(function (id) {
+      var f = PROV_FEAT[id];
+      if (!f) return;
+      (function walk(c) { if (typeof c[0] === 'number') { bb = bb || [c[0], c[1], c[0], c[1]]; bb[0] = Math.min(bb[0], c[0]); bb[1] = Math.min(bb[1], c[1]); bb[2] = Math.max(bb[2], c[0]); bb[3] = Math.max(bb[3], c[1]); } else c.forEach(walk); })(f.geometry.coordinates);
+    });
+    ZONE.box = bb;
+    return bb;
+  }
+  function zoneCovers(lon, lat) { return ZONE_PROVS.indexOf(provinceAt(lon, lat)) >= 0; }
   // สีมาตรฐานของผังเมืองรวมแบบคร่าวๆ (ไม่ใช่ค่าสีทางการ) ใช้อธิบาย ส่วนสีจริงบนแผนที่มาจากเซิร์ฟเวอร์กรมโยธาฯ
   var ZONE_LEG = [
     ['#FFE15A', 'ย.1–ย.4 สีเหลือง', 'ที่อยู่อาศัยหนาแน่นน้อย บ้านเดี่ยวเป็นหลัก'],
@@ -4005,10 +4022,13 @@
     if (!im) return;
     if (map.getZoom() < ZONE_MINZ - 0.01 || map.getPitch() > 1) { placeZoneImg(v); return; }
     var bb = map.getBounds(), b = [bb.getWest(), bb.getSouth(), bb.getEast(), bb.getNorth()];
+    var zb = zoneProvBox(), out = !!zb && (b[2] < zb[0] || b[0] > zb[2] || b[3] < zb[1] || b[1] > zb[3]);
+    if (out !== ZONE.outside) { ZONE.outside = out; renderDataChips(); }
+    if (out) { im.style.visibility = 'hidden'; im._b = null; im._want = ''; return; }
     var cv = map.getCanvas(), dpr = Math.min(window.devicePixelRatio || 1, 2);
     var w = Math.min(2048, Math.round(cv.clientWidth * dpr)), h = Math.min(2048, Math.round(cv.clientHeight * dpr));
     var url = ZONE_SVC + '/export?bbox=' + [mercX(b[0]), mercY(b[1]), mercX(b[2]), mercY(b[3])].map(function (x) { return x.toFixed(1); }).join(',') +
-      '&bboxSR=3857&imageSR=3857&size=' + w + ',' + h + '&dpi=' + Math.round(96 * dpr) + '&format=png32&transparent=true&f=image';
+      '&bboxSR=3857&imageSR=3857&size=' + w + ',' + h + '&dpi=' + Math.round(96 * dpr) + '&format=png32&transparent=true&layers=show:' + ZONE_LU.join(',') + '&f=image';
     if (im._want === url) return;
     im._want = url;
     var pre = new Image();
@@ -4052,6 +4072,7 @@
     getJSON(ZONE_SVC + '/legend?f=json', 9000).then(function (j) {
       var seen = {}, out = [];
       ((j && j.layers) || []).forEach(function (l) {
+        if (ZONE_LU.indexOf(l.layerId) < 0) return;
         (l.legend || []).forEach(function (g) {
           var lab = String(g.label || '').trim();
           if (!lab || seen[lab] || !g.imageData || out.length >= 40) return;
@@ -4064,18 +4085,25 @@
   }
   // ผังเมืองที่จุด (ต้องอ่านข้ามเว็บได้) ถ้าไม่ได้ ให้ลิงก์ไปเว็บกรมโยธาฯ
   function zoningAt(lon, lat) {
+    if (!zoneCovers(lon, lat)) return Promise.resolve({ outside: true, list: [] });
     var d = 0.004, url = ZONE_SVC + '/identify?f=json&geometryType=esriGeometryPoint&sr=4326&geometry=' + lon.toFixed(6) + ',' + lat.toFixed(6) +
-      '&layers=visible&tolerance=2&returnGeometry=false&imageDisplay=400,400,96&mapExtent=' + [lon - d, lat - d, lon + d, lat + d].map(function (x) { return x.toFixed(6); }).join(',');
+      '&layers=all:' + ZONE_LU.concat(ZONE_FLOOD).join(',') + '&tolerance=2&returnGeometry=false&imageDisplay=400,400,96&mapExtent=' +
+      [lon - d, lat - d, lon + d, lat + d].map(function (x) { return x.toFixed(6); }).join(',');
     return getJSON(url, 9000).then(function (j) {
-      return ((j && j.results) || []).slice(0, 4).map(function (r) {
+      var list = [], flood = false;
+      ((j && j.results) || []).forEach(function (r) {
+        if (ZONE_FLOOD.indexOf(r.layerId) >= 0) { flood = true; return; }
+        if (list.length >= 3) return;
         var a = r.attributes || {}, extra = '';
         Object.keys(a).forEach(function (k) { if (!extra && /ประเภท|สี|zone|class|lu_|landuse|type/i.test(k) && a[k] && String(a[k]).length < 60) extra = String(a[k]); });
-        return { layer: String(r.layerName || ''), value: String(r.value || ''), extra: extra };
+        list.push({ layer: String(r.layerName || ''), value: String(r.value || ''), extra: extra });
       });
+      return { outside: false, list: list, flood: flood };
     });
   }
   function zoneLegendHtml() {
-    var h = '<div class="m-extra zone-leg"><div class="m-extra-head">ผังเมืองรวม · สีใช้ทำอะไร</div>';
+    var h = '<div class="m-extra zone-leg"><div class="m-extra-head">ผังเมืองรวม · สีใช้ทำอะไร</div>' +
+      '<p class="fp-fine">บริการแผนที่ที่กรมโยธาฯ เปิดให้เว็บอื่นใช้ ตอนนี้มีเฉพาะร่างผังที่กำลังรับฟังความเห็นของเพชรบุรีและสระบุรี ยังไม่ใช่ผังที่บังคับใช้ จังหวัดอื่นตรวจที่ <a href="https://plludds.dpt.go.th/landuse/" target="_blank" rel="noopener">ระบบตรวจสอบผังเมือง</a></p>';
     if (ZONE.legend) {
       h += ZONE.legend.slice(0, 24).map(function (g) { return '<div class="zl-row"><img src="' + esc(g.img) + '" alt="" width="18" height="18"><span>' + esc(g.label) + '</span></div>'; }).join('');
       h += '<p class="fp-fine">สีจากเซิร์ฟเวอร์กรมโยธาธิการและผังเมือง</p>';
@@ -4090,8 +4118,9 @@
   function zoneStatusText() {
     if (ZONE.err) return 'เซิร์ฟเวอร์ผังเมืองไม่ตอบตอนนี้ (บางครั้งเปิดได้เฉพาะในไทย)';
     var v = views.chat;
+    if (ZONE.outside) return 'ตอนนี้มีเฉพาะร่างผังเพชรบุรีและสระบุรี เลื่อนแผนที่ไปที่ 2 จังหวัดนี้';
     if (v && v.map.getZoom() < ZONE_MINZ) return 'ซูมเข้าถึงระดับอำเภอเพื่อดูสีผังเมือง';
-    return ZONE.ok ? 'แสดงผังจากกรมโยธาฯ' : 'กำลังโหลด';
+    return ZONE.ok ? 'แสดงร่างผังจากกรมโยธาฯ' : 'กำลังโหลด';
   }
   function zoneLinksHtml(lon, lat) {
     var bkk = provinceAt(lon, lat) === 'bkk';
@@ -4172,6 +4201,7 @@
       else if (S.ele.pct >= 0.85) { score -= 1; why.push('สูงกว่าพื้นที่รอบๆ (ที่ดอน)'); }
     }
     if (S.flood && S.flood.hit && S.flood.hit.kind !== 'seasonal' && S.flood.hit.conf !== 'low') { score += 2; why.push('ภาพดาวเทียมล่าสุดพบน้ำท่วมตรงจุดนี้'); }
+    if (S.zone && S.zone.flood) { score += 1; why.push('ร่างผังเมืองรวมของกรมโยธาฯ กำหนดเป็นพื้นที่เสี่ยงอุทกภัย'); }
     if (g && g.lv === 'water') return { lv: 'water', t: 'จุดนี้อยู่ในแหล่งน้ำ', why: ['ภาพดาวเทียมเห็นน้ำตรงนี้เกือบตลอด 41 ปี ลองแตะจุดบนบกใกล้ๆ อีกครั้ง'] };
     if (!known) return null;
     var lv = score >= 4 ? 'high' : score >= 2 ? 'mid' : 'low';
@@ -4254,9 +4284,14 @@
     // 4) ผังเมือง
     h += '<section class="sv-sec"><h3>ผังเมืองรวม <small>กรมโยธาธิการและผังเมือง</small></h3>';
     if (S.st.zone === 'loading') h += '<p class="sv-load">กำลังถามเซิร์ฟเวอร์ผังเมือง…</p>';
-    else if (S.st.zone === 'ok' && S.zone && S.zone.length) h += S.zone.map(function (z) { return '<p><b>' + esc(z.value || z.extra || '-') + '</b> <span class="sv-dim">' + esc(z.layer) + (z.extra && z.extra !== z.value ? ' · ' + esc(z.extra) : '') + '</span></p>'; }).join('');
-    else if (S.st.zone === 'ok') h += '<p>ไม่พบผังเมืองรวมที่ประกาศใช้ตรงจุดนี้ในเซิร์ฟเวอร์ของกรมโยธาฯ</p>';
-    else h += '<p>อ่านผังเมืองที่จุดนี้จากเว็บนี้ไม่ได้ ลองเปิดชั้นผังเมืองบนแผนที่ หรือตรวจที่เว็บของหน่วยงานด้านล่าง</p>';
+    else if (S.st.zone === 'ok' && S.zone && S.zone.outside) h += '<p>ผังเมืองของจุดนี้ยังดูผ่านเว็บนี้ไม่ได้ ตอนนี้กรมโยธาฯ เปิดบริการแผนที่ให้เว็บอื่นใช้ได้เฉพาะร่างผังของเพชรบุรีและสระบุรี ตรวจผังที่ใช้อยู่จริงได้ที่ระบบของหน่วยงานด้านล่าง</p>';
+    else if (S.st.zone === 'ok' && S.zone && (S.zone.list.length || S.zone.flood)) {
+      h += S.zone.list.map(function (z) { return '<p><b>' + esc(z.value || z.extra || '-') + '</b> <span class="sv-dim">' + esc(z.layer) + (z.extra && z.extra !== z.value ? ' · ' + esc(z.extra) : '') + '</span></p>'; }).join('');
+      if (S.zone.flood) h += '<p><b>ร่างผังกำหนดให้จุดนี้อยู่ใน "พื้นที่เสี่ยงอุทกภัย"</b></p>';
+      h += '<p class="sv-note">เป็นร่างผังเมืองรวมที่กำลังจัดทำหรือรับฟังความเห็น ยังไม่ใช่ผังที่บังคับใช้ อาจเปลี่ยนก่อนประกาศ</p>';
+    }
+    else if (S.st.zone === 'ok') h += '<p>ร่างผังของจังหวัดนี้ไม่ครอบจุดนี้</p>';
+    else h += '<p>อ่านผังเมืองที่จุดนี้จากเว็บนี้ไม่ได้ (เซิร์ฟเวอร์อาจไม่อนุญาตให้เว็บอื่นอ่านข้อมูล) ลองเปิดชั้นผังเมืองบนแผนที่ หรือตรวจที่เว็บของหน่วยงานด้านล่าง</p>';
     h += '<div class="sv-links">' + zoneLinksHtml(S.lon, S.lat) + '</div>';
     h += '<button type="button" class="btn-ghost sv-btn" data-site-layer="zoning">' + (state.data.zoning ? 'ซ่อน' : 'เปิด') + 'สีผังเมืองบนแผนที่</button>';
     h += '<p class="sv-note">ข้อมูลผังเมืองบนเว็บใช้อ้างอิงทางกฎหมายไม่ได้ ก่อนซื้อหรือขออนุญาตก่อสร้าง ให้ขอหนังสือรับรองการใช้ประโยชน์ที่ดินจากสำนักงานโยธาธิการและผังเมืองจังหวัดหรือเขต</p></section>';
@@ -4490,7 +4525,7 @@
     { id: 'hazard', name: 'พื้นที่น้ำท่วมใหญ่ (แบบจำลอง)', src: 'JRC GloFAS · รอบ 100 ปี' },
     { id: 'cctv', name: 'กล้อง CCTV + AI (ทดลอง)', src: 'หาดใหญ่ · เขื่อน กฟผ.' },
     { id: 'terrain', name: 'ความสูงพื้นดิน', src: 'Terrain Tiles' },
-    { id: 'zoning', name: 'ผังเมืองรวม (ทดลอง)', src: 'กรมโยธาธิการและผังเมือง' },
+    { id: 'zoning', name: 'ร่างผังเมืองรวม (ทดลอง)', src: 'กรมโยธาฯ · เพชรบุรี สระบุรี' },
     { id: 'sat', name: 'ภาพดาวเทียม', src: 'Sentinel-2 · EOX' }
   ];
   function dataSub(r) {
