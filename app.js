@@ -2688,6 +2688,7 @@
       eachView(refreshLive);
       if (CVM.ready) cvmFlood();
       if (state.page === 'cctv' && CV.mode === 'map') cvmTicker();
+      renderSbar();
       renderDataChips();
       renderLiveCards();
       renderSuggest();
@@ -2954,6 +2955,7 @@
       renderSuggest();
       if (!$('ccModal').hidden) renderCcModal();
       if (state.page === 'cctv') renderCctvPage();
+      renderSbar();
       if (state.messages.some(function (m) { return m.key === 'near' || m.key === 'place' || m.key === 'q'; })) renderMsgs();
     });
   }
@@ -4115,6 +4117,7 @@
     var map = v.map;
     v.terrain3d = !!on;
     if (v.kind === 'chat' && $('btnTerrain3d')) $('btnTerrain3d').setAttribute('aria-pressed', String(!!on));
+    if (v.kind === 'chat' && $('btnExit3d')) $('btnExit3d').hidden = !on; // ปุ่มออกจาก 3 มิติ (ไม่มีปุ่ม 3 มิติบนแถบแล้ว เพราะซ้ำกับลูกโลกในความรู้สึกผู้ใช้)
     try {
       if (on) {
         if (!map.getSource('cg-dem')) { state.data.terrain = true; saveData(); updateTerrain(v); renderDataChips(); }
@@ -5286,6 +5289,7 @@
     });
   }
   if ($('sitePickX')) $('sitePickX').addEventListener('click', function () { setSitePick(false); });
+  if ($('btnExit3d')) $('btnExit3d').addEventListener('click', function () { if (views.chat) setTerrain3d(views.chat, false); });
   if ($('btnTerrain3d')) {
     if (IN_ARTIFACT) $('btnTerrain3d').hidden = true;
     $('btnTerrain3d').addEventListener('click', function () {
@@ -6459,7 +6463,7 @@
     else if (id === 'cables') p = getJSON(LD_BASE + 'cables.geojson', 30000).then(function (j) { W.fc = j; });
     else p = ldJSON(id + '.json').then(function (j) { W.doc = j; });
     p.then(function () { W.err = false; W.at = Date.now(); }, function () { W.err = true; W.at = Date.now() - maxAge + 60e3; })
-      .then(function () { W.loading = false; eachView(updateWorld); renderDataChips(); renderOpsHud(); if (state.messages.some(function (m) { return m.key === 'q' && /แผ่นดินไหว|พายุ|ไฟป่า|จุดความร้อน|ดาวเทียม|ISS|เครื่องบิน|เรือ|ข่าว|เคเบิล/i.test(m.q || ''); })) renderMsgs(); });
+      .then(function () { W.loading = false; eachView(updateWorld); renderDataChips(); renderOpsHud(); if (id === 'quakes') renderSbar(); if (state.messages.some(function (m) { return m.key === 'q' && /แผ่นดินไหว|พายุ|ไฟป่า|จุดความร้อน|ดาวเทียม|ISS|เครื่องบิน|เรือ|ข่าว|เคเบิล/i.test(m.q || ''); })) renderMsgs(); });
     if (!WD.status && id !== 'quakes' && id !== 'gdacs') ldJSON('status.json').then(function (j) { WD.status = j; renderDataChips(); }, function () { /* ข้าม */ });
   }
   function worldOn(id) { return !!state.data[id] && !IN_ARTIFACT; }
@@ -7150,7 +7154,7 @@
     OPS.kpAt = Date.now();
     fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
       var last = j && j[j.length - 1], v = last && (Array.isArray(last) ? parseFloat(last[1]) : parseFloat(last.Kp != null ? last.Kp : last.kp_index));
-      if (isFinite(v)) { OPS.kp = { v: v, t: Array.isArray(last) ? last[0] : last.time_tag }; if (OPS.on) renderOpsStatus(); }
+      if (isFinite(v)) { OPS.kp = { v: v, t: Array.isArray(last) ? last[0] : last.time_tag }; if (OPS.on) renderOpsStatus(); renderSbar(); }
     }).catch(function () { OPS.kpAt = Date.now() - 25 * 60e3; });
   }
   function kpText(v) {
@@ -7835,6 +7839,134 @@
     });
   }
 
+  /* ---------- แถบสถานะล่างสุด (แบบ OSIRIS): ลิงก์ · ตัวหนังสือวิ่ง แผ่นดินไหว ราคา น้ำท่วม ข่าว · สถานะออนไลน์ ---------- */
+  var SB = { q: null, qAt: 0, px: null, pxAt: 0, fx: null, fxAt: 0, keys: '', items: [] };
+  var SB_QUAKE = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson';
+  var SB_CG = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true';
+  var SB_BN = 'https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22,%22ETHUSDT%22%5D';
+  var SB_FX = 'https://api.frankfurter.dev/v1/';
+  function sbJSON(u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }); }
+  function sbLoad() {
+    if (IN_ARTIFACT || document.hidden) return;
+    var now = Date.now(), jobs = [];
+    if (!(WD.quakes && WD.quakes.fc) && now - SB.qAt > 5 * 60e3) { SB.qAt = now; jobs.push(sbJSON(SB_QUAKE).then(function (j) { SB.q = j; }, function () { /* ข้าม */ })); }
+    if (now - SB.pxAt > 5 * 60e3) {
+      SB.pxAt = now;
+      jobs.push(sbJSON(SB_CG).then(function (j) {
+        SB.px = { src: 'CoinGecko', BTC: [j.bitcoin.usd, j.bitcoin.usd_24h_change], ETH: [j.ethereum.usd, j.ethereum.usd_24h_change] };
+      }).catch(function () {
+        return sbJSON(SB_BN).then(function (a) {
+          var m = {}; a.forEach(function (r) { m[r.symbol] = [+r.lastPrice, +r.priceChangePercent]; });
+          SB.px = { src: 'Binance', BTC: m.BTCUSDT, ETH: m.ETHUSDT };
+        });
+      }).catch(function () { /* ราคาโหลดไม่ได้ ซ่อนไว้ */ }));
+    }
+    if (now - SB.fxAt > 6 * 3600e3) {
+      SB.fxAt = now;
+      // อัตราแลกเปลี่ยนอ้างอิง ECB (วันทำการ) เทียบกับวันทำการก่อนหน้า
+      var from = new Date(now - 10 * 86400e3).toISOString().slice(0, 10);
+      jobs.push(sbJSON(SB_FX + from + '..?base=USD&symbols=THB').then(function (j) {
+        var ds = Object.keys(j.rates || {}).sort(), a = ds.length > 1 ? j.rates[ds[ds.length - 2]].THB : null, b = ds.length ? j.rates[ds[ds.length - 1]].THB : null;
+        if (b) SB.fx = { v: b, ch: a ? (b - a) / a * 100 : null, d: ds[ds.length - 1] };
+      }, function () { /* ข้าม */ }));
+    }
+    if (typeof opsKp === 'function') opsKp();
+    Promise.all(jobs).then(renderSbar);
+  }
+  function sbMoney(v) { return v >= 1e4 ? '$' + (Math.round(v / 100) / 10).toFixed(1) + 'K' : v >= 100 ? '$' + Math.round(v).toLocaleString('en-US') : '$' + v.toFixed(2); }
+  function sbCh(c) { return c == null || !isFinite(c) ? '' : '<span class="' + (c >= 0 ? 'sb-up' : 'sb-dn') + '">' + (c >= 0 ? '▲' : '▼') + Math.abs(c).toFixed(1) + '%</span>'; }
+  function sbShort(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function sbItems() {
+    var out = [], now = Date.now();
+    var fc = (WD.quakes && WD.quakes.fc) || SB.q, qs = [];
+    ((fc && fc.features) || []).forEach(function (f) {
+      var p = f.properties, c = f.geometry.coordinates, d = kmFromThai(c[0], c[1]);
+      if ((p.mag >= 4.5 && now - p.time < 24 * 3600e3) || (p.mag >= 3 && d < 1500 && now - p.time < 48 * 3600e3)) qs.push(f);
+    });
+    qs.sort(function (a, b) { return b.properties.time - a.properties.time; });
+    var qi = qs.slice(0, 10).map(function (f) {
+      var p = f.properties, m = Math.round(p.mag * 10) / 10;
+      return { k: 'q' + f.id, act: 'q', f: f, h: '<i class="sb-dot" style="--c:' + (m >= 6 ? '#FF4D4F' : m >= 5 ? '#FF7A45' : '#F5A524') + '"></i><b class="sb-k" style="--c:' + (m >= 6 ? '#FF6B6B' : '#FF8A65') + '">M' + m.toFixed(1) + '</b>' +
+        esc(sbShort(p.place, 34)) + '<span class="sb-ago">' + esc(agoText(p.time)) + '</span>', t: 'แผ่นดินไหว M' + m + ' · ' + (p.place || '') + ' (USGS) กดเพื่อดูบนแผนที่' };
+    });
+    out = out.concat(qi.slice(0, 5));
+    if (SB.px) ['BTC', 'ETH'].forEach(function (s) {
+      var r = SB.px[s]; if (!r || !isFinite(r[0])) return;
+      out.push({ k: 'p' + s, h: '<b class="sb-sym">' + s + '</b>' + sbMoney(r[0]) + sbCh(r[1]), t: s + ' (USD) เปลี่ยนแปลง 24 ชม. · ข้อมูล ' + SB.px.src + ' · ราคาอ้างอิง ไม่ใช่คำแนะนำการลงทุน' });
+    });
+    if (SB.fx) out.push({ k: 'fx', h: '<b class="sb-sym">USD/THB</b>' + SB.fx.v.toFixed(2) + sbCh(SB.fx.ch), t: 'อัตราอ้างอิง ECB วันที่ ' + SB.fx.d + ' (Frankfurter) เทียบวันทำการก่อนหน้า' });
+    if (ccReady() && CCTV.idx) {
+      var wet = ccFilterCams('wet').length;
+      out.push({ k: 'cc', act: 'cc', h: '<i class="sb-dot" style="--c:' + (wet ? '#FF4D4F' : '#3DDC84') + '"></i><b class="sb-sym">CCTV</b>' + (wet ? 'AI เห็นน้ำ ' + wet + ' กล้อง' : 'AI ไม่เห็นน้ำผิดปกติ'), t: 'ผล AI ดูกล้อง ' + ccTime(CCTV.idx.updated) + ' กดเพื่อเปิดหน้ากล้อง' });
+    }
+    topFloodProvinces(3, FL_PROV_MIN).forEach(function (r) {
+      out.push({ k: 'fl' + r.name, act: 'fl', pid: PID_BY_NAME[r.name], h: '<i class="sb-dot" style="--c:' + FL_C.flood + '"></i><b class="sb-sym">ดาวเทียม</b>น้ำท่วม จ.' + esc(r.name) + ' ~' + fmtKm2(r.flood_high) + ' ตร.กม.', t: 'น้ำจากดาวเทียม Sentinel-1 กดเพื่อดูบนแผนที่' });
+    });
+    if (typeof OPS !== 'undefined' && OPS.kp) out.push({ k: 'kp', h: '<b class="sb-sym">SOLAR</b>Kp ' + (Math.round(OPS.kp.v * 10) / 10) + ' ' + kpText(OPS.kp.v), t: 'ดัชนีสนามแม่เหล็กโลกจาก NOAA SWPC · 0–2 สงบ 5 ขึ้นไปคือพายุสุริยะ' });
+    D.STORIES.filter(function (s) { return s.rank && s.rank <= 4; }).sort(function (a, b) { return a.rank - b.rank; }).forEach(function (s) {
+      out.push({ k: 'n' + s.id, act: 'n', id: s.id, h: '<b class="sb-sym news">ข่าว</b>' + esc(sbShort(s.title, 60)), t: s.title + (s.source ? ' · ' + s.source : '') });
+    });
+    return out.concat(qi.slice(5));
+  }
+  function sbItemHtml(it, hid) {
+    var tag = it.act ? 'button type="button"' : 'span';
+    return '<' + tag + ' class="sb-it" data-sbk="' + esc(it.k) + '" title="' + esc(it.t || '') + '"' + (hid ? ' tabindex="-1" aria-hidden="true"' : '') + '>' + it.h + '</' + (it.act ? 'button' : 'span') + '>';
+  }
+  function renderSbar() {
+    var run = $('sbRun');
+    if (!run) return;
+    var items = sbItems(), keys = items.map(function (it) { return it.k; }).join('|');
+    SB.items = items;
+    if (keys === SB.keys && run.childNodes.length) {
+      // รายการเดิม ค่าเปลี่ยน: แก้เฉพาะข้อความ ตัวหนังสือไม่กระตุกกลับไปเริ่มใหม่
+      items.forEach(function (it) { run.querySelectorAll('[data-sbk="' + it.k + '"]').forEach(function (el) { if (el.innerHTML !== it.h) el.innerHTML = it.h; el.title = it.t || ''; }); });
+      return;
+    }
+    SB.keys = keys;
+    if (!items.length) { run.classList.remove('go'); run.innerHTML = '<span class="sb-it dim">กำลังโหลดเหตุการณ์ล่าสุด…</span>'; return; }
+    var half = function (hid) { return '<span class="ot-half"' + (hid ? ' aria-hidden="true"' : '') + '>' + items.map(function (it) { return sbItemHtml(it, hid); }).join('') + '</span>'; };
+    run.innerHTML = half(false) + half(true);
+    run.classList.add('go');
+    run.style.animationDuration = Math.max(40, Math.round(run.scrollWidth / 2 / 55)) + 's';
+  }
+  function sbOnline() {
+    var el = $('sbOn');
+    if (!el) return;
+    var on = navigator.onLine !== false;
+    el.classList.toggle('off', !on);
+    el.querySelector('span').textContent = on ? 'ออนไลน์' : 'ออฟไลน์';
+  }
+  if ($('sbar')) {
+    $('sbar').addEventListener('click', function (e) {
+      var l = e.target.closest('[data-sb]');
+      if (l) {
+        openHelp();
+        var sec = l.getAttribute('data-sb') === 'privacy' ? $('h-privacy') : null;
+        if (sec) setTimeout(function () { sec.scrollIntoView({ block: 'start' }); }, 30);
+        return;
+      }
+      var b = e.target.closest('button[data-sbk]');
+      if (!b) return;
+      var it = SB.items.filter(function (x) { return x.k === b.getAttribute('data-sbk'); })[0];
+      if (!it) return;
+      if (it.act === 'cc') { location.hash = '#cctv=wet'; return; }
+      if (it.act === 'fl') { if (it.pid) showFloodProvince(it.pid); return; }
+      if (it.act === 'n') { if (state.page !== 'chat') setPage('chat'); selectStory(it.id); return; }
+      if (it.act === 'q') {
+        if (state.page !== 'chat') setPage('chat');
+        if (!state.data.quakes) { state.data.quakes = true; saveData(); eachView(refreshLive); renderDataChips(); }
+        var v = views.chat, c = it.f.geometry.coordinates;
+        if (!v) return;
+        if (OPS.on) OPS.idleAt = Date.now() + 60e3;
+        v.map.flyTo({ center: [c[0], c[1]], zoom: Math.max(4, Math.min(6, v.map.getZoom() + 2)), duration: reduceMotion ? 0 : 1400 });
+        v.map.once('moveend', function () { openQuakePopup(v, it.f); });
+      }
+    });
+    window.addEventListener('online', sbOnline);
+    window.addEventListener('offline', sbOnline);
+    sbOnline();
+  }
+
   /* ---------- เริ่ม ---------- */
   renderMeta();
   setAskHint();
@@ -7860,6 +7992,9 @@
   setInterval(function () { if (!document.hidden) loadCctv(); }, 10 * 60e3); // ผล AI อัปเดตทุกชั่วโมง เช็กทุก 10 นาที
   loadRadar();
   loadWind();
+  renderSbar();
+  setTimeout(sbLoad, 2500);
+  setInterval(function () { sbLoad(); renderSbar(); }, 60e3);
   if (location.hash === '#help') setTimeout(openHelp, 300);
   if (start.site && !IN_ARTIFACT) setTimeout(function () { openSite(start.site.lon, start.site.lat, { tab: start.tab }); }, 300);
   if (start.ops && !IN_ARTIFACT) setTimeout(enterOps, 400);

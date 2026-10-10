@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610110023">
+<link rel="stylesheet" href="style.css?v=202610110034">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -75,6 +75,7 @@
 
     <section class="mapwrap" aria-label="แผนที่">
       <div id="mapChat" class="map"></div>
+      <button type="button" class="exit3d" id="btnExit3d" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>กลับเป็นแผนที่แบน</button>
       <button type="button" class="chat-tab" id="btnChatTab" aria-controls="chatPanel" aria-expanded="true" aria-label="ซ่อนแชท ให้แผนที่เต็มจอ" title="ซ่อนแชท">
         <svg class="ct-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span class="ct-t"></span>
       </button>
@@ -101,11 +102,6 @@
         <button type="button" class="rail-btn site-btn" id="btnSite" aria-pressed="false" aria-label="ตรวจทำเล: เลือกจุดบนแผนที่ ดูน้ำท่วมย้อนหลัง แบบจำลองน้ำท่วม ความสูง ผังเมือง และดินสำหรับเพาะปลูก" title="ตรวจทำเล (หรือคลิกขวาที่จุดใดก็ได้บนแผนที่)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h6"/><circle cx="16.5" cy="16" r="3"/><path d="M18.7 18.2 21 20.5"/></svg>
           <span class="rl">ตรวจทำเล</span>
-        </button>
-        <span class="rail-sep" aria-hidden="true"></span>
-        <button type="button" class="rail-btn" id="btnTerrain3d" aria-pressed="false" title="ภูมิประเทศ 3 มิติ (ลากด้วยคลิกขวาหรือสองนิ้วเพื่อหมุน)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 20 6-10 4 6 3-4 5 8H3z"/><path d="M8.5 6.5 10 4l1.5 2.5"/></svg>
-          <span class="rl">3 มิติ</span>
         </button>
       </nav>
       <div class="filter-pop drawer" id="filterPop" role="dialog" aria-labelledby="drTitle" hidden>
@@ -428,7 +424,7 @@
       </div>
       <div class="cc-body help-body">
         <nav class="help-toc" aria-label="หัวข้อ">
-          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-twin">วิเคราะห์ที่ดิน</a><a href="#h-ops">ห้องควบคุม</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-cctv">หน้ากล้อง</a><a href="#h-props">หน้าทรัพย์</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
+          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-twin">วิเคราะห์ที่ดิน</a><a href="#h-ops">ห้องควบคุม</a><a href="#h-privacy">ความเป็นส่วนตัว</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-cctv">หน้ากล้อง</a><a href="#h-props">หน้าทรัพย์</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
         </nav>
 
         <section id="h-start">
@@ -443,9 +439,10 @@
             <li><b>เลือกพื้นที่</b> กดภาคบนแผนที่ หรือใช้แถบด้านบน (เอเชีย › อาเซียน › ไทย › ภาค) หรือกดปุ่ม <kbd>/</kbd> เพื่อค้นชื่อจังหวัด</li>
             <li><b>ซูม</b> ด้วยปุ่ม + − หรือหมุนเมาส์ ยิ่งซูมเข้า ยิ่งเห็นสถานีและรายละเอียดมาก</li>
             <li><b>กดจุดบนแผนที่</b> (สามเหลี่ยมระดับน้ำ วงกลมฝน หมุดกล้อง ปื้นน้ำ) เพื่อดูรายละเอียดและแหล่งที่มา</li>
-            <li><b>แถบเครื่องมือด้านขวาของแผนที่</b> ชั้นข้อมูล · ค้นหา · รอบตัวฉัน · ตรวจทำเล · ภูมิประเทศ 3 มิติ (บนมือถือเหลือแต่ไอคอน)</li>
+            <li><b>แถบเครื่องมือด้านขวาของแผนที่</b> ชั้นข้อมูล · ค้นหา · รอบตัวฉัน · ตรวจทำเล (บนมือถือเหลือแต่ไอคอน) · มุมมองภูมิประเทศ 3 มิติเปิดได้จากการ์ดวิเคราะห์ที่ดิน</li>
             <li><b>ลูกโลก</b> และ <b>ธีม</b> อยู่มุมขวาบนของหน้า (ธีมเริ่มต้นน้ำเงิน-ขาว กดเปลี่ยนเป็นน้ำเงินกรมท่าได้) เปิดเว็บครั้งแรกจะเห็นลูกโลกเต็มใบก่อน กด <b>ไทย</b> ที่แถบด้านบนเพื่อบินเข้าประเทศไทย</li>
             <li><b>แผนที่ฐาน</b> (ปุ่มชั้นข้อมูล › แผนที่ฐาน) เลือกได้ 5 แบบ: ChatGeo ตามธีม · ถนนสีสด · OpenStreetMap · ภูมิประเทศ · ภาพดาวเทียม Sentinel-2 เว็บจำไว้ให้ ถ้าแบบที่เลือกโหลดไม่ได้จะกลับมาใช้แบบ ChatGeo ชั่วคราว</li>
+            <li><b>แถบล่างสุด</b> ตัวหนังสือวิ่ง: แผ่นดินไหวล่าสุด (USGS) ราคา BTC/ETH (CoinGecko) อัตรา USD/THB (ECB) ผล AI กล้อง น้ำท่วมจากดาวเทียม สภาพอวกาศ และข่าวเด่น ชี้เมาส์เพื่อหยุด กดแผ่นดินไหว น้ำท่วม กล้อง หรือข่าว เพื่อไปดู · ราคาเป็นข้อมูลอ้างอิง ไม่ใช่คำแนะนำการลงทุน</li>
             <li><b>ซ่อนแชท</b> กดลูกศรที่ขอบซ้ายของแผนที่ (มือถือเป็นปุ่มใต้แถบพื้นที่) แผนที่จะเต็มกว้าง กดปุ่ม <b>แชท</b> เพื่อเปิดกลับ</li>
           </ul>
         </section>
@@ -516,6 +513,17 @@
             <li><b>มุมซ้ายล่าง</b> สลับลูกโลก 3D กับแผนที่แบน 2D และสลับแผนที่กับภาพดาวเทียม พร้อมแถบมาตราส่วน</li>
             <li><b>แถบล่างสุด</b> ตัวหนังสือวิ่งเหตุการณ์ล่าสุด ชี้เมาส์เพื่อหยุด กดเรื่องไหนก็บินไปดูได้</li>
             <li>กด <kbd>Esc</kbd> หรือปุ่ม <b>ออก</b> เพื่อกลับ ชั้นข้อมูลจะกลับเป็นแบบเดิม</li>
+          </ul>
+        </section>
+
+        <section id="h-privacy">
+          <h3>ความเป็นส่วนตัว</h3>
+          <ul>
+            <li>ไม่มีระบบสมาชิก ไม่ขอชื่อ อีเมล หรือเบอร์โทร และไม่มีตัวติดตามโฆษณา</li>
+            <li>ตำแหน่งของคุณ (ปุ่มรอบตัวฉัน ใกล้ฉัน) ใช้คำนวณในเบราว์เซอร์ของคุณเท่านั้น ไม่ถูกส่งไปเก็บที่ไหน</li>
+            <li>การตั้งค่า เช่น ธีม แผนที่ฐาน ชั้นข้อมูล และรายการทรัพย์ที่วางไว้ เก็บในเบราว์เซอร์ของคุณเอง (localStorage) ลบได้ด้วยการล้างข้อมูลเว็บไซต์</li>
+            <li>แผนที่และข้อมูลสดโหลดตรงจากผู้ให้บริการแต่ละราย (เช่น OpenFreeMap, USGS, RainViewer, CoinGecko) ผู้ให้บริการเหล่านั้นเห็นที่อยู่ IP ตามปกติของการเปิดเว็บ · เว็บนี้ฝากไว้บน GitHub Pages</li>
+            <li>ตรวจทำเลจะส่งพิกัดไปค้นชื่อสถานที่ที่ OpenStreetMap เฉพาะตอนที่คุณกดตรวจ · กล้อง CCTV ใช้ AI ดูแค่สภาพน้ำและถนน ไม่จดจำใบหน้า ไม่อ่านทะเบียน</li>
           </ul>
         </section>
 
@@ -609,14 +617,25 @@
     </div>
   </div>
 
+  <!-- แถบสถานะล่างสุด (แบบ OSIRIS): ลิงก์ · ตัวหนังสือวิ่งเหตุการณ์และราคา · สถานะออนไลน์ -->
+  <footer class="sbar" id="sbar" aria-label="แถบสถานะและเหตุการณ์ล่าสุด">
+    <div class="sb-links">
+      <a class="sb-l" href="https://github.com/Choonahakarn/chatgeo" target="_blank" rel="noopener" title="ซอร์สโค้ดของเว็บนี้ (GitHub)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5"/><path d="M16 7l5 5-5 5"/></svg><span>โค้ด</span></a>
+      <button type="button" class="sb-l gold" data-sb="help"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg><span>วิธีใช้</span></button>
+      <button type="button" class="sb-l sb-priv" data-sb="privacy"><span>ความเป็นส่วนตัว</span></button>
+    </div>
+    <div class="sb-track"><div class="sb-run" id="sbRun"></div></div>
+    <span class="sb-on" id="sbOn" role="status"><i aria-hidden="true"></i><span>ออนไลน์</span></span>
+  </footer>
+
   <div class="toast" id="toast" role="status" hidden></div>
 </div>
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610110023"></script>
-<script src="data/countries.js?v=202610110023"></script>
-<script src="data/th-regions.js?v=202610110023"></script>
-<script src="app.js?v=202610110023"></script>
+<script src="data/data.js?v=202610110034"></script>
+<script src="data/countries.js?v=202610110034"></script>
+<script src="data/th-regions.js?v=202610110034"></script>
+<script src="app.js?v=202610110034"></script>
 </body>
 </html>

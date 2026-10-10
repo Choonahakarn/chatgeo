@@ -40,7 +40,7 @@ h1, h2, h3 { text-wrap: balance; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; display: inline-block; }
 
 /* ---------- โครงหน้า ---------- */
-.app { height: 100%; display: grid; grid-template-rows: 60px minmax(0, 1fr); }
+.app { height: 100%; display: grid; grid-template-rows: 60px minmax(0, 1fr) auto; }
 .topbar {
   display: flex; align-items: center; gap: 20px; padding: 0 16px 0 20px; min-width: 0;
   background: var(--panel); border-bottom: 1px solid var(--line);
@@ -440,7 +440,7 @@ kbd {
   .icon-btn span { display: none; }
 }
 @media (max-width: 860px) {
-  .app { grid-template-rows: 56px minmax(0, 1fr); }
+  .app { grid-template-rows: 56px minmax(0, 1fr) auto; }
   .topbar { gap: 8px; padding: 0 10px 0 12px; }
   .nav { margin-right: auto; }
   .nav a { padding: 0 10px; font-size: 14px; min-height: 40px; }
@@ -843,7 +843,7 @@ i.sq.dash { background: none; border: 1.5px dashed var(--ink2); width: 11px; hei
 .ops-btn[aria-pressed="true"] { border-color: #36D1DC; color: #36D1DC; }
 
 /* ---------- ห้องควบคุม: อวกาศมืด ลูกโลกกลางจอ แถบไอคอนซ้าย เครื่องมือขวา แถบข่าววิ่งล่าง ---------- */
-body.ops .app { grid-template-rows: minmax(0, 1fr); }
+body.ops .app { grid-template-rows: minmax(0, 1fr) auto; }
 body.ops .topbar { display: none; }
 body.ops .page-chat { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 body.ops .page-chat > .panel { display: none; }
@@ -862,7 +862,6 @@ body.ops .mapwrap { order: 0; border: 0; background-color: #000;
   background-repeat: repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, no-repeat; }
 body.ops .map-top, body.ops .pin-card, body.ops .map-stack, body.ops .site-card { display: none !important; }
 body.ops .maplibregl-ctrl-group, body.ops .maplibregl-ctrl-scale { display: none !important; }
-body.ops .maplibregl-ctrl-bottom-right, body.ops .maplibregl-ctrl-bottom-left { bottom: 32px; }
 body.ops .maplibregl-ctrl-attrib { background: rgba(3,9,18,.8); color: #8FB3C6; }
 body.ops .maplibregl-ctrl-attrib a { color: #9CC0D3; }
 .ops-hud { position: absolute; inset: 0; z-index: 3; pointer-events: none; color: #CFE8FF; font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -925,22 +924,22 @@ body.ops .maplibregl-ctrl-attrib a { color: #9CC0D3; }
 .ops-ev-t b { font-size: 12.5px; font-weight: 600; line-height: 1.35; color: #E9FBFF; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ops-ev-t small { font-size: 11px; color: var(--om); }
 .ops-empty { padding: 14px; font-size: 12.5px; color: var(--om); font-family: 'Inter', 'Sarabun', system-ui, sans-serif; }
-.ops-mode { position: absolute; left: 14px; bottom: 44px; display: flex; align-items: flex-end; gap: 8px; }
+.ops-mode { position: absolute; left: 14px; bottom: 14px; display: flex; align-items: flex-end; gap: 8px; }
 .ops-seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--ob); border: 1px solid var(--ol); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .ops-seg button { height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #7FA0B4; font-family: 'IBM Plex Mono', 'Sarabun', monospace !important; font-size: 11.5px; font-weight: 600; cursor: pointer; }
 .ops-seg button:hover { color: #E9FBFF; }
 .ops-seg button[aria-pressed="true"] { background: rgba(63,230,255,.16); color: var(--oc); }
 .ops-scale { display: flex; flex-direction: column; gap: 2px; margin: 0 0 3px 6px; font-size: 10.5px; color: #8FB3C6; pointer-events: none !important; text-shadow: 0 1px 2px #000; }
 .ops-scale i { display: block; height: 5px; border: 1px solid #8FB3C6; border-top: 0; min-width: 20px; }
-.ops-cursor { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); display: flex; gap: 14px; font-size: 11px; color: #8FB3C6; white-space: nowrap; pointer-events: none !important; text-shadow: 0 1px 3px #000; }
+.ops-cursor { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 14px; font-size: 11px; color: #8FB3C6; white-space: nowrap; pointer-events: none !important; text-shadow: 0 1px 3px #000; }
 .ops-cursor span:first-child { color: #E9FBFF; font-variant-numeric: tabular-nums; }
 .ops-cursor span:not(:first-child) { font-family: 'IBM Plex Mono', 'Sarabun', monospace; }
 .ops-cursor .oc-c { color: #4F6E82; }
-.ops-zoom { position: absolute; right: 14px; bottom: 82px; display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; background: var(--ob); border: 1px solid var(--ol); }
+.ops-zoom { position: absolute; right: 14px; bottom: 52px; display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; background: var(--ob); border: 1px solid var(--ol); }
 .ops-zoom button { width: 38px; height: 34px; border: 0; background: transparent; color: #9CC0D3; display: grid; place-items: center; cursor: pointer; padding: 0; }
 .ops-zoom button + button { border-top: 1px solid var(--ol); }
 .ops-zoom button:hover { color: var(--oc); background: rgba(63,230,255,.08); }
-.ops-ticker { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: center; background: rgba(1,6,12,.94); border-top: 1px solid var(--ol); }
+.ops-ticker { display: none !important; position: absolute; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: center; background: rgba(1,6,12,.94); border-top: 1px solid var(--ol); }
 .ot-live { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; height: 100%; padding: 0 14px; border-right: 1px solid var(--ol); color: var(--og); font: 600 11.5px 'IBM Plex Mono', 'Sarabun', monospace; letter-spacing: .03em; }
 .ot-track { flex: 1; min-width: 0; height: 100%; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
 .ot-run { display: inline-flex; align-items: center; height: 100%; white-space: nowrap; padding-left: 20px; will-change: transform; }
@@ -976,8 +975,8 @@ body.ops .maplibregl-ctrl-attrib a { color: #9CC0D3; }
   .ops-rb { width: 36px; height: 36px; }
   .ops-badge { right: -9px; }
   .ops-tip { display: none; }
-  .ops-feed { left: 8px; right: 8px; top: auto; bottom: 76px; width: auto; max-height: 52%; }
-  .ops-mode { left: 8px; bottom: 38px; gap: 6px; }
+  .ops-feed { left: 8px; right: 8px; top: auto; bottom: 46px; width: auto; max-height: 52%; }
+  .ops-mode { left: 8px; bottom: 8px; gap: 6px; }
   .ops-seg button { height: 26px; padding: 0 8px; }
   .ops-cursor, .ops-zoom { display: none; }
   .ops-ticker { height: 28px; }
@@ -1455,3 +1454,51 @@ body.ops .chat-tab { display: none; }
   body.chat-hidden .chat-tab .ct-ico { transform: rotate(90deg); }
   body.chat-hidden .page-chat { grid-template-rows: minmax(0, 1fr); }
 }
+
+/* ---------- แถบสถานะล่างสุด (แบบ OSIRIS) ---------- */
+.sbar { position: relative; z-index: 5; display: flex; align-items: center; height: 30px; min-width: 0; overflow: hidden; background: #070B14; color: #C9D6E8; border-top: 1px solid #1B2436;
+  font-family: 'IBM Plex Mono', 'Sarabun', ui-monospace, monospace; font-size: 11.5px; }
+.sb-links { flex: 0 0 auto; display: flex; align-items: center; height: 100%; }
+.sb-l { display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 12px; border: 0; border-right: 1px solid #1B2436; background: transparent; color: #8FA3BC; font: inherit; letter-spacing: .04em; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.sb-l:hover { color: #fff; background: #0E1524; }
+.sb-l.gold { color: #E8C36A; }
+.sb-l:focus-visible, .sb-it:focus-visible { outline: 2px solid #3FE6FF; outline-offset: -2px; }
+.sb-track { flex: 1; min-width: 0; height: 100%; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+.sb-run { display: inline-flex; align-items: center; height: 100%; white-space: nowrap; will-change: transform; }
+.sb-run.go { animation: ot-run 120s linear infinite; }
+.sbar:hover .sb-run, .sbar:focus-within .sb-run { animation-play-state: paused; }
+.sb-it { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; border: 0; background: transparent; color: #C9D6E8; font: inherit; white-space: nowrap; }
+button.sb-it { cursor: pointer; }
+button.sb-it:hover { color: #fff; background: #0E1524; }
+.sb-it.dim { color: #6F85A0; }
+.sb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c); flex: 0 0 auto; }
+.sb-k { color: var(--c); font-weight: 700; }
+.sb-sym { color: #E9F1FB; font-weight: 700; }
+.sb-sym.news { color: #9DB7FF; font-weight: 600; }
+.sb-up { color: #3DDC84; } .sb-dn { color: #FF6B6B; }
+.sb-ago { color: #5E7590; }
+.sb-on { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 14px; border-left: 1px solid #1B2436; color: #3DDC84; font-weight: 700; letter-spacing: .06em; white-space: nowrap; }
+.sb-on i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; animation: ops-blink 1.8s infinite; }
+.sb-on.off { color: #FF6B6B; }
+body.cv-fs-on .sbar { display: none; }
+.toast { bottom: 44px; }
+@media (max-width: 860px) {
+  .sbar { height: 28px; font-size: 11px; }
+  .sb-l { padding: 0 9px; }
+  .sb-l span, .sb-priv { display: none; }
+  .sb-on { padding: 0 9px; }
+  .sb-on span { display: none; }
+  .sb-it { height: 28px; padding: 0 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-run.go { animation: none; }
+  .sb-track { overflow-x: auto; scrollbar-width: none; }
+  .sb-on i { animation: none; }
+}
+
+/* ปุ่มออกจากมุมมองภูมิประเทศ 3 มิติ (เปิดจากการ์ดวิเคราะห์ที่ดิน) */
+.exit3d { position: absolute; left: 50%; top: 64px; z-index: 4; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border: 1px solid var(--line2); border-radius: 999px;
+  background: var(--overlay); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow-sm); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.exit3d[hidden] { display: none; }
+.exit3d:hover { border-color: var(--accent); color: var(--accent-ink); }
+body.ops .exit3d { display: none; }
