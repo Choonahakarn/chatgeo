@@ -413,7 +413,7 @@ MEGA = re.compile(r'^(STARLINK|ONEWEB|KUIPER|QIANFAN|G60|GUOWANG|HULIANWANG|SPAC
 def task_sats(out):
     raw = get(CELESTRAK, timeout=120, mock='sats.json')
     arr = json.loads(raw)
-    keep, mega = [], {}
+    keep, mega, mrows, groups = [], {}, [], []
     for o in arr:
         name = str(o.get('OBJECT_NAME', '')).strip()
         nid = int(o.get('NORAD_CAT_ID') or 0)
@@ -421,6 +421,16 @@ def task_sats(out):
         if m and nid not in FEATURED:
             k = m.group(1).upper()
             mega[k] = mega.get(k, 0) + 1
+            # กลุ่มดาวเทียมใหญ่ (Starlink ฯลฯ) เก็บแบบย่อไว้วาดเป็นจุดรอบลูกโลกเท่านั้น
+            try:
+                ep = datetime.strptime(str(o.get('EPOCH'))[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=UTC).timestamp()
+                if k not in groups:
+                    groups.append(k)
+                mrows.append([groups.index(k), nid, int(ep), round(float(o.get('MEAN_MOTION')), 8), round(float(o.get('ECCENTRICITY')), 7),
+                              round(float(o.get('INCLINATION')), 4), round(float(o.get('RA_OF_ASC_NODE')), 4), round(float(o.get('ARG_OF_PERICENTER')), 4),
+                              round(float(o.get('MEAN_ANOMALY')), 4)])
+            except (TypeError, ValueError):
+                pass
             continue
         keep.append([name, nid, o.get('OBJECT_ID', ''), o.get('EPOCH'), o.get('MEAN_MOTION'), o.get('ECCENTRICITY'), o.get('INCLINATION'),
                      o.get('RA_OF_ASC_NODE'), o.get('ARG_OF_PERICENTER'), o.get('MEAN_ANOMALY'), o.get('BSTAR'),
@@ -430,7 +440,10 @@ def task_sats(out):
     write_json(out, 'sats.json', {'v': 1, 't': now_iso(), 'src': 'CelesTrak GP (GROUP=ACTIVE)', 'featured': FEATURED, 'mega': mega, 'total': len(arr),
                                    'cols': ['name', 'norad', 'intl', 'epoch', 'mm', 'ecc', 'inc', 'raan', 'argp', 'ma', 'bstar', 'mmdot', 'mmddot', 'rev', 'elset'],
                                    'omm': keep})
-    return {'n': len(keep), 'mega': mega}
+    if mrows:
+        write_json(out, 'sats_mega.json', {'v': 1, 't': now_iso(), 'src': 'CelesTrak GP (GROUP=ACTIVE)', 'groups': groups,
+                                           'cols': ['group', 'norad', 'epoch_unix', 'mm', 'ecc', 'inc', 'raan', 'argp', 'ma'], 'rows': mrows})
+    return {'n': len(keep), 'mega': mega, 'mega_rows': len(mrows)}
 
 
 # ---------------------------------------------------------------- สายเคเบิลใต้ทะเล

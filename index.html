@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610110041">
+<link rel="stylesheet" href="style.css?v=202610110105">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -111,7 +111,7 @@
         </div>
         <div class="dr-body">
           <div class="dr-t">แผนที่ฐาน</div>
-          <div class="base-grid" id="baseChips" role="group" aria-label="เลือกแผนที่ฐาน"></div>
+          <div class="base-list" id="baseChips" role="group" aria-label="เลือกแผนที่ฐาน"></div>
           <div class="dr-t">มุมมองสำเร็จรูป</div>
           <div class="dr-presets" id="presetChips" role="group" aria-label="มุมมองสำเร็จรูป"></div>
           <div class="fp-list" id="dataChips" role="group" aria-label="ชั้นข้อมูลสาธารณะ"></div>
@@ -441,7 +441,8 @@
             <li><b>กดจุดบนแผนที่</b> (สามเหลี่ยมระดับน้ำ วงกลมฝน หมุดกล้อง ปื้นน้ำ) เพื่อดูรายละเอียดและแหล่งที่มา</li>
             <li><b>แถบเครื่องมือด้านขวาของแผนที่</b> ชั้นข้อมูล · ค้นหา · รอบตัวฉัน · ตรวจทำเล (บนมือถือเหลือแต่ไอคอน) · มุมมองภูมิประเทศ 3 มิติเปิดได้จากการ์ดวิเคราะห์ที่ดิน</li>
             <li><b>ลูกโลก</b> และ <b>ธีม</b> อยู่มุมขวาบนของหน้า (ธีมเริ่มต้นน้ำเงิน-ขาว กดเปลี่ยนเป็นน้ำเงินกรมท่าได้) เปิดเว็บครั้งแรกจะเห็นลูกโลกเต็มใบก่อน กด <b>ไทย</b> ที่แถบด้านบนเพื่อบินเข้าประเทศไทย</li>
-            <li><b>แผนที่ฐาน</b> (ปุ่มชั้นข้อมูล › แผนที่ฐาน) เลือกได้ 5 แบบ: ChatGeo ตามธีม · ถนนสีสด · OpenStreetMap · ภูมิประเทศ · ภาพดาวเทียม Sentinel-2 เว็บจำไว้ให้ ถ้าแบบที่เลือกโหลดไม่ได้จะกลับมาใช้แบบ ChatGeo ชั่วคราว</li>
+            <li><b>แผนที่ฐาน</b> (ปุ่มชั้นข้อมูล › แผนที่ฐาน) แบบ Longdo มีภาพตัวอย่าง 3 กลุ่ม: OpenFreeMap (ถนน สีสด สีอ่อน มืด น้ำเงิน) · OpenStreetMap (Colorful Gray ภูมิประเทศ) · ภาพโลก (ดาวเทียม Hybrid โลกจริง กลางคืน) เว็บจำไว้ให้</li>
+            <li><b>ดาวเทียมลอยรอบโลก</b> เปิดชั้นดาวเทียม + "แสดงดาวเทียมทั้งหมด" ในโหมดลูกโลก (หรือเข้าห้องควบคุม) จะเห็นดาวเทียมนับหมื่นดวงลอยรอบลูกโลก เขียวคือ Starlink วงแหวนรอบเส้นศูนย์สูตรคือดาวเทียมค้างฟ้า</li>
             <li><b>แถบล่างสุด</b> ซ้ายสุดเป็นลิงก์ Discord · X · Facebook ถัดมาเป็นตัวหนังสือวิ่ง: แผ่นดินไหวล่าสุด (USGS) ราคา BTC/ETH (CoinGecko) อัตรา USD/THB (ECB) ผล AI กล้อง น้ำท่วมจากดาวเทียม สภาพอวกาศ และข่าวเด่น ชี้เมาส์เพื่อหยุด กดแผ่นดินไหว น้ำท่วม กล้อง หรือข่าว เพื่อไปดู · ราคาเป็นข้อมูลอ้างอิง ไม่ใช่คำแนะนำการลงทุน</li>
             <li><b>ซ่อนแชท</b> กดลูกศรที่ขอบซ้ายของแผนที่ (มือถือเป็นปุ่มใต้แถบพื้นที่) แผนที่จะเต็มกว้าง กดปุ่ม <b>แชท</b> เพื่อเปิดกลับ</li>
           </ul>
@@ -634,9 +635,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610110041"></script>
-<script src="data/countries.js?v=202610110041"></script>
-<script src="data/th-regions.js?v=202610110041"></script>
-<script src="app.js?v=202610110041"></script>
+<script src="data/data.js?v=202610110105"></script>
+<script src="data/countries.js?v=202610110105"></script>
+<script src="data/th-regions.js?v=202610110105"></script>
+<script src="app.js?v=202610110105"></script>
 </body>
 </html>

@@ -75,26 +75,64 @@
   }
   // แผนที่ฐานให้เลือกแบบ Longdo (ใช้ได้ฟรีไม่ต้องมีคีย์ ใส่เครดิตทุกแหล่ง)
   // ไม่มี Google / GISTDA / Longdo เพราะต้องใช้คีย์ และเงื่อนไขให้แสดงผ่านแผนที่ของเขาเองเท่านั้น
+  var OFM = 'https://tiles.openfreemap.org/styles/';
+  var GIBS_B = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
+  var OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
   var BASES = [
-    { id: 'auto', t: 'ChatGeo', sub: 'ตามธีม สว่าง/มืด' },
-    { id: 'liberty', t: 'ถนนสีสด', sub: 'OpenFreeMap', url: 'https://tiles.openfreemap.org/styles/liberty' },
-    { id: 'osm', t: 'OpenStreetMap', sub: 'แผนที่มาตรฐาน', raster: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19,
-      thumb: 'https://tile.openstreetmap.org/5/24/14.png', attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' },
-    { id: 'topo', t: 'ภูมิประเทศ', sub: 'OpenTopoMap', raster: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], max: 17,
-      thumb: 'https://a.tile.opentopomap.org/5/24/14.png', attr: 'แผนที่ © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA) · ข้อมูล © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, SRTM' },
-    { id: 'sat', t: 'ภาพดาวเทียม', sub: 'Sentinel-2 · EOX', raster: [SAT_URL], max: 14, thumb: SAT_URL.replace('{z}/{y}/{x}', '5/14/24'), attr: SAT_ATTR }
+    { id: 'auto', g: 'ofm', t: 'ChatGeo', sub: 'ตามธีม' },
+    { id: 'liberty', g: 'ofm', t: 'ถนน', sub: 'Liberty', url: OFM + 'liberty' },
+    { id: 'bright', g: 'ofm', t: 'สีสด', sub: 'Bright', url: OFM + 'bright' },
+    { id: 'positron', g: 'ofm', t: 'สีอ่อน', sub: 'Positron', url: OFM + 'positron' },
+    { id: 'dark', g: 'ofm', t: 'มืด', sub: 'Dark', url: OFM + 'dark' },
+    { id: 'fiord', g: 'ofm', t: 'น้ำเงิน', sub: 'Fiord', url: OFM + 'fiord' },
+    { id: 'osm', g: 'osm', t: 'Colorful', sub: 'มาตรฐาน', raster: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19, attr: OSM_ATTR },
+    { id: 'osmgray', g: 'osm', t: 'Gray', sub: 'ขาวดำ', raster: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19, attr: OSM_ATTR, paint: { 'raster-saturation': -1, 'raster-contrast': 0.06 } },
+    { id: 'topo', g: 'osm', t: 'ภูมิประเทศ', sub: 'OpenTopoMap', raster: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], max: 17,
+      attr: 'แผนที่ © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA) · ข้อมูล ' + OSM_ATTR + ', SRTM' },
+    { id: 'sat', g: 'img', t: 'ดาวเทียม', sub: 'Sentinel-2', raster: [SAT_URL], max: 14, attr: SAT_ATTR },
+    { id: 'hybrid', g: 'img', t: 'Hybrid', sub: 'ดาวเทียม + ถนน', hybrid: true },
+    { id: 'bluemarble', g: 'img', t: 'โลกจริง', sub: 'Blue Marble', raster: [GIBS_B + 'BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg'], max: 8, bg: '#000',
+      attr: 'ภาพโลก: <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">NASA GIBS</a> (Blue Marble)', th: [101, 13, 3.4] },
+    { id: 'night', g: 'img', t: 'กลางคืน', sub: 'Black Marble', raster: [GIBS_B + 'VIIRS_Black_Marble/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png'], max: 8, bg: '#000',
+      attr: 'แสงไฟกลางคืน: <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">NASA GIBS</a> (VIIRS Black Marble)', th: [101, 13.5, 4.6] }
   ];
-  var BASE = { id: 'auto' };
+  var BASE_GROUPS = [['ofm', 'OpenFreeMap'], ['osm', 'OpenStreetMap'], ['img', 'ภาพโลก · ดาวเทียม']];
+  var BASE = { id: 'auto', hybrid: null, hybridP: null };
   try { var bsv = localStorage.getItem('cg-base'); if (BASES.some(function (b) { return b.id === bsv; })) BASE.id = bsv; } catch (e) { /* ไม่มีที่เก็บ */ }
-  function baseStyle(theme) {
-    if (usingFallback) return fallbackStyle(theme);
-    var id = typeof OPS !== 'undefined' && OPS && OPS.on ? 'auto' : BASE.id;
-    var b = BASES.filter(function (x) { return x.id === id; })[0];
+  function baseById(id) { return BASES.filter(function (x) { return x.id === id; })[0]; }
+  // ห้องควบคุมใช้ภาพโลกจริง (Blue Marble) แบบ OSIRIS ถ้าโหลดไม่ได้ใช้แผนที่มืด
+  function opsBaseId() { return typeof OPS !== 'undefined' && OPS && OPS.on ? (OPS.baseFail ? 'auto' : 'bluemarble') : null; }
+  function baseStyleFor(b, theme) {
     if (!b || b.id === 'auto' || styleOverride) return osmStyleUrl(theme);
+    if (b.hybrid) return BASE.hybrid || OFM + 'liberty';
     if (b.url) return b.url;
     return { version: 8, name: 'ChatGeo ' + b.id,
       sources: { base: { type: 'raster', tiles: b.raster, tileSize: 256, maxzoom: b.max, attribution: b.attr } },
-      layers: [{ id: 'base-bg', type: 'background', paint: { 'background-color': theme === 'dark' ? '#0A0F1F' : '#E8EBF2' } }, { id: 'base', type: 'raster', source: 'base' }] };
+      layers: [{ id: 'base-bg', type: 'background', paint: { 'background-color': b.bg || (theme === 'dark' ? '#0A0F1F' : '#E8EBF2') } }, { id: 'base', type: 'raster', source: 'base', paint: b.paint || {} }] };
+  }
+  function baseStyle(theme) {
+    if (usingFallback) return fallbackStyle(theme);
+    return baseStyleFor(baseById(opsBaseId() || BASE.id), theme);
+  }
+  // Hybrid: ภาพดาวเทียม + ถนนและชื่อสถานที่จากสไตล์ liberty (ตัดพื้น น้ำ อาคารออก)
+  function ensureHybrid() {
+    if (BASE.hybrid) return Promise.resolve(BASE.hybrid);
+    if (BASE.hybridP) return BASE.hybridP;
+    BASE.hybridP = fetch(OFM + 'liberty').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (st) {
+      var keep = (st.layers || []).filter(function (l) {
+        var sl = l['source-layer'] || '';
+        return l.type === 'symbol' || (l.type === 'line' && /transportation|boundary/.test(sl));
+      }).map(function (l) {
+        if (l.type !== 'line' || !/transportation/.test(l['source-layer'] || '')) return l;
+        var c = JSON.parse(JSON.stringify(l)); c.paint = Object.assign({}, c.paint, { 'line-opacity': 0.7 }); return c;
+      });
+      st.sources = Object.assign({}, st.sources, { base: { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 14, attribution: SAT_ATTR } });
+      st.layers = [{ id: 'base-bg', type: 'background', paint: { 'background-color': '#0B1220' } }, { id: 'base', type: 'raster', source: 'base' }].concat(keep);
+      st.name = 'ChatGeo hybrid';
+      BASE.hybrid = st;
+      return st;
+    }).catch(function (e) { BASE.hybridP = null; throw e; });
+    return BASE.hybridP;
   }
 
   var FB_COLORS = {
@@ -1033,6 +1071,7 @@
   function setFilterOpen(open) {
     $('filterPop').hidden = !open;
     $('btnFilter').setAttribute('aria-expanded', String(open));
+    if (open) setTimeout(makeBaseThumbs, 400);
   }
   $('btnFilter').addEventListener('click', function (e) {
     e.stopPropagation();
@@ -2123,8 +2162,10 @@
   }
   // แผนที่ฐานที่เลือกโหลดไม่ได้: กลับไปใช้แผนที่ ChatGeo ชั่วคราว (ไม่ลบค่าที่เลือกไว้ เปิดครั้งหน้าจะลองใหม่)
   function baseFailed() {
-    if (BASE.id === 'auto' || (OPS && OPS.on) || usingFallback || styleOverride) return false;
-    var b = BASES.filter(function (x) { return x.id === BASE.id; })[0];
+    if (usingFallback || styleOverride) return false;
+    if (OPS && OPS.on) { if (OPS.baseFail) return false; OPS.baseFail = true; BASE.revertAt = Date.now(); reloadBase(); return true; }
+    if (BASE.id === 'auto') return false;
+    var b = baseById(BASE.id);
     BASE.id = 'auto'; BASE.revertAt = Date.now();
     toast('โหลดแผนที่ ' + (b ? b.t : '') + ' ไม่ได้ตอนนี้ กลับมาใช้แผนที่ ChatGeo ก่อน');
     reloadBase(); renderBaseChips();
@@ -2132,19 +2173,68 @@
   }
   function setBase(id) {
     if (id === BASE.id) return;
+    var b = baseById(id);
+    if (b && b.hybrid && !BASE.hybrid) {
+      ensureHybrid().then(function () { setBase(id); }, function () { toast('โหลดแผนที่ Hybrid ไม่ได้ตอนนี้'); });
+      return;
+    }
     BASE.id = id;
     try { localStorage.setItem('cg-base', id); } catch (e) { /* ข้าม */ }
     if (!(OPS && OPS.on)) reloadBase();
     renderBaseChips();
   }
+  // ภาพตัวอย่างแผนที่ฐาน: วาดแผนที่จริงย่อส่วนนอกจอทีละแบบ แล้วเก็บเป็นรูปในเครื่อง (ครั้งแรกครั้งเดียว)
+  var BTH = { busy: false, key: 'cg-bth1' };
+  function readThumbs() { try { var o = JSON.parse(localStorage.getItem(BTH.key) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
+  function writeThumbs(o) { try { localStorage.setItem(BTH.key, JSON.stringify(o)); } catch (e) { /* เต็ม ข้าม */ } }
+  function thumbFor(id, cache) { return id === 'auto' ? cache[state.theme === 'dark' ? 'dark' : 'positron'] : cache[id]; }
+  function makeBaseThumbs() {
+    if (BTH.busy || usingFallback || IN_ARTIFACT || !window.maplibregl) return;
+    var cache = readThumbs(), todo = BASES.filter(function (b) { return b.id !== 'auto' && !cache[b.id]; });
+    if (!todo.length) return;
+    BTH.busy = true;
+    var el = document.createElement('div');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText = 'position:fixed;left:-10000px;top:0;width:200px;height:150px;pointer-events:none;';
+    document.body.appendChild(el);
+    var map;
+    try {
+      map = new maplibregl.Map({ container: el, style: { version: 8, sources: {}, layers: [] }, center: [100.5415, 13.7307], zoom: 14, interactive: false, attributionControl: false,
+        preserveDrawingBuffer: true, fadeDuration: 0 });
+    } catch (e) { el.remove(); BTH.busy = false; return; }
+    var i = 0;
+    function finish() { try { map.remove(); } catch (e) { /* ข้าม */ } el.remove(); BTH.busy = false; }
+    function next() {
+      if (i >= todo.length) { finish(); return; }
+      var b = todo[i++], th = b.th || [100.5415, 13.7307, 14];
+      (b.hybrid ? ensureHybrid() : Promise.resolve(baseStyleFor(b, 'light'))).then(function (st) {
+        var fired = false, tm = 0;
+        var done = function () {
+          if (fired) return; fired = true; clearTimeout(tm);
+          try { cache[b.id] = map.getCanvas().toDataURL('image/jpeg', 0.8); writeThumbs(cache); renderBaseChips(); } catch (e) { /* ข้าม */ }
+          setTimeout(next, 30);
+        };
+        map.jumpTo({ center: [th[0], th[1]], zoom: th[2] });
+        map.setStyle(st, { diff: false });
+        map.once('styledata', function () { map.once('idle', done); });
+        tm = setTimeout(done, 9000);
+      }, function () { setTimeout(next, 30); });
+    }
+    map.once('load', next);
+  }
   function renderBaseChips() {
     var el = $('baseChips');
     if (!el) return;
-    el.innerHTML = BASES.map(function (b) {
-      return '<button type="button" class="base-opt" data-base="' + b.id + '" aria-pressed="' + (BASE.id === b.id) + '" title="' + esc(b.t + ' · ' + b.sub) + '">' +
-        '<span class="base-th base-' + b.id + '" aria-hidden="true">' + (b.thumb && !usingFallback ? '<img alt="" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" src="' + esc(b.thumb) + '">' : '') + '</span>' +
-        '<span class="base-t">' + esc(b.t) + '</span><small>' + esc(b.sub) + '</small></button>';
-    }).join('') + (usingFallback ? '<p class="fp-fine">โหมดออฟไลน์ใช้แผนที่สำรองแบบเดียว</p>' : '');
+    if (usingFallback) { el.innerHTML = '<p class="fp-fine">โหมดออฟไลน์ใช้แผนที่สำรองแบบเดียว</p>'; return; }
+    var cache = readThumbs();
+    el.innerHTML = BASE_GROUPS.map(function (g) {
+      return '<div class="base-g"><div class="base-gh">' + esc(g[1]) + '</div><div class="base-grid">' + BASES.filter(function (b) { return b.g === g[0]; }).map(function (b) {
+        var th = thumbFor(b.id, cache);
+        return '<button type="button" class="base-opt" data-base="' + b.id + '" aria-pressed="' + (BASE.id === b.id) + '" title="' + esc(b.t + ' · ' + b.sub) + '">' +
+          '<span class="base-th base-' + b.id + '" aria-hidden="true">' + (th ? '<img alt="" src="' + th + '">' : '') + '</span>' +
+          '<span class="base-t">' + esc(b.t) + '</span><small>' + esc(b.sub) + '</small></button>';
+      }).join('') + '</div></div>';
+    }).join('');
   }
   if ($('baseChips')) $('baseChips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-base]');
@@ -2167,6 +2257,7 @@
     $('btnGlobe').setAttribute('aria-pressed', String(state.globe));
     $('globeText').textContent = state.globe ? 'แผนที่แบน' : 'ลูกโลก';
     eachView(applyProjection);
+    eachView(function (x) { if (x.kind === 'chat' && x.map.getSource('cg-water')) updateSats(x); });
     var v = views[state.page];
     if (v && state.place === 'world') flyToPlace(v, byId.world);
   });
@@ -6730,6 +6821,8 @@
     var map = v.map, on = worldOn('sats'), S = WD.sats;
     if (on) loadWorld('sats');
     clearInterval(v.satTimer);
+    var shell = on && S.recs.length && S.all && state.globe && v.kind === 'chat';
+    updateShell(v, shell);
     if (!on || !S.recs.length) {
       vis(map, ['cg-sat-all', 'cg-sat-trk'], false);
       (v.satMarkers || []).forEach(function (m) { m.mk.remove(); });
@@ -6774,8 +6867,199 @@
       v.satTimer = setInterval(function () { if (document.hidden) return; tick(); if (++k % 5 === 0) all(); }, 1000);
     }
     opsSatPaint(map);
-    vis(map, ['cg-sat-all'], !!S.all);
+    vis(map, ['cg-sat-all'], !!S.all && !shell);
     vis(map, ['cg-sat-trk'], !!S.sel);
+  }
+  /* ---------- ดาวเทียมลอยรอบลูกโลก 3 มิติ (แบบ OSIRIS) ----------
+     วาดทุกดวงด้วย WebGL ที่ "ความสูงย่อส่วน" (วงโคจรต่ำลอยเหนือผิวโลกนิดเดียว ค้างฟ้าเป็นวงแหวนรอบเส้นศูนย์สูตร)
+     ตำแหน่งคำนวณแบบวงโคจรเคปเลอร์ + J2 (เร็วพอสำหรับหมื่นดวง) ส่วนดวงเด่นและป๊อปอัปยังใช้ SGP4 เหมือนเดิม */
+  var SHELL = { want: false, n: 0, data: null, ver: 0, orbs: [], feat: [], timer: 0, mega: null, megaLoading: false, size: 2.6, lbl: null };
+  var SH_MU = 398600.4418, SH_RE = 6378.137, SH_J2 = 1.08263e-3, SH_DEG = Math.PI / 180, SH_GEO = Math.log(1 + 35786 / 1000);
+  var SH_COL = [[0.24, 1, 0.55], [0.2, 0.88, 1], [0.38, 0.56, 1], [0.32, 0.95, 1], [1, 0.38, 0.38], [1, 0.97, 0.85]]; // Starlink LEO MEO GEO HEO ดวงเด่น
+  function shellAlt(h) { return 0.42 * Math.log(1 + Math.max(0, h) / 1000) / SH_GEO; }
+  function orbEl(id, epMs, mm, ecc, inc, raan, argp, ma, starlink, feat) {
+    if (!(mm > 0) || !isFinite(epMs)) return null;
+    var n0 = mm * 2 * Math.PI / 86400, a = Math.pow(SH_MU / (n0 * n0), 1 / 3), e = Math.min(0.95, Math.max(0, ecc || 0)), i = inc * SH_DEG;
+    var p = a * (1 - e * e), k = 1.5 * SH_J2 * Math.pow(SH_RE / p, 2) * n0, ci = Math.cos(i), si = Math.sin(i);
+    var hp = a * (1 - e) - SH_RE, ha = a * (1 + e) - SH_RE;
+    var col = feat ? 5 : e > 0.25 ? 4 : hp > 30000 && ha < 40000 ? 3 : hp > 2000 ? 2 : starlink ? 0 : 1;
+    return { id: id, n0: n0, a: a, e: e, b: Math.sqrt(1 - e * e), ci: ci, si: si, O0: raan * SH_DEG, w0: argp * SH_DEG, M0: ma * SH_DEG, ep: epMs, dO: -k * ci, dw: k * (2 - 2.5 * si * si), col: col };
+  }
+  function shellBuild() {
+    var S = WD.sats, doc = S.doc, out = [], feat = {};
+    if (!doc) return;
+    (doc.featured || []).forEach(function (id) { feat[id] = 1; });
+    (doc.omm || []).forEach(function (r) {
+      var o = orbEl(r[1], Date.parse(/Z$/.test(r[3]) ? r[3] : r[3] + 'Z'), r[4], r[5], r[6], r[7], r[8], r[9], false, !!feat[r[1]]);
+      if (o) { o.name = r[0]; out.push(o); }
+    });
+    var M = SHELL.mega;
+    if (M && M.rows) M.rows.forEach(function (r) {
+      var o = orbEl(r[1], r[2] * 1000, r[3], r[4], r[5], r[6], r[7], r[8], /^STARLINK/i.test(M.groups[r[0]] || ''), false);
+      if (o) out.push(o);
+    });
+    // ดวงเด่นวาดทีหลังสุด จะได้อยู่บนสุด
+    out.sort(function (x, y) { return (x.col === 5) - (y.col === 5); });
+    SHELL.orbs = out;
+    SHELL.data = new Float32Array(out.length * 4);
+    SHELL.feat = out.filter(function (o) { return o.col === 5; });
+  }
+  function shellGmst(t) {
+    if (window.satellite && window.satellite.gstime) return window.satellite.gstime(new Date(t));
+    var jd = t / 86400000 + 2440587.5;
+    return ((280.46061837 + 360.98564736629 * (jd - 2451545)) % 360) * SH_DEG;
+  }
+  // ตำแหน่งทุกดวง ณ เวลา t → พิกัดบนทรงกลมหน่วยของลูกโลก MapLibre (x = sin(lon)cos(lat), y = sin(lat), z = cos(lon)cos(lat)) คูณความสูงย่อส่วน
+  function shellCompute(t) {
+    var os = SHELL.orbs, d = SHELL.data, g = shellGmst(t), cg = Math.cos(g), sg = Math.sin(g), TAU = 2 * Math.PI;
+    for (var j = 0; j < os.length; j++) {
+      var o = os[j], dt = (t - o.ep) / 1000;
+      var M = (o.M0 + o.n0 * dt) % TAU, O = o.O0 + o.dO * dt, w = o.w0 + o.dw * dt, E = M;
+      if (o.e > 1e-4) for (var k = 0; k < 5; k++) E -= (E - o.e * Math.sin(E) - M) / (1 - o.e * Math.cos(E));
+      var xp = o.a * (Math.cos(E) - o.e), yp = o.a * o.b * Math.sin(E);
+      var cO = Math.cos(O), sO = Math.sin(O), cw = Math.cos(w), sw = Math.sin(w);
+      var X = (cO * cw - sO * sw * o.ci) * xp + (-cO * sw - sO * cw * o.ci) * yp;
+      var Y = (sO * cw + cO * sw * o.ci) * xp + (-sO * sw + cO * cw * o.ci) * yp;
+      var Z = sw * o.si * xp + cw * o.si * yp;
+      var x = X * cg + Y * sg, y = -X * sg + Y * cg, r = Math.sqrt(x * x + y * y + Z * Z);
+      var s = (1 + shellAlt(r - 6371)) / r, q = j * 4;
+      d[q] = y * s; d[q + 1] = Z * s; d[q + 2] = x * s; d[q + 3] = o.col;
+    }
+    SHELL.n = os.length;
+    SHELL.ver++;
+  }
+  function mat4Inv(m) {
+    var a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3], a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7], a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11], a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15];
+    var b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12;
+    var b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+    var det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    if (!det) return null;
+    det = 1 / det;
+    return [(a11 * b11 - a12 * b10 + a13 * b09) * det, (a02 * b10 - a01 * b11 - a03 * b09) * det, (a31 * b05 - a32 * b04 + a33 * b03) * det, (a22 * b04 - a21 * b05 - a23 * b03) * det,
+      (a12 * b08 - a10 * b11 - a13 * b07) * det, (a00 * b11 - a02 * b08 + a03 * b07) * det, (a32 * b02 - a30 * b05 - a33 * b01) * det, (a20 * b05 - a22 * b02 + a23 * b01) * det,
+      (a10 * b10 - a11 * b08 + a13 * b06) * det, (a01 * b08 - a00 * b10 - a03 * b06) * det, (a30 * b04 - a31 * b02 + a33 * b00) * det, (a21 * b02 - a20 * b04 - a23 * b00) * det,
+      (a11 * b07 - a10 * b09 - a12 * b06) * det, (a00 * b09 - a01 * b07 + a02 * b06) * det, (a31 * b01 - a30 * b03 - a32 * b00) * det, (a20 * b03 - a21 * b01 + a22 * b00) * det];
+  }
+  // ตำแหน่งกล้องในพิกัดลูกโลก = จุดที่เมทริกซ์ฉายส่งไปที่ w = 0 (คอลัมน์ที่ 3 ของเมทริกซ์ผกผัน)
+  function shellCam(M) { var inv = mat4Inv(M); return inv && inv[11] ? [inv[8] / inv[11], inv[9] / inv[11], inv[10] / inv[11]] : [0, 0, 6]; }
+  function shellHidden(c, x, y, z) {
+    var dx = x - c[0], dy = y - c[1], dz = z - c[2], a = dx * dx + dy * dy + dz * dz, b = 2 * (c[0] * dx + c[1] * dy + c[2] * dz), cc = c[0] * c[0] + c[1] * c[1] + c[2] * c[2] - 1, disc = b * b - 4 * a * cc;
+    if (disc <= 0) return false;
+    var t = (-b - Math.sqrt(disc)) / (2 * a);
+    return t > 0 && t < 0.999;
+  }
+  var SH_VS = '#version 300 es\nprecision highp float;\nin vec3 a_pos;\nin float a_col;\nuniform mat4 u_m;\nuniform vec3 u_cam;\nuniform float u_size;\nuniform vec3 u_cols[6];\nout vec4 v_c;\n' +
+    'void main(){vec3 d=a_pos-u_cam;float a=dot(d,d);float b=2.0*dot(u_cam,d);float c=dot(u_cam,u_cam)-1.0;float disc=b*b-4.0*a*c;bool hid=false;' +
+    'if(disc>0.0){float t=(-b-sqrt(disc))/(2.0*a);hid=t>0.0&&t<0.999;}' +
+    'vec4 p=u_m*vec4(a_pos,1.0);p.z=0.0;gl_Position=hid?vec4(2.0,2.0,2.0,1.0):p;' +
+    'int ci=int(a_col+0.5);bool back=dot(a_pos,normalize(u_cam))<0.0;gl_PointSize=ci==5?u_size*2.4:u_size;v_c=vec4(u_cols[ci],back?0.5:0.92);}';
+  var SH_FS = '#version 300 es\nprecision mediump float;\nin vec4 v_c;\nout vec4 o;\nvoid main(){vec2 q=gl_PointCoord-0.5;float r=dot(q,q);if(r>0.25)discard;o=vec4(v_c.rgb,v_c.a*(1.0-smoothstep(0.12,0.25,r)));}';
+  function shellProgram(gl) {
+    function sh(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn('sat shell shader', gl.getShaderInfoLog(s)); return null; } return s; }
+    var vs = sh(gl.VERTEX_SHADER, SH_VS), fs = sh(gl.FRAGMENT_SHADER, SH_FS);
+    if (!vs || !fs) return null;
+    var p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return null;
+    return { p: p, aPos: gl.getAttribLocation(p, 'a_pos'), aCol: gl.getAttribLocation(p, 'a_col'), uM: gl.getUniformLocation(p, 'u_m'), uCam: gl.getUniformLocation(p, 'u_cam'),
+      uSize: gl.getUniformLocation(p, 'u_size'), uCols: gl.getUniformLocation(p, 'u_cols') };
+  }
+  function shellLayer() {
+    return { id: 'cg-sat-shell', type: 'custom', renderingMode: '3d',
+      onAdd: function (map, gl) { this.map = map; this.buf = gl.createBuffer(); this.prog = (typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext) ? shellProgram(gl) : null; this.ver = -1; },
+      onRemove: function (map, gl) { if (this.buf) gl.deleteBuffer(this.buf); if (this.prog) gl.deleteProgram(this.prog.p); },
+      render: function (gl, args) {
+        var pd = args.defaultProjectionData, P = this.prog;
+        SHELL.M = null;
+        if (!SHELL.want || !SHELL.n || !P || !pd || !pd.mainMatrix) return;
+        if (pd.projectionTransition != null && pd.projectionTransition < 0.98) return;
+        SHELL.M = pd.mainMatrix;
+        gl.useProgram(P.p);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+        if (this.ver !== SHELL.ver) { gl.bufferData(gl.ARRAY_BUFFER, SHELL.data.subarray(0, SHELL.n * 4), gl.DYNAMIC_DRAW); this.ver = SHELL.ver; }
+        gl.enableVertexAttribArray(P.aPos); gl.vertexAttribPointer(P.aPos, 3, gl.FLOAT, false, 16, 0);
+        gl.enableVertexAttribArray(P.aCol); gl.vertexAttribPointer(P.aCol, 1, gl.FLOAT, false, 16, 12);
+        gl.uniformMatrix4fv(P.uM, false, pd.mainMatrix);
+        var c = shellCam(pd.mainMatrix); SHELL.cam = c;
+        gl.uniform3f(P.uCam, c[0], c[1], c[2]);
+        gl.uniform1f(P.uSize, (window.devicePixelRatio || 1) * SHELL.size);
+        gl.uniform3fv(P.uCols, [].concat.apply([], SH_COL));
+        gl.disable(gl.DEPTH_TEST);
+        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.drawArrays(gl.POINTS, 0, SHELL.n);
+        gl.disableVertexAttribArray(P.aPos); gl.disableVertexAttribArray(P.aCol);
+      } };
+  }
+  // ป้ายชื่อดวงเด่น (ISS ไทยโชต ฯลฯ) ลอยตามจุด
+  function shellScreen(map, x, y, z) {
+    var M = SHELL.M; if (!M) return null;
+    var cx = M[0] * x + M[4] * y + M[8] * z + M[12], cy = M[1] * x + M[5] * y + M[9] * z + M[13], cw = M[3] * x + M[7] * y + M[11] * z + M[15];
+    if (cw <= 0) return null;
+    var cv = map.getCanvas();
+    return [(cx / cw + 1) / 2 * cv.clientWidth, (1 - cy / cw) / 2 * cv.clientHeight];
+  }
+  function shellLabels(v) {
+    var box = SHELL.lbl;
+    if (!SHELL.want || !SHELL.M) { if (box) box.hidden = true; return; }
+    if (!box) { box = SHELL.lbl = document.createElement('div'); box.className = 'sat-lbls'; v.map.getCanvasContainer().appendChild(box); }
+    box.hidden = false;
+    var d = SHELL.data, os = SHELL.orbs, h = '', c = SHELL.cam || [0, 0, 6];
+    for (var j = 0; j < SHELL.n; j++) {
+      if (os[j].col !== 5) continue;
+      var q = j * 4, x = d[q], y = d[q + 1], z = d[q + 2];
+      if (shellHidden(c, x, y, z)) continue;
+      var s = shellScreen(v.map, x, y, z);
+      if (!s) continue;
+      var nm = (SAT_INFO[os[j].id] || [os[j].name])[0], pm = /\(([^)]{2,14})\)/.exec(nm);
+      nm = pm && /[A-Za-z]/.test(pm[1]) ? pm[1] : nm.length > 18 ? nm.slice(0, 17) + '…' : nm;
+      h += '<span style="transform:translate(' + Math.round(s[0] + 6) + 'px,' + Math.round(s[1] - 8) + 'px)">' + esc(nm) + '</span>';
+    }
+    if (box.innerHTML !== h) box.innerHTML = h;
+  }
+  function shellPick(v, pt) {
+    if (!SHELL.want || !SHELL.M) return null;
+    var d = SHELL.data, os = SHELL.orbs, best = null, bd = 14 * 14, c = SHELL.cam || [0, 0, 6];
+    for (var j = 0; j < SHELL.n; j++) {
+      if (os[j].col !== 5) continue;
+      var q = j * 4;
+      if (shellHidden(c, d[q], d[q + 1], d[q + 2])) continue;
+      var s = shellScreen(v.map, d[q], d[q + 1], d[q + 2]);
+      if (!s) continue;
+      var dd = (s[0] - pt.x) * (s[0] - pt.x) + (s[1] - pt.y) * (s[1] - pt.y);
+      if (dd < bd) { bd = dd; best = os[j].id; }
+    }
+    return best;
+  }
+  function shellCount() { return SHELL.orbs.length || null; }
+  // ไว้ตรวจในหน้าทดสอบ: จุดบนทรงกลม (lon, lat, k = รัศมีเท่าของโลก) อยู่ตรงไหนบนจอ
+  window.cgShell = { S: SHELL, screen: function (lon, lat, k) { var a = lon * SH_DEG, b = lat * SH_DEG, v = views.chat; return v && shellScreen(v.map, Math.sin(a) * Math.cos(b) * k, Math.sin(b) * k, Math.cos(a) * Math.cos(b) * k); } };
+  function loadMegaSats() {
+    if (SHELL.mega || SHELL.megaLoading || IN_ARTIFACT) return;
+    SHELL.megaLoading = true;
+    ldJSON('sats_mega.json').then(function (j) { if (j && j.rows) { SHELL.mega = j; shellBuild(); shellCompute(Date.now()); eachView(function (v) { if (v.kind === 'chat') v.map.triggerRepaint(); }); renderOpsHud(); } })
+      .catch(function () { /* ยังไม่มีไฟล์ (รอบดึงข้อมูลถัดไปจะสร้าง) ใช้เฉพาะดวงหลัก */ })
+      .then(function () { SHELL.megaLoading = false; });
+  }
+  function updateShell(v, on) {
+    var map = v.map;
+    SHELL.want = !!on;
+    v.el.classList.toggle('sat-shell', !!on);
+    clearInterval(SHELL.timer);
+    if (!on) { if (SHELL.lbl) SHELL.lbl.hidden = true; map.triggerRepaint(); return; }
+    if (!SHELL.orbs.length || SHELL.builtFor !== WD.sats.doc) { shellBuild(); SHELL.builtFor = WD.sats.doc; }
+    loadMegaSats();
+    if (!map.getLayer('cg-sat-shell')) { try { map.addLayer(shellLayer(), topBelow(map)); } catch (e) { SHELL.want = false; return; } }
+    if (!v.shellBound) {
+      v.shellBound = true;
+      map.on('render', function () { if (SHELL.want) shellLabels(v); });
+      map.on('click', function (e) {
+        if (!SHELL.want) return;
+        var id = shellPick(v, e.point), s = id && find(WD.sats.recs, function (x) { return x.id === id; });
+        if (s) { WD.sats.sel = s.id; openSatPopup(v, s); drawSatTrack(v); }
+      });
+    }
+    shellCompute(Date.now());
+    map.triggerRepaint();
+    SHELL.timer = setInterval(function () { if (!document.hidden && SHELL.want) { shellCompute(Date.now()); map.triggerRepaint(); } }, 2000);
   }
   function satPopupText(box, s, p) {
     var info = SAT_INFO[s.id];
@@ -7098,7 +7382,7 @@
     if (id === 'quakes') return W.fc ? (W.fc.features || []).filter(function (f) { return Date.now() - f.properties.time < 86400e3; }).length : null;
     if (id === 'gdacs') return W.list ? gdacsEvents().length : null;
     if (id === 'fires') return W.grid ? W.grid.n : null;
-    if (id === 'sats') return W.recs && W.recs.length ? W.recs.length : null;
+    if (id === 'sats') return W.recs && W.recs.length ? Math.max(W.recs.length, shellCount() || 0) : null;
     if (id === 'aircraft') return W.doc ? (W.doc.ac || []).length : null;
     if (id === 'ships') return W.doc ? (W.doc.s || []).length : null;
     if (id === 'news') return W.doc ? (W.doc.items || []).length : null;
@@ -7265,13 +7549,14 @@
     if (OPS.on || IN_ARTIFACT) return;
     if (state.page !== 'chat') setPage('chat');
     OPS.on = true;
+    OPS.baseFail = false;
     OPS.prev = Object.assign({}, state.data);
     ['quakes', 'gdacs', 'fires', 'daynight', 'sats', 'aircraft', 'ships', 'news', 'cables'].forEach(function (k) { state.data[k] = true; });
     ['water', 'rain', 'fc', 'flood', 'hist', 'hazard', 'zoning', 'terrain', 'wind', 'radar', 'cloud', 'props', 'sat', 'cctv'].forEach(function (k) { state.data[k] = false; });
     OPS.satAll = WD.sats.all; WD.sats.all = true;
     OPS.theme = state.theme; OPS.globe = state.globe;
     if (state.theme !== 'dark') $('btnTheme').click();
-    else if (BASE.id !== 'auto') reloadBase(); // ห้องควบคุมใช้แผนที่มืดเสมอ
+    else reloadBase(); // ห้องควบคุมใช้ภาพโลกจริง (Blue Marble)
     if (!state.globe) $('btnGlobe').click();
     document.body.classList.add('ops');
     if ($('opsFeed')) { $('opsFeed').hidden = true; $('opsFeedBtn').setAttribute('aria-pressed', 'false'); }
@@ -7302,7 +7587,7 @@
     document.body.classList.remove('ops');
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () { /* ข้าม */ });
     if (OPS.theme && state.theme !== OPS.theme) $('btnTheme').click();
-    else if (BASE.id !== 'auto') reloadBase();
+    else reloadBase();
     if (OPS.globe === false && state.globe) $('btnGlobe').click();
     var v = views.chat;
     if (v) { opsSky(v); opsSatPaint(v.map); }
@@ -7847,7 +8132,8 @@
   var SB_FX = 'https://api.frankfurter.dev/v1/';
   function sbJSON(u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }); }
   function sbLoad() {
-    if (IN_ARTIFACT || document.hidden) return;
+    if (IN_ARTIFACT || (document.hidden && SB.once)) return;
+    SB.once = true;
     var now = Date.now(), jobs = [];
     if (!(WD.quakes && WD.quakes.fc) && now - SB.qAt > 5 * 60e3) { SB.qAt = now; jobs.push(sbJSON(SB_QUAKE).then(function (j) { SB.q = j; }, function () { /* ข้าม */ })); }
     if (now - SB.pxAt > 5 * 60e3) {
@@ -7961,6 +8247,7 @@
         v.map.once('moveend', function () { openQuakePopup(v, it.f); });
       }
     });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) sbLoad(); });
     window.addEventListener('online', sbOnline);
     window.addEventListener('offline', sbOnline);
     sbOnline();
