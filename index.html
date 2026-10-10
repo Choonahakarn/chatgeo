@@ -15,15 +15,15 @@
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="th_TH">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0A1220">
+<meta name="theme-color" content="#4F46E5">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 </head>
-<body class="cg-dark">
+<body class="cg-light">
 <!-- PAGE-START -->
 <div class="app">
   <header class="topbar">
@@ -80,27 +80,46 @@
         <div class="mapbar">
           <svg class="pin-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
           <div class="crumbs" id="crumbsChat"></div>
-          <span class="bar-div" aria-hidden="true"></span>
-          <button type="button" class="search-btn" data-open-search aria-label="ค้นหาพื้นที่" title="ค้นหาพื้นที่ (กด /)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="sb-label">ค้นหา</span><kbd>/</kbd></button>
-          <button type="button" class="search-btn near-btn" id="btnNear" aria-label="รอบตัวฉัน: ดูน้ำ ฝน พยากรณ์ และข่าวใกล้ตำแหน่งของคุณ" title="รอบตัวฉัน (ใช้ตำแหน่งในเครื่องเท่านั้น)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="sb-label">รอบตัวฉัน</span></button>
-          <button type="button" class="search-btn site-btn" id="btnSite" aria-pressed="false" aria-label="ตรวจทำเล: เลือกจุดบนแผนที่ ดูน้ำท่วมย้อนหลัง แบบจำลองน้ำท่วม ความสูง และผังเมือง" title="ตรวจทำเล (หรือคลิกขวาที่จุดใดก็ได้บนแผนที่)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h6"/><circle cx="16.5" cy="16" r="3"/><path d="M18.7 18.2 21 20.5"/></svg><span class="sb-label">ตรวจทำเล</span></button>
         </div>
-        <div class="filter-wrap">
-          <button type="button" class="filter-btn" id="btnFilter" aria-expanded="false" aria-controls="filterPop">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
-            <span class="fb-label">ชั้นข้อมูล</span>
-            <span class="fb-dots" id="filterDots" aria-hidden="true"></span>
-            <span class="fb-count" id="filterCount"></span>
+      </div>
+      <!-- แถบเครื่องมือด้านขวาของแผนที่ (แบบห้องควบคุม: ไอคอน + ป้ายสั้น) -->
+      <nav class="map-rail" aria-label="เครื่องมือแผนที่">
+        <button type="button" class="rail-btn" id="btnFilter" aria-expanded="false" aria-controls="filterPop" title="เปิด/ปิดชั้นข้อมูลบนแผนที่">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5" opacity=".55"/></svg>
+          <span class="rl">ชั้นข้อมูล</span><span class="rail-badge" id="filterCount"></span><span class="fb-dots" id="filterDots" hidden></span>
+        </button>
+        <button type="button" class="rail-btn" data-open-search aria-label="ค้นหาพื้นที่" title="ค้นหาพื้นที่ (กด /)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <span class="rl">ค้นหา</span>
+        </button>
+        <button type="button" class="rail-btn near-btn" id="btnNear" aria-label="รอบตัวฉัน: ดูน้ำ ฝน พยากรณ์ และข่าวใกล้ตำแหน่งของคุณ" title="รอบตัวฉัน (ใช้ตำแหน่งในเครื่องเท่านั้น)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          <span class="rl">รอบตัวฉัน</span>
+        </button>
+        <button type="button" class="rail-btn site-btn" id="btnSite" aria-pressed="false" aria-label="ตรวจทำเล: เลือกจุดบนแผนที่ ดูน้ำท่วมย้อนหลัง แบบจำลองน้ำท่วม ความสูง ผังเมือง และดินสำหรับเพาะปลูก" title="ตรวจทำเล (หรือคลิกขวาที่จุดใดก็ได้บนแผนที่)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h6"/><circle cx="16.5" cy="16" r="3"/><path d="M18.7 18.2 21 20.5"/></svg>
+          <span class="rl">ตรวจทำเล</span>
+        </button>
+        <span class="rail-sep" aria-hidden="true"></span>
+        <button type="button" class="rail-btn" id="btnTerrain3d" aria-pressed="false" title="ภูมิประเทศ 3 มิติ (ลากด้วยคลิกขวาหรือสองนิ้วเพื่อหมุน)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 20 6-10 4 6 3-4 5 8H3z"/><path d="M8.5 6.5 10 4l1.5 2.5"/></svg>
+          <span class="rl">3 มิติ</span>
+        </button>
+      </nav>
+      <div class="filter-pop drawer" id="filterPop" role="dialog" aria-labelledby="drTitle" hidden>
+        <div class="dr-head">
+          <b id="drTitle">ชั้นข้อมูล</b><span class="dr-n" id="drCount"></span>
+          <button type="button" class="dr-x" id="filterClose" aria-label="ปิดชั้นข้อมูล"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+        </div>
+        <div class="dr-body">
+          <div class="dr-t">มุมมองสำเร็จรูป</div>
+          <div class="dr-presets" id="presetChips" role="group" aria-label="มุมมองสำเร็จรูป"></div>
+          <div class="fp-list" id="dataChips" role="group" aria-label="ชั้นข้อมูลสาธารณะ"></div>
+          <div class="fp-head fp-sub fp-grp"><span>ข่าวบนแผนที่</span><button type="button" class="fp-all" id="fpAll">เลือกทั้งหมด</button></div>
+          <div class="fp-list" id="layerChips" role="group" aria-label="หมวดข่าว"></div>
+          <button type="button" class="fp-row fp-switch" id="btnLabels" aria-pressed="true">
+            <span>ป้ายชื่อภาษาไทยบนแผนที่</span><span class="sw" aria-hidden="true"><i></i></span>
           </button>
-          <div class="filter-pop" id="filterPop" role="dialog" aria-label="ตัวกรองแผนที่" hidden>
-            <div class="fp-head"><span>แสดงข่าวหมวด</span><button type="button" class="fp-all" id="fpAll">เลือกทั้งหมด</button></div>
-            <div class="fp-list" id="layerChips" role="group" aria-label="หมวดข่าว"></div>
-            <button type="button" class="fp-row fp-switch" id="btnLabels" aria-pressed="true">
-              <span>ป้ายชื่อภาษาไทยบนแผนที่</span><span class="sw" aria-hidden="true"><i></i></span>
-            </button>
-            <div class="fp-head fp-sub"><span>ข้อมูลสาธารณะ</span></div>
-            <div class="fp-list" id="dataChips" role="group" aria-label="ข้อมูลสาธารณะ"></div>
-          </div>
         </div>
       </div>
       <div class="ops-hud" id="opsHud" hidden>
@@ -372,12 +391,14 @@
             <li><b>เลือกพื้นที่</b> กดภาคบนแผนที่ หรือใช้แถบด้านบน (เอเชีย › อาเซียน › ไทย › ภาค) หรือกดปุ่ม <kbd>/</kbd> เพื่อค้นชื่อจังหวัด</li>
             <li><b>ซูม</b> ด้วยปุ่ม + − หรือหมุนเมาส์ ยิ่งซูมเข้า ยิ่งเห็นสถานีและรายละเอียดมาก</li>
             <li><b>กดจุดบนแผนที่</b> (สามเหลี่ยมระดับน้ำ วงกลมฝน หมุดกล้อง ปื้นน้ำ) เพื่อดูรายละเอียดและแหล่งที่มา</li>
-            <li><b>ลูกโลก</b> และ <b>ธีมมืด/สว่าง</b> อยู่มุมขวาบน</li>
+            <li><b>แถบเครื่องมือด้านขวาของแผนที่</b> ชั้นข้อมูล · ค้นหา · รอบตัวฉัน · ตรวจทำเล · ภูมิประเทศ 3 มิติ (บนมือถือเหลือแต่ไอคอน)</li>
+            <li><b>ลูกโลก</b> และ <b>ธีม</b> อยู่มุมขวาบนของหน้า (ธีมเริ่มต้นน้ำเงิน-ขาว กดเปลี่ยนเป็นน้ำเงินกรมท่าได้)</li>
           </ul>
         </section>
 
         <section id="h-layers">
-          <h3>ชั้นข้อมูล (ปุ่ม "ชั้นข้อมูล" มุมขวาบนของแผนที่)</h3>
+          <h3>ชั้นข้อมูล (ปุ่ม "ชั้นข้อมูล" บนแถบด้านขวาของแผนที่)</h3>
+          <p>แผนที่เริ่มแบบโล่ง (ข่าว น้ำจากดาวเทียม และกล้อง) ตัวเลขบนปุ่มคือจำนวนชั้นที่เปิดอยู่ ด้านบนของลิ้นชักมี <b>มุมมองสำเร็จรูป</b> กดครั้งเดียวเปิดชุดชั้นที่ใช้ด้วยกัน: ข่าว · น้ำ·ฝน · อากาศ · ที่ดิน·ทำเล · โลกตอนนี้ · ปิดทั้งหมด คำอธิบายสีของชั้นที่เปิดอยู่จะอยู่ท้ายลิ้นชัก</p>
           <dl class="help-dl">
             <dt><i class="tri" style="border-top-color:#E5484D"></i>ระดับน้ำในแม่น้ำ</dt><dd>สามเหลี่ยมสีตามระดับ แดง = ล้นตลิ่ง ส้ม = น้ำมาก เขียว = ปกติ จากสถานีวัดน้ำของ ThaiWater</dd>
             <dt><i class="cc-dot" style="background:#4FA3FF"></i>ฝนสะสม 24 ชม.</dt><dd>วงกลมยิ่งใหญ่ยิ่งตกหนัก วัดจริงจากสถานี</dd>

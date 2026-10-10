@@ -51,15 +51,17 @@
     cv.width = w; cv.height = h;
     var x = cv.getContext('2d');
     x.beginPath(); x.moveTo(3, 3); x.lineTo(w - 3, 3); x.lineTo(w / 2, h - 3); x.closePath();
-    x.lineJoin = 'round'; x.lineWidth = 4; x.strokeStyle = dark ? '#0A1220' : '#FFFFFF'; x.stroke();
+    x.lineJoin = 'round'; x.lineWidth = 4; x.strokeStyle = dark ? '#0A0F1F' : '#FFFFFF'; x.stroke();
     x.fillStyle = color; x.fill();
     return x.getImageData(0, 0, w, h);
   }
   function readDataPrefs() {
-    var d = { water: true, rain: true, fc: true, sat: false, flood: true, cctv: true, radar: true, cloud: false, wind: !reduceMotion, terrain: false, hist: false, hazard: false, zoning: false, props: false,
-      quakes: true, gdacs: true, fires: false, daynight: false, sats: false, aircraft: false, ships: false, news: false, cables: false };
+    // เริ่มแบบโล่ง (ข่าว + น้ำจากดาวเทียม + กล้อง) ให้แผนที่ไม่รก เปิดชั้นอื่นได้จากปุ่ม "ชั้นข้อมูล" หรือมุมมองสำเร็จรูป
+    // คีย์ cg-data3: ทุกคน (รวมเครื่องที่เคยเปิดหลายชั้นไว้) เริ่มที่หน้าตาแบบใหม่ครั้งเดียว
+    var d = { water: false, rain: false, fc: false, sat: false, flood: true, cctv: true, radar: false, cloud: false, wind: false, terrain: false, hist: false, hazard: false, zoning: false, props: false,
+      quakes: false, gdacs: false, fires: false, daynight: false, sats: false, aircraft: false, ships: false, news: false, cables: false };
     try {
-      var j = JSON.parse(localStorage.getItem('cg-data') || 'null');
+      var j = JSON.parse(localStorage.getItem('cg-data3') || 'null');
       if (j) Object.keys(d).forEach(function (k) { if (typeof j[k] === 'boolean') d[k] = j[k]; });
     } catch (e) { /* ไม่มี storage */ }
     return d;
@@ -73,8 +75,8 @@
   }
 
   var FB_COLORS = {
-    dark: { ocean: '#0C1829', land: '#15253B', border: '#2E4566', coast: '#22385A' },
-    light: { ocean: '#CDDAE8', land: '#F8FAFC', border: '#B4C2D4', coast: '#B9C8DA' }
+    dark: { ocean: '#070C1A', land: '#111A33', border: '#2C3963', coast: '#232D5E' },
+    light: { ocean: '#DDE3F6', land: '#FFFFFF', border: '#C7CDE6', coast: '#C3CBEA' }
   };
   var geoLoading = null;
   function ensureGeo() {
@@ -280,12 +282,12 @@
   }
 
   /* ---------- สถานะ ---------- */
+  // ธีมน้ำเงิน-ขาวเป็นค่าเริ่มต้นของทุกคน (คีย์ใหม่ cg-theme2 ค่าเดิมที่เคยเลือกไว้จึงเริ่มใหม่ครั้งเดียว) กดปุ่มสลับเป็นน้ำเงินกรมท่าได้
   function readTheme() {
-    try { var t = localStorage.getItem('cg-theme'); if (t === 'light' || t === 'dark') return t; } catch (e) { /* ไม่มี storage */ }
+    try { var t = localStorage.getItem('cg-theme2'); if (t === 'light' || t === 'dark') return t; } catch (e) { /* ไม่มี storage */ }
     var host = document.documentElement.getAttribute('data-theme');
     if (host === 'light' || host === 'dark') return host;
-    try { if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light'; } catch (e) { /* ข้าม */ }
-    return 'dark';
+    return 'light';
   }
   function readGroup() {
     try { var g = localStorage.getItem('cg-group2'); if (g === 'cat' || g === 'region') return g; } catch (e) { /* ข้าม */ }
@@ -309,8 +311,10 @@
     data: readDataPrefs(),
     channels: { line: true, email: false, app: true }
   };
+  // สีหลักของธีมน้ำเงิน-ขาว (เส้นประเทศที่เลือก ไฮไลต์) ทับค่าเดิมในไฟล์ข้อมูล
+  D.PAL.light.accent = '#4F46E5'; D.PAL.dark.accent = '#818CF8';
   function pal() { return D.PAL[state.theme]; }
-  function numInk() { return state.theme === 'light' ? '#FFFFFF' : '#0A1220'; }
+  function numInk() { return state.theme === 'light' ? '#FFFFFF' : '#0A0F1F'; }
 
   // หน้าใน claude.ai (artifact) โหลดแผนที่จากเว็บอื่นไม่ได้ จึงเริ่มด้วยแผนที่สำรองเลย
   var IN_ARTIFACT = window.CG_ENV === 'artifact';
@@ -541,14 +545,14 @@
       map.addSource('cg-thr', { type: 'geojson', data: TH.regions, promoteId: 'id', attribution: 'ขอบเขตภาคและจังหวัด: Natural Earth' });
       map.addSource('cg-thp', { type: 'geojson', data: TH.provinceLines });
       map.addLayer({ id: 'cg-thr-fill', type: 'fill', source: 'cg-thr', paint: {
-        'fill-color': dark ? '#8FB4E8' : '#2450C2',
+        'fill-color': dark ? '#A5B4FC' : '#4F46E5',
         'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], dark ? 0.14 : 0.1, dark ? 0.04 : 0.03]
       } }, before);
       map.addLayer({ id: 'cg-thp-line', type: 'line', source: 'cg-thp', minzoom: 4.2, paint: {
-        'line-color': dark ? '#9FB6D6' : '#5B6B82', 'line-opacity': state.data.sat ? 0.55 : 0.28, 'line-width': 0.6, 'line-dasharray': [2, 2]
+        'line-color': dark ? '#A5B4FC' : '#6366F1', 'line-opacity': state.data.sat ? 0.55 : 0.28, 'line-width': 0.6, 'line-dasharray': [2, 2]
       } }, before);
       map.addLayer({ id: 'cg-thr-line', type: 'line', source: 'cg-thr', paint: {
-        'line-color': dark ? '#B9CCE6' : '#4A5A70', 'line-opacity': state.data.sat ? 0.9 : 0.6,
+        'line-color': dark ? '#C7D2FE' : '#4338CA', 'line-opacity': state.data.sat ? 0.9 : 0.6,
         'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.8, 8, 1.8]
       } }, before);
     }
@@ -586,7 +590,7 @@
           9, ['interpolate', ['linear'], ['get', 'mm'], 0, 2.5, 10, 4, 35, 7, 90, 11, 150, 15]],
         'circle-sort-key': ['get', 'mm'],
         'circle-color': ['interpolate', ['linear'], ['get', 'mm'], 10, RAIN_C[0], 35, RAIN_C[1], 90, RAIN_C[2], 150, RAIN_C[3]],
-        'circle-opacity': 0.6, 'circle-stroke-color': dark ? '#0A1220' : '#FFFFFF', 'circle-stroke-width': 1
+        'circle-opacity': 0.6, 'circle-stroke-color': dark ? '#0A0F1F' : '#FFFFFF', 'circle-stroke-width': 1
       } });
       map.addSource('cg-water', { type: 'geojson', data: emptyFC(), attribution: TW_ATTR });
       // สถานีวัดน้ำเป็นสามเหลี่ยมคว่ำ แยกจากหมุดข่าวที่เป็นวงกลม
@@ -970,7 +974,7 @@
     var t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     e.preventDefault();
-    openPalette(document.querySelector(state.page === 'brief' ? '#briefMapCard [data-open-search]' : '.mapbar [data-open-search]'));
+    openPalette(document.querySelector(state.page === 'brief' ? '#briefMapCard [data-open-search]' : '.map-rail [data-open-search]'));
   });
 
   /* ---------- ตัวกรองหมวดข่าว (หน้าแชท) ---------- */
@@ -989,11 +993,17 @@
     }).join('');
     var onList = used.filter(function (l) { return state.layers[l.id]; });
     $('filterDots').innerHTML = onList.map(function (l) { return '<i style="background:' + p[l.id] + '"></i>'; }).join('');
-    var all = onList.length === used.length;
-    $('filterCount').textContent = all ? 'ทั้งหมด' : onList.length + '/' + used.length;
-    $('filterCount').classList.toggle('on', !all);
-    $('btnFilter').setAttribute('aria-label', 'หมวดข่าว ' + (all ? 'แสดงทั้งหมด' : 'แสดง ' + onList.length + ' จาก ' + used.length + ' หมวด'));
     $('btnLabels').setAttribute('aria-pressed', String(state.thaiLabels));
+    railBadge();
+  }
+  // ตัวเลขบนปุ่มชั้นข้อมูล = จำนวนชั้นที่เปิดอยู่ (ข่าวไม่นับ เพราะเปิดเสมอ)
+  function railBadge() {
+    if (!DATA_ROWS || !$('filterCount')) return;
+    var n = DATA_ROWS.filter(function (r) { return r.id && state.data[r.id]; }).length;
+    var used = usedLayers(), onN = used.filter(function (l) { return state.layers[l.id]; }).length;
+    $('filterCount').textContent = n ? String(n) : '';
+    if ($('drCount')) $('drCount').textContent = 'เปิดอยู่ ' + n + ' ชั้น' + (onN < used.length ? ' · ข่าว ' + onN + '/' + used.length + ' หมวด' : '');
+    $('btnFilter').setAttribute('aria-label', 'ชั้นข้อมูลบนแผนที่ เปิดอยู่ ' + n + ' ชั้น' + (onN < used.length ? ' ข่าวแสดง ' + onN + ' จาก ' + used.length + ' หมวด' : ''));
   }
   function setFilterOpen(open) {
     $('filterPop').hidden = !open;
@@ -1007,8 +1017,9 @@
   // ยกเว้นปุ่มที่ทำงานผ่านตัวดักระดับหน้า (เปิดหน้ากล้อง ดาวเทียมทั้งหมด ฯลฯ) ต้องให้คลิกผ่านขึ้นไปได้
   var POP_PASS = '[data-cv-open],[data-cc-wall],[data-cc-cam],[data-cc-site],[data-sat-all],[data-site-open],[data-site-layer],[data-world-fly],[data-terrain3d]';
   $('filterPop').addEventListener('click', function (e) { if (!e.target.closest(POP_PASS)) e.stopPropagation(); });
+  if ($('filterClose')) $('filterClose').addEventListener('click', function () { setFilterOpen(false); $('btnFilter').focus(); });
   document.addEventListener('click', function (e) {
-    if (!$('filterPop').hidden && e.target.isConnected && !e.target.closest('.filter-wrap')) setFilterOpen(false);
+    if (!$('filterPop').hidden && e.target.isConnected && !e.target.closest('#filterPop, #btnFilter')) setFilterOpen(false);
   });
   $('layerChips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-layer]');
@@ -2055,7 +2066,7 @@
   }
   $('btnTheme').addEventListener('click', function () {
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    try { localStorage.setItem('cg-theme', state.theme); } catch (e) { /* ไม่มี storage */ }
+    try { localStorage.setItem('cg-theme2', state.theme); } catch (e) { /* ไม่มี storage */ }
     applyThemeChrome();
     eachView(function (v) {
       v.styleLoading = true;
@@ -3716,6 +3727,7 @@
   function setTerrain3d(v, on) {
     var map = v.map;
     v.terrain3d = !!on;
+    if (v.kind === 'chat' && $('btnTerrain3d')) $('btnTerrain3d').setAttribute('aria-pressed', String(!!on));
     try {
       if (on) {
         if (!map.getSource('cg-dem')) { state.data.terrain = true; saveData(); updateTerrain(v); renderDataChips(); }
@@ -4716,7 +4728,7 @@
   function sitePadding() {
     var v = views.chat, W = v ? v.el.clientWidth : 800;
     // จอเล็ก: การ์ดอยู่ครึ่งล่างของจอ (ทับแชท) แผนที่ไม่ถูกบัง
-    return window.innerWidth <= 860 ? { top: 56, bottom: 16, left: 16, right: 16 } : { top: 60, bottom: 40, left: 40, right: Math.min(424, W * 0.5 + 12) };
+    return window.innerWidth <= 860 ? { top: 56, bottom: 16, left: 16, right: 64 } : { top: 60, bottom: 40, left: 40, right: Math.min(500, W * 0.5 + 88) };
   }
   function openSite(lon, lat, opt) {
     opt = opt || {};
@@ -4885,6 +4897,16 @@
     });
   }
   if ($('sitePickX')) $('sitePickX').addEventListener('click', function () { setSitePick(false); });
+  if ($('btnTerrain3d')) {
+    if (IN_ARTIFACT) $('btnTerrain3d').hidden = true;
+    $('btnTerrain3d').addEventListener('click', function () {
+      if (state.page !== 'chat') setPage('chat');
+      var v = views.chat;
+      if (!v) return;
+      setTerrain3d(v, !v.terrain3d);
+      if (v.terrain3d) toast('ภูมิประเทศ 3 มิติ: ลากด้วยคลิกขวาหรือสองนิ้วเพื่อหมุนและเอียง กดปุ่มเดิมอีกครั้งเพื่อกลับเป็นแผนที่แบน');
+    });
+  }
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-site-open], [data-site-layer], [data-site-ll], [data-site-close], [data-site-copy]');
     if (!t) return;
@@ -5482,7 +5504,7 @@
     if (!v) return;
     if (!state.data.sat) { state.data.sat = true; saveData(); eachView(refreshLive); renderDataChips(); }
     setTerrain3d(v, true);
-    v.map.easeTo({ center: [S.lon, S.lat], zoom: Math.max(15, Math.min(16.5, v.map.getZoom())), pitch: 64, bearing: -25, padding: sitePadding(), duration: reduceMotion ? 0 : 1200 });
+    v.map.easeTo({ center: [S.lon, S.lat], zoom: Math.max(14, Math.min(15.5, v.map.getZoom())), pitch: 64, bearing: -25, padding: sitePadding(), duration: reduceMotion ? 0 : 1200 });
     toast('ภาพดาวเทียมบนแผนที่ความสูง (ขยายความสูง 1.6 เท่า) ลากด้วยคลิกขวาหรือสองนิ้วเพื่อหมุนมุมมอง');
   }
   function setSiteTab(tab) {
@@ -6082,7 +6104,7 @@
           'circle-radius': ['interpolate', ['exponential', 1.6], ['get', 'mag'], 2.5, 2.5, 5, 7, 7, 17, 9, 30],
           'circle-color': ['step', ['get', 'ageH'], '#FF3B30', 1, '#FF7A1A', 24, '#FFB020', 72, '#E8D44D'],
           'circle-opacity': ['step', ['get', 'ageH'], 0.9, 24, 0.75, 72, 0.5],
-          'circle-stroke-color': state.theme === 'dark' ? '#0A1220' : '#FFFFFF', 'circle-stroke-width': 1
+          'circle-stroke-color': state.theme === 'dark' ? '#0A0F1F' : '#FFFFFF', 'circle-stroke-width': 1
         } }, topBelow(map));
       }
     }
@@ -6454,7 +6476,7 @@
         map.addLayer({ id: 'cg-ac', type: 'symbol', source: 'cg-ac', layout: { 'icon-image': 'cg-plane', 'icon-rotate': ['get', 'trk'], 'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true, 'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.45, 8, 0.8, 12, 1] },
           paint: { 'icon-color': ['case', ['<=', ['get', 'alt'], 0], '#9AA8BC', ['<', ['get', 'alt'], 10000], '#6EE7A8', ['<', ['get', 'alt'], 30000], '#FFD166', '#5CC8FF'],
-            'icon-halo-color': '#0A1220', 'icon-halo-width': 1 } }, topBelow(map));
+            'icon-halo-color': '#0A0F1F', 'icon-halo-width': 1 } }, topBelow(map));
       }
     }
     vis(map, ['cg-ac'], on);
@@ -6967,24 +6989,61 @@
     var n = (LIVE[r.id] || []).length;
     return r.src + (LIVE.src[r.id] ? ' · ' + (n ? n + ' จุด' : 'ดึงข้อมูลไม่ได้ตอนนี้') : ' · กำลังโหลด');
   }
+  // มุมมองสำเร็จรูป: กดครั้งเดียวเปิดชุดชั้นที่ใช้ด้วยกัน ที่เหลือปิด (แผนที่จะไม่รก)
+  var PRESETS = [
+    { id: 'news', t: 'ข่าว', on: ['flood', 'cctv'] },
+    { id: 'water', t: 'น้ำ · ฝน', on: ['water', 'rain', 'radar', 'flood', 'cctv'] },
+    { id: 'wx', t: 'อากาศ', on: ['radar', 'cloud', 'wind', 'fc'] },
+    { id: 'land', t: 'ที่ดิน · ทำเล', on: ['hist', 'hazard', 'terrain', 'zoning', 'props'] },
+    { id: 'world', t: 'โลกตอนนี้', on: ['quakes', 'gdacs', 'fires', 'daynight', 'sats', 'aircraft', 'ships', 'news', 'cables'] },
+    { id: 'none', t: 'ปิดทั้งหมด', on: [] }
+  ];
+  var LYR_C = { water: '#2563EB', rain: '#0EA5E9', radar: '#3B82F6', cloud: '#94A3B8', wind: '#38BDF8', fc: '#F59E0B', flood: '#E5484D', hist: '#7C3AED',
+    hazard: '#8052E0', cctv: '#10B981', terrain: '#A16207', zoning: '#EAB308', sat: '#16A34A', props: '#4F46E5', quakes: '#F97316', gdacs: '#EF4444',
+    fires: '#DC2626', daynight: '#64748B', sats: '#06B6D4', aircraft: '#0EA5E9', ships: '#0284C7', news: '#A855F7', cables: '#14B8A6' };
+  function presetNow() {
+    var ids = DATA_ROWS.filter(function (r) { return r.id; }).map(function (r) { return r.id; });
+    var p = find(PRESETS, function (x) { return ids.every(function (id) { return !!state.data[id] === (x.on.indexOf(id) >= 0); }); });
+    return p ? p.id : '';
+  }
+  function applyPreset(id) {
+    var P = find(PRESETS, function (x) { return x.id === id; });
+    if (!P) return;
+    DATA_ROWS.forEach(function (r) { if (r.id) state.data[r.id] = P.on.indexOf(r.id) >= 0; });
+    saveData();
+    if (views.chat && views.chat.popup) { views.chat.popup.remove(); views.chat.popup = null; }
+    eachView(refreshLive);
+    renderDataChips();
+  }
   function renderDataChips() {
     var el = $('dataChips');
     if (!el) return;
-    el.innerHTML = DATA_ROWS.map(function (r) {
-      if (r.head) return '<div class="fp-head fp-sub fp-grp"><span>' + esc(r.head) + '</span></div>';
-      var on = !!state.data[r.id];
-      var sub = dataSub(r);
-      return '<button type="button" class="fp-row fp-switch" data-data="' + r.id + '" aria-pressed="' + on + '">' +
-        '<span class="fp-two"><span>' + esc(r.name) + '</span><small>' + esc(sub) + '</small></span><span class="sw" aria-hidden="true"><i></i></span></button>';
-    }).join('') + (state.data.water ? '<div class="wl-legend" aria-label="สีระดับน้ำ">' + [5, 4, 3, 2, 1].map(function (k) {
+    var pn = presetNow();
+    if ($('presetChips')) $('presetChips').innerHTML = PRESETS.map(function (x) {
+      return '<button type="button" class="dr-preset" data-preset="' + x.id + '" aria-pressed="' + (pn === x.id) + '">' + esc(x.t) + '</button>';
+    }).join('');
+    railBadge();
+    var leg = (state.data.water ? '<div class="wl-legend" aria-label="สีระดับน้ำ">' + [5, 4, 3, 2, 1].map(function (k) {
       return '<span><i class="tri" style="border-top-color:' + WL[k].c + '"></i>' + WL[k].t + '</span>';
     }).join('') + '</div>' : '') + (state.data.rain ? '<div class="rain-legend" aria-label="สีปริมาณฝน"><span>ฝน</span><span class="sp"></span><span>10</span><i style="background:linear-gradient(90deg,' +
       RAIN_C.join(',') + ')"></i><span>150+ มม.</span></div>' : '') +
       (state.data.water || state.data.rain ? '<p class="fp-fine">ซูมออกจะเห็นเฉพาะสถานีที่น้ำผิดปกติและฝน 35 มม.ขึ้นไป ซูมเข้าเพื่อดูครบทุกสถานี</p>' : '') +
       (state.data.flood && floodReady() ? floodLegendHtml() : '') +
       (state.data.cctv && ccReady() ? ccLegendHtml() : '') + wxLegendHtml() + siteLegendHtml() + worldLegendHtml();
+    el.innerHTML = DATA_ROWS.map(function (r) {
+      if (r.head) return '<div class="fp-head fp-sub fp-grp"><span>' + esc(r.head) + '</span></div>';
+      var on = !!state.data[r.id];
+      var sub = dataSub(r);
+      return '<button type="button" class="fp-row fp-switch" data-data="' + r.id + '" aria-pressed="' + on + '">' +
+        '<i class="lyr-dot" style="background:' + (LYR_C[r.id] || '#8A93A3') + '" aria-hidden="true"></i>' +
+        '<span class="fp-two"><span>' + esc(r.name) + '</span><small>' + esc(sub) + '</small></span><span class="sw" aria-hidden="true"><i></i></span></button>';
+    }).join('') + (leg ? '<div class="fp-head fp-sub fp-grp dr-leg"><span>คำอธิบายสัญลักษณ์</span></div><div class="dr-legend">' + leg + '</div>' : '');
   }
-  function saveData() { if (OPS.on) return; try { localStorage.setItem('cg-data', JSON.stringify(state.data)); } catch (e) { /* ข้าม */ } }
+  if ($('presetChips')) $('presetChips').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-preset]');
+    if (b) applyPreset(b.getAttribute('data-preset'));
+  });
+  function saveData() { if (OPS.on) return; try { localStorage.setItem('cg-data3', JSON.stringify(state.data)); } catch (e) { /* ข้าม */ } }
   if ($('dataChips')) {
     $('dataChips').addEventListener('click', function (e) {
       var g = e.target.closest('[data-flood-prov]');

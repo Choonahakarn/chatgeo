@@ -1,51 +1,32 @@
-/* ChatGeo prototype — สีและขนาดตาม mockup
-   เลย์เอาต์: แถบบน + 2 หน้า (คุยกับโลก = แชทซ้าย/แผนที่ขวา, สรุปเช้านี้ = หน้าอ่านเต็มจอ) */
+/* ChatGeo prototype
+   เลย์เอาต์: แถบบน + 4 หน้า (คุยกับโลก = แชทซ้าย/แผนที่ขวา, สรุปเช้านี้, กล้อง, ทรัพย์)
+   ธีม: น้ำเงิน-ขาว ตามเว็บพอร์ตโฟลิโอของเจ้าของ (พื้นขาว ตัวอักษรเทาเข้ม สีหลัก indigo-600) และธีมมืดเป็นน้ำเงินกรมท่า */
 
-/* ธีมมืดเป็นค่าเริ่มต้น ธีมสว่างตามระบบ หรือปุ่มสลับในหน้า */
-:root {
-  --bg: #0A1220; --panel: #101B2C; --panel2: #15233A; --line: #1F2F47; --line2: #2A4060;
-  --ink: #E7EEF8; --ink2: #C9D5E6; --muted: #96A6BF; --faint: #7F90AA;
-  --accent: #F5C04A; --accent-ink: #F5C04A; --brand: #3D6BE8; --brand-ink: #FFFFFF;
-  --chip: #16243A; --chip-on: #1B2C46; --input: #0C1626; --overlay: rgba(10, 18, 32, 0.88);
-  --bubble: #2B5BD7; --bubble-ink: #FFFFFF; --space: #050A13; --halo: #0A1220;
-  --up: #4CC38A; --down: #FF6F61; --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #F2F4F7; --panel: #FFFFFF; --panel2: #F5F7FB; --line: #E0E6EE; --line2: #C8D2E0;
-    --ink: #13202F; --ink2: #334459; --muted: #56677E; --faint: #66768C;
-    --accent: #C27C0E; --accent-ink: #8A5600; --brand: #2450C2; --brand-ink: #FFFFFF;
-    --chip: #F0F3F8; --chip-on: #E4EAF4; --input: #F7F9FC; --overlay: rgba(255, 255, 255, 0.94);
-    --bubble: #2450C2; --bubble-ink: #FFFFFF; --space: #EEF2F7; --halo: #FFFFFF;
-    --up: #1E7F4C; --down: #C2362B; --shadow: 0 10px 30px rgba(19, 32, 47, 0.14);
-    color-scheme: light;
-  }
-}
-:root[data-theme="light"], body.cg-light {
-  --bg: #F2F4F7; --panel: #FFFFFF; --panel2: #F5F7FB; --line: #E0E6EE; --line2: #C8D2E0;
-  --ink: #13202F; --ink2: #334459; --muted: #56677E; --faint: #66768C;
-  --accent: #C27C0E; --accent-ink: #8A5600; --brand: #2450C2; --brand-ink: #FFFFFF;
-  --chip: #F0F3F8; --chip-on: #E4EAF4; --input: #F7F9FC; --overlay: rgba(255, 255, 255, 0.94);
-  --bubble: #2450C2; --bubble-ink: #FFFFFF; --space: #EEF2F7; --halo: #FFFFFF;
-  --up: #1E7F4C; --down: #C2362B; --shadow: 0 10px 30px rgba(19, 32, 47, 0.14);
+/* ธีมสว่าง (น้ำเงิน-ขาว) เป็นค่าเริ่มต้น */
+:root, :root[data-theme="light"], body.cg-light {
+  --bg: #FAFAFA; --panel: #FFFFFF; --panel2: #F8FAFF; --line: #E4E4E7; --line2: #D4D4D8;
+  --ink: #18181B; --ink2: #3F3F46; --muted: #52525B; --faint: #71717A;
+  --accent: #4F46E5; --accent-ink: #4338CA; --accent-soft: #EEF2FF; --brand: #4F46E5; --brand-ink: #FFFFFF;
+  --chip: #F4F4F5; --chip-on: #E0E7FF; --input: #FFFFFF; --overlay: rgba(255, 255, 255, 0.86);
+  --bubble: #4F46E5; --bubble-ink: #FFFFFF; --space: #EEF2FF; --halo: #FFFFFF;
+  --up: #059669; --down: #DC2626; --shadow: 0 8px 24px rgba(30, 27, 75, 0.10); --shadow-sm: 0 1px 3px rgba(30, 27, 75, 0.10);
   color-scheme: light;
 }
-/* ปุ่มสลับในหน้าเว็บชนะธีมของระบบเสมอ */
-body.cg-dark {
-  --bg: #0A1220; --panel: #101B2C; --panel2: #15233A; --line: #1F2F47; --line2: #2A4060;
-  --ink: #E7EEF8; --ink2: #C9D5E6; --muted: #96A6BF; --faint: #7F90AA;
-  --accent: #F5C04A; --accent-ink: #F5C04A; --brand: #3D6BE8; --brand-ink: #FFFFFF;
-  --chip: #16243A; --chip-on: #1B2C46; --input: #0C1626; --overlay: rgba(10, 18, 32, 0.88);
-  --bubble: #2B5BD7; --bubble-ink: #FFFFFF; --space: #050A13; --halo: #0A1220;
-  --up: #4CC38A; --down: #FF6F61; --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+/* ธีมมืด: น้ำเงินกรมท่า + ตัวอักษรขาว (ปุ่มสลับในหน้า หรือโหมดห้องควบคุม) */
+:root[data-theme="dark"], body.cg-dark {
+  --bg: #0A0F1F; --panel: #10172E; --panel2: #141C38; --line: #1F2A4A; --line2: #2C3963;
+  --ink: #EEF2FF; --ink2: #C7D2FE; --muted: #9BA6CC; --faint: #8590B8;
+  --accent: #818CF8; --accent-ink: #A5B4FC; --accent-soft: #1E2550; --brand: #6366F1; --brand-ink: #FFFFFF;
+  --chip: #151D3A; --chip-on: #232D5E; --input: #0C1328; --overlay: rgba(12, 18, 38, 0.86);
+  --bubble: #4F46E5; --bubble-ink: #FFFFFF; --space: #050913; --halo: #0A0F1F;
+  --up: #4CC38A; --down: #FF6F61; --shadow: 0 10px 30px rgba(0, 0, 0, 0.40); --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
-  font-family: 'Anuphan', 'Noto Sans Thai', 'Sukhumvit Set', 'Thonburi', system-ui, sans-serif;
+  font-family: 'Inter', 'Sarabun', 'Noto Sans Thai', 'Sukhumvit Set', 'Thonburi', system-ui, sans-serif;
   background: var(--bg); color: var(--ink); font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
@@ -864,19 +845,19 @@ body.ops .maplibregl-ctrl-bottom-right { margin-bottom: 4px; }
 .ops-top { position: absolute; left: 12px; right: 12px; top: 10px; display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 14px; border-radius: 10px;
   background: rgba(2,10,20,.72); border: 1px solid rgba(54,209,220,.35); box-shadow: 0 0 24px rgba(54,209,220,.08); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .ops-brand { display: flex; align-items: center; gap: 8px; font-family: inherit; }
-.ops-brand b { font-family: 'Anuphan', system-ui, sans-serif; font-size: 15px; letter-spacing: .02em; color: #E9FBFF; }
+.ops-brand b { font-family: 'Inter', 'Sarabun', system-ui, sans-serif; font-size: 15px; letter-spacing: .02em; color: #E9FBFF; }
 .ops-sub { font-size: 11px; color: #6FA6C0; letter-spacing: .06em; text-transform: uppercase; }
 .ops-live { width: 9px; height: 9px; border-radius: 50%; background: #FF3B30; box-shadow: 0 0 0 0 rgba(255,59,48,.7); animation: ops-pulse 1.6s infinite; }
 @keyframes ops-pulse { 70% { box-shadow: 0 0 0 8px rgba(255,59,48,0); } 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0); } }
 .ops-clock { margin-left: auto; font-size: 12.5px; color: #9CC7DB; white-space: nowrap; }
 .ops-clock b { color: #E9FBFF; font-size: 15px; font-variant-numeric: tabular-nums; }
 .ops-clock .oc-u { color: #6FA6C0; }
-.ops-x { border: 1px solid rgba(54,209,220,.45); background: transparent; color: #CFE8FF; border-radius: 8px; height: 32px; padding: 0 10px; font-family: 'Anuphan', system-ui, sans-serif; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.ops-x { border: 1px solid rgba(54,209,220,.45); background: transparent; color: #CFE8FF; border-radius: 8px; height: 32px; padding: 0 10px; font-family: 'Inter', 'Sarabun', system-ui, sans-serif; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
 .ops-x kbd { background: transparent; color: #6FA6C0; border-color: rgba(54,209,220,.35); }
 .ops-x:hover { background: rgba(54,209,220,.12); }
 .ops-stats { position: absolute; left: 12px; top: 68px; display: flex; flex-direction: column; gap: 4px; width: 214px; max-height: calc(100% - 140px); overflow-y: auto; scrollbar-width: none; }
 .ops-stat { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(54,209,220,.18); background: rgba(2,10,20,.66);
-  color: #8FB3C6; font-family: 'Anuphan', system-ui, sans-serif; font-size: 12.5px; text-align: left; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  color: #8FB3C6; font-family: 'Inter', 'Sarabun', system-ui, sans-serif; font-size: 12.5px; text-align: left; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .ops-stat .ops-lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ops-stat b { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12.5px; color: #6FA6C0; font-variant-numeric: tabular-nums; }
 .ops-stat[aria-pressed="true"] { border-color: rgba(54,209,220,.55); color: #E9FBFF; background: rgba(6,30,44,.78); }
@@ -884,21 +865,21 @@ body.ops .maplibregl-ctrl-bottom-right { margin-bottom: 4px; }
 .ops-ico { width: 18px; text-align: center; flex: 0 0 auto; font-size: 13px; }
 .ops-feed { position: absolute; right: 12px; top: 68px; width: 330px; max-height: calc(100% - 140px); display: flex; flex-direction: column; border-radius: 10px;
   background: rgba(2,10,20,.72); border: 1px solid rgba(54,209,220,.25); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); overflow: hidden; }
-.ops-feed-h { display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 14px; border-bottom: 1px solid rgba(54,209,220,.18); font-family: 'Anuphan', system-ui, sans-serif; }
+.ops-feed-h { display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 14px; border-bottom: 1px solid rgba(54,209,220,.18); font-family: 'Inter', 'Sarabun', system-ui, sans-serif; }
 .ops-feed-h b { font-size: 13.5px; color: #E9FBFF; }
 .ops-feed-h span { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #36D1DC; }
 .ops-feed-h button { margin-left: auto; border: 0; background: transparent; color: #8FB3C6; width: 28px; height: 28px; border-radius: 6px; }
 .ops-feed-list { overflow-y: auto; overscroll-behavior: contain; }
 .ops-hud.feed-min .ops-feed-list { display: none; }
 .ops-hud.feed-min .ops-feed-h button { transform: rotate(180deg); }
-.ops-ev { display: flex; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-bottom: 1px solid rgba(54,209,220,.1); background: transparent; color: #CFE8FF; text-align: left; font-family: 'Anuphan', system-ui, sans-serif; }
+.ops-ev { display: flex; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-bottom: 1px solid rgba(54,209,220,.1); background: transparent; color: #CFE8FF; text-align: left; font-family: 'Inter', 'Sarabun', system-ui, sans-serif; }
 .ops-ev:hover { background: rgba(54,209,220,.08); }
 .ops-ev.orange { box-shadow: inset 3px 0 0 #FF9500; }
 .ops-ev.red { box-shadow: inset 3px 0 0 #FF3B30; }
 .ops-ev-t { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .ops-ev-t b { font-size: 12.5px; font-weight: 600; line-height: 1.35; color: #E9FBFF; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ops-ev-t small { font-size: 11px; color: #6FA6C0; }
-.ops-empty { padding: 14px; font-size: 12.5px; color: #6FA6C0; font-family: 'Anuphan', system-ui, sans-serif; }
+.ops-empty { padding: 14px; font-size: 12.5px; color: #6FA6C0; font-family: 'Inter', 'Sarabun', system-ui, sans-serif; }
 @media (max-width: 860px) {
   body.ops .page-chat { grid-template-rows: minmax(0, 1fr); }
   .ops-top { left: 6px; right: 6px; top: 6px; gap: 8px; padding: 6px 6px 6px 10px; flex-wrap: nowrap; }
@@ -1149,7 +1130,7 @@ body.cv-fs-on .topbar { display: none; }
 .pp-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .pp-acts .btn-ghost { min-height: 34px; padding: 0 10px; font-size: 12.5px; text-decoration: none; gap: 4px; }
 .pp-del { margin-left: auto; color: var(--muted); }
-.pp-pin { --c: #8A93A3; height: 24px; padding: 0 7px; border-radius: 999px; border: 2px solid var(--c); background: var(--panel); color: var(--ink); font: 600 11.5px/1 'Anuphan', sans-serif; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.pp-pin { --c: #8A93A3; height: 24px; padding: 0 7px; border-radius: 999px; border: 2px solid var(--c); background: var(--panel); color: var(--ink); font: 600 11.5px/1 'Inter', 'Sarabun', sans-serif; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
 .pp-pin:hover { transform: scale(1.06); }
 @media (max-width: 860px) {
   .pp-side { grid-template-columns: minmax(0, 1fr); }
@@ -1178,3 +1159,103 @@ body.cv-fs-on .topbar { display: none; }
 @media (max-width: 420px) {
   .brand { display: none; }
 }
+
+/* ===================================================================
+   หน้าตาแบบใหม่: ธีมน้ำเงิน-ขาว + แผนที่แบบห้องควบคุม (แถบเครื่องมือด้านขวา ลิ้นชักชั้นข้อมูล)
+   =================================================================== */
+/* ส่วนหัวโปร่งแสงแบบพอร์ตโฟลิโอ */
+.topbar { background: var(--overlay); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.brand-name { letter-spacing: -0.02em; }
+.nav a { font-weight: 500; border-radius: 8px; }
+.nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.icon-btn { border-color: var(--line2); border-radius: 8px; background: var(--panel); }
+.icon-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.badge { border-color: var(--line2); }
+/* ปุ่มและชิปแบบพอร์ตโฟลิโอ: มุมโค้ง 8 px ขอบบาง ไม่มีเงาหนัก */
+.btn-ghost { border-radius: 8px; border-color: var(--line2); background: var(--panel); font-weight: 500; }
+.btn-ghost:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.q-chip { background: var(--panel); border-color: var(--line); color: var(--ink2); }
+.q-chip:hover { border-color: var(--accent); color: var(--accent-ink); }
+.page-cctv .q-chip[aria-pressed="true"], .cc-tabs .q-chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.send { border-radius: 10px; }
+.ask input:focus { border-color: var(--accent); }
+.panel { background: var(--panel); }
+
+/* แผนที่: กล่องลอยแบบกระจก */
+.mapwrap { background: var(--space); }
+.map-top { right: 88px; }
+.mapbar { height: 44px; padding: 0 6px 0 12px; border-color: var(--line); border-radius: 12px; box-shadow: var(--shadow-sm); max-width: min(560px, 100%); }
+.map-rail {
+  position: absolute; top: 12px; right: 12px; z-index: 6; width: 66px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--overlay); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.rail-btn {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; padding: 8px 2px 7px;
+  border: 0; border-radius: 11px; background: transparent; color: var(--muted); font-size: 10.5px; font-weight: 600; line-height: 1.15; text-align: center;
+}
+.rail-btn svg { flex: 0 0 auto; }
+.rail-btn:hover { background: var(--chip); color: var(--ink); }
+.rail-btn[aria-expanded="true"], .rail-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.rail-btn:focus-visible { outline-offset: 0; }
+.rail-badge { position: absolute; top: 3px; right: 7px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 10.5px; line-height: 17px; font-variant-numeric: tabular-nums; }
+.rail-badge:empty { display: none; }
+.rail-sep { height: 1px; background: var(--line); margin: 3px 8px; }
+
+/* ลิ้นชักชั้นข้อมูล */
+.filter-pop.drawer {
+  position: absolute; top: 12px; right: 90px; bottom: 12px; left: auto; width: 344px; max-height: none; z-index: 12;
+  display: flex; flex-direction: column; padding: 0; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow);
+}
+.filter-pop.drawer[hidden] { display: none; }
+.dr-head { display: flex; align-items: center; gap: 10px; padding: 12px 10px 10px 16px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.dr-head b { font-size: 15px; }
+.dr-n { font-size: 12px; color: var(--muted); margin-right: auto; }
+.dr-x { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+.dr-x:hover { background: var(--chip); color: var(--ink); }
+.dr-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 8px 16px; }
+.dr-t { padding: 2px 8px 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--faint); }
+.dr-presets { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 12px; }
+.dr-preset { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line2); background: var(--panel); color: var(--ink2); font-size: 12.5px; font-weight: 600; }
+.dr-preset:hover { border-color: var(--accent); color: var(--accent-ink); }
+.dr-preset[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.drawer .fp-grp { margin-top: 6px; padding: 12px 8px 4px; border-top: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--faint); }
+.drawer .fp-row { gap: 10px; border-radius: 10px; }
+.drawer .fp-row:hover { background: var(--chip); }
+.drawer .fp-list .fp-switch { min-height: 48px; }
+.lyr-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.drawer .fp-row[aria-pressed="false"] .lyr-dot { opacity: .45; }
+.drawer .fp-two { flex: 1; }
+.drawer .fp-two > span { font-weight: 600; color: var(--ink); }
+.drawer .fp-row[aria-pressed="false"] .fp-two > span { font-weight: 500; color: var(--ink2); }
+.drawer .fp-switch[aria-pressed="true"] .sw { background: var(--accent); }
+.drawer .fp-row[aria-pressed="true"] .box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.drawer #btnLabels { margin: 4px 0 0; border-top: 0; border-radius: 10px; min-height: 46px; padding: 0 10px; }
+.dr-legend { padding: 2px 0 4px; }
+.dr-legend .fl-legend:first-child { border-top: 0; margin-top: 0; }
+
+/* มุมซ้ายล่าง: แถบเวลาเรดาร์และป้ายอายุภาพ เป็นกระจกเดียวกัน */
+.wx-bar, .fl-age { background: var(--overlay); border-color: var(--line); box-shadow: var(--shadow-sm); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.wx-play:hover { background: var(--accent); color: #fff; }
+.wx-wind-note { right: 60px; }
+.maplibregl-ctrl-group { border-color: var(--line) !important; border-radius: 12px !important; overflow: hidden; box-shadow: var(--shadow-sm) !important; }
+.site-card { right: 90px; top: 12px; border-color: var(--line); border-radius: 16px; max-height: calc(100% - 100px); }
+.pin-card { border-color: var(--line); border-radius: 16px; }
+.cg-popup .maplibregl-popup-content { border-radius: 14px; }
+body.ops .map-rail, body.ops .filter-pop.drawer { display: none !important; }
+
+@media (max-width: 860px) {
+  .map-top { left: 8px; right: 62px; top: 8px; }
+  .mapbar { height: 40px; }
+  .map-rail { top: 8px; right: 8px; width: 46px; padding: 4px; border-radius: 14px; gap: 0; }
+  .rail-btn { padding: 8px 0; border-radius: 10px; }
+  .rail-btn .rl { display: none; }
+  .rail-badge { top: 1px; right: 1px; }
+  .rail-sep { margin: 2px 6px; }
+  .filter-pop.drawer { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 74dvh; z-index: 40; border-radius: 18px 18px 0 0; border-bottom: 0; }
+  .site-card { right: 0; top: auto; }
+  .wx-wind-note { right: 56px; }
+}
+.cv-side > * { flex-shrink: 0; }
+.rail-badge { top: 2px; right: 5px; }
