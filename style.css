@@ -55,7 +55,7 @@ h1, h2, h3 { text-wrap: balance; }
 .nav a:hover { background: var(--chip); color: var(--ink); }
 .nav a[aria-current="page"] { background: var(--chip-on); color: var(--ink); font-weight: 600; }
 .badge { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--accent-ink); border: 1px solid var(--line2); border-radius: 999px; padding: 4px 10px; white-space: nowrap; margin-left: auto; }
-.top-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.top-actions { display: flex; gap: 6px; flex: 0 0 auto; margin-left: auto; }
 .icon-btn {
   display: inline-flex; align-items: center; gap: 6px; min-width: 44px; height: 42px; padding: 0 12px; justify-content: center;
   background: transparent; border: 1px solid var(--line2); border-radius: 10px; color: var(--ink2); font-size: 13.5px;
