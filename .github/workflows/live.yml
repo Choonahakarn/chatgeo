@@ -1,0 +1,68 @@
+# ข้อมูลสดสำหรับโหมดห้องควบคุม: ทุก 20 นาที ดึงจุดความร้อน เครื่องบิน เรือ หัวข่าว (และดาวเทียมทุก 12 ชม. สายเคเบิลทุก 7 วัน)
+# เก็บใน branch "live-data" (commit เดียว เขียนทับทุกครั้ง) หน้าเว็บอ่านจาก raw.githubusercontent.com/<repo>/live-data/*.json
+# เรือต้องมีคีย์ฟรีจาก aisstream.io ใส่ไว้ที่ Settings → Secrets and variables → Actions → New repository secret ชื่อ AISSTREAM_KEY
+# ถ้าไม่มีคีย์ งานเรือจะข้ามไปเฉยๆ งานอื่นทำงานตามปกติ
+# กดรันเองได้ที่แท็บ Actions → "ข้อมูลสด (ห้องควบคุม)" → Run workflow
+name: ข้อมูลสด (ห้องควบคุม)
+
+on:
+  schedule:
+    - cron: '7,27,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'เฉพาะงาน เช่น news,fires (เว้นว่าง = ทุกงานตามรอบ) งานที่มี: fires aircraft ships news sats cables'
+        required: false
+        default: ''
+      force:
+        description: 'ทำงานรายวัน/รายสัปดาห์ (ดาวเทียม สายเคเบิล) ทันทีไม่รอรอบ'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATA: /tmp/live-data
+      ONLY: ${{ inputs.only }}
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      AISSTREAM_KEY: ${{ secrets.AISSTREAM_KEY }}
+      REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: ดึงข้อมูลเดิม (branch live-data)
+        run: |
+          git clone -q --depth 1 --branch live-data "$REMOTE" "$DATA" 2>/dev/null || {
+            echo "ยังไม่มี branch live-data จะสร้างใหม่"
+            mkdir -p "$DATA" && git -C "$DATA" init -q -b live-data
+          }
+
+      - name: ติดตั้งไลบรารีเรือ (เฉพาะเมื่อมีคีย์)
+        if: env.AISSTREAM_KEY != ''
+        run: pip install -q 'websockets==13.1'
+
+      - name: ดึงข้อมูลสด
+        run: python scripts/live_feeds.py --out "$DATA" --only "$ONLY" $FORCE
+
+      - name: เก็บลง branch live-data
+        run: |
+          cd "$DATA"
+          git config user.name "ChatGeo bot"
+          git config user.email "chatgeo-bot@users.noreply.github.com"
+          git checkout -q --orphan snapshot
+          git add -A
+          git commit -q -m "ข้อมูลสด $(TZ=Asia/Bangkok date '+%Y-%m-%d %H:%M')"
+          git push -q -f "$REMOTE" snapshot:live-data

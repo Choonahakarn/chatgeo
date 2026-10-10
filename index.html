@@ -32,11 +32,17 @@
       <span class="brand-name">ChatGeo</span>
     </a>
     <nav class="nav" aria-label="เมนูหลัก">
-      <a href="#" id="navChat" data-page="chat" aria-current="page">คุยกับโลก</a>
-      <a href="#brief" id="navBrief" data-page="brief">สรุปเช้านี้</a>
+      <a href="#" id="navChat" data-page="chat" aria-current="page"><span class="nl">คุยกับโลก</span><span class="ns" aria-hidden="true">แชท</span></a>
+      <a href="#brief" id="navBrief" data-page="brief"><span class="nl">สรุปเช้านี้</span><span class="ns" aria-hidden="true">สรุป</span></a>
+      <a href="#cctv" id="navCctv" data-page="cctv" aria-current="false">กล้อง</a>
+      <a href="#props" id="navPp" data-page="props" aria-current="false">ทรัพย์</a>
     </nav>
     <span class="badge" id="badgeText">ต้นแบบ</span>
     <div class="top-actions">
+      <button type="button" id="btnOps" class="icon-btn ops-btn" aria-pressed="false" title="ห้องควบคุม: ลูกโลกเต็มจอ แผ่นดินไหว พายุ ไฟป่า ดาวเทียม เครื่องบิน เรือ ข่าวทั่วโลก">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6-6"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+        <span class="help-text">ห้องควบคุม</span>
+      </button>
       <button type="button" id="btnHelp" class="icon-btn" title="วิธีใช้งานเว็บนี้" aria-haspopup="dialog">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 3.9"/><path d="M12 17h.01"/></svg>
         <span class="help-text">วิธีใช้</span>
@@ -97,14 +103,36 @@
           </div>
         </div>
       </div>
+      <div class="ops-hud" id="opsHud" hidden>
+        <div class="ops-top">
+          <div class="ops-brand"><span class="ops-live" aria-hidden="true"></span><b>ห้องควบคุม</b><span class="ops-sub">ChatGeo · โลกตอนนี้</span></div>
+          <div class="ops-clock" id="opsClock" aria-live="off"></div>
+          <button type="button" class="ops-x" id="opsExit">ออก <kbd>Esc</kbd></button>
+        </div>
+        <div class="ops-stats" id="opsStats" role="group" aria-label="ชั้นข้อมูลห้องควบคุม"></div>
+        <aside class="ops-feed" aria-label="เหตุการณ์ล่าสุด">
+          <div class="ops-feed-h"><b>เหตุการณ์ล่าสุด</b><span id="opsFeedN"></span><button type="button" id="opsFeedT" aria-label="ย่อหรือขยายรายการ">▾</button></div>
+          <div class="ops-feed-list" id="opsFeedList"></div>
+        </aside>
+      </div>
       <div class="site-pick" id="sitePick" hidden role="status"><span id="sitePickText">แตะจุดบนแผนที่ที่อยากตรวจทำเล</span><button type="button" class="btn-ghost" id="sitePickX">ยกเลิก</button></div>
       <section class="site-card" id="siteCard" hidden aria-labelledby="siteTitle">
         <div class="site-head">
-          <div class="site-hd"><div class="site-kicker">ตรวจทำเล · ทดลอง</div><h2 id="siteTitle"></h2><div class="site-sub" id="siteSub"></div></div>
+          <div class="site-hd"><div class="site-kicker" id="siteKicker">ตรวจทำเล · ทดลอง</div><h2 id="siteTitle"></h2><div class="site-sub" id="siteSub"></div></div>
           <button type="button" class="pin-x" data-site-close aria-label="ปิดรายงานทำเล"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
         </div>
-        <div class="site-body" id="siteBody"></div>
+        <div class="site-tabs" role="tablist" aria-label="มุมมองรายงาน">
+          <button type="button" role="tab" id="siteTabRisk" data-site-tab="risk" aria-selected="true" aria-controls="siteBody">ทำเล · น้ำท่วม</button>
+          <button type="button" role="tab" id="siteTabTwin" data-site-tab="twin" aria-selected="false" aria-controls="siteBody" tabindex="-1">ดิน · เพาะปลูก <span class="site-tab-tag">Digital Twin</span></button>
+        </div>
+        <div class="site-body" id="siteBody" role="tabpanel" aria-labelledby="siteTabRisk"></div>
       </section>
+      <div class="site-pick parcel-bar" id="parcelBar" hidden role="status">
+        <span id="parcelText"></span>
+        <button type="button" class="btn-ghost" id="parcelUndo">ย้อน</button>
+        <button type="button" class="btn-ghost parcel-done" id="parcelDone">เสร็จ</button>
+        <button type="button" class="btn-ghost" id="parcelX">ยกเลิก</button>
+      </div>
       <div class="pin-card" id="pinCard" hidden>
         <button type="button" class="pin-x" id="pinClose" aria-label="ปิด">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
@@ -203,6 +231,98 @@
     </div>
   </main>
 
+  <!-- หน้า 3: กล้อง CCTV (จอรวมเต็มหน้า) -->
+  <main class="page-cctv" id="pageCctv" data-size="m" hidden>
+    <aside class="cv-side" aria-label="เลือกกล้อง">
+      <label class="cv-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="cvQ" type="search" placeholder="ค้นชื่อกล้อง สะพาน เขื่อน จังหวัด" autocomplete="off" spellcheck="false" aria-label="ค้นหากล้อง">
+      </label>
+      <div class="cv-views" id="cvViews" role="group" aria-label="มุมมอง"></div>
+      <select id="cvSel" class="cv-sel" aria-label="เลือกพื้นที่"></select>
+      <div class="cv-kinds" id="cvKinds" role="group" aria-label="ประเภทกล้อง"></div>
+      <nav class="cv-tree" id="cvTree" aria-label="พื้นที่"></nav>
+      <p class="cv-side-note">ป้ายสีคือผล AI รอบล่าสุด (ทุกชั่วโมง) ดูแค่สภาพน้ำ ถนน อากาศ ไม่จดจำใบหน้า ไม่อ่านทะเบียน กดภาพเพื่อดูรายละเอียดและย้อนหลัง 48 ชม.</p>
+    </aside>
+    <section class="cv-main" id="cvScroll" aria-labelledby="cvTitle">
+      <div class="cv-top">
+        <div class="cv-head">
+          <h1 id="cvTitle">กล้อง CCTV สด <span class="cv-tag">AI ดูน้ำ · ทดลอง</span></h1>
+          <span class="cv-clock" id="cvClock"></span>
+        </div>
+        <div class="cv-stats" id="cvStats"></div>
+        <div class="cv-tools">
+          <div class="seg cv-size" id="cvSize" role="group" aria-label="ขนาดภาพ"></div>
+          <button type="button" class="btn-ghost" id="cvRefresh" title="โหลดภาพใหม่ทันที (ปกติรีเฟรชเองทุก 2 นาที)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+            <span class="cv-bt">รีเฟรช</span> <span class="cv-count" id="cvCount"></span>
+          </button>
+          <button type="button" class="btn-ghost" id="cvMap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+            <span class="cv-bt">ดูบนแผนที่</span>
+          </button>
+          <button type="button" class="btn-ghost" id="cvFull" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+            <span class="cv-bt" id="cvFullT">เต็มจอ</span>
+          </button>
+        </div>
+      </div>
+      <div class="cv-body" id="cvBody"></div>
+      <footer class="cv-foot" id="cvFoot"></footer>
+    </section>
+  </main>
+
+  <!-- หน้า 4: ทรัพย์ (วางรายการเอง ตรวจทำเลทีละหลายแปลง) -->
+  <main class="page-cctv page-pp" id="pagePp" data-size="m" hidden>
+    <aside class="cv-side pp-side" aria-label="กรองทรัพย์">
+      <label class="cv-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="ppQ" type="search" placeholder="ค้นชื่อ จังหวัด หมายเหตุ" autocomplete="off" spellcheck="false" aria-label="ค้นทรัพย์">
+      </label>
+      <div class="pp-fl"><span class="cv-lbl">ประเภท</span><div class="cv-views" id="ppTypes" role="group" aria-label="ประเภททรัพย์"></div></div>
+      <button type="button" class="btn-ghost pp-filt" id="ppFilt" aria-expanded="false" aria-controls="ppMore">ตัวกรองเพิ่มเติม</button>
+      <div class="pp-more" id="ppMore">
+      <div class="pp-fl"><span class="cv-lbl">สัญญาณน้ำท่วม</span><div class="cv-views" id="ppFloods" role="group" aria-label="สัญญาณน้ำท่วม"></div></div>
+      <div class="pp-fl"><span class="cv-lbl">จังหวัด</span><select id="ppProv" class="pp-sel" aria-label="จังหวัด"></select></div>
+      <div class="pp-fl"><span class="cv-lbl">ราคา (ล้านบาท)</span><div class="pp-range"><input id="ppMin" type="text" inputmode="decimal" placeholder="ต่ำสุด" aria-label="ราคาต่ำสุด ล้านบาท"><span>–</span><input id="ppMax" type="text" inputmode="decimal" placeholder="สูงสุด" aria-label="ราคาสูงสุด ล้านบาท"></div></div>
+      </div>
+      <div class="pp-fl"><span class="cv-lbl">เรียงตาม</span><select id="ppSort" class="pp-sel" aria-label="เรียงตาม"></select></div>
+      <p class="cv-side-note">รายการเก็บในเบราว์เซอร์นี้เท่านั้น ไม่ได้ส่งไปที่ไหน ชื่อบุคคล (จำเลย โจทก์ เจ้าของ) ถูกตัดออกตั้งแต่ตอนอ่าน ผลตรวจทำเลเป็นการคัดกรองเบื้องต้นจากข้อมูลเปิด ไม่ใช่คำแนะนำการลงทุน</p>
+    </aside>
+    <section class="cv-main" id="ppScroll" aria-labelledby="ppTitle">
+      <div class="cv-top">
+        <div class="cv-head"><h1 id="ppTitle">ค้นทรัพย์ <span class="cv-tag">ตรวจทำเลทีละหลายแปลง</span></h1></div>
+        <div class="cv-stats" id="ppStats"></div>
+        <div class="cv-tools">
+          <button type="button" class="btn-ghost pp-run" id="ppRun" hidden><span id="ppRunT">ตรวจทำเล</span></button>
+          <button type="button" class="btn-ghost" id="ppMap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+            <span class="cv-bt">ดูบนแผนที่</span>
+          </button>
+          <button type="button" class="btn-ghost" id="ppCsv" title="ดาวน์โหลดรายการพร้อมผลตรวจทำเลเป็นไฟล์ CSV (เปิดใน Excel หรือ Google Sheets ได้)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+            <span class="cv-bt">ส่งออก CSV</span>
+          </button>
+        </div>
+      </div>
+      <div class="cv-body">
+        <details class="pp-import" id="ppImport">
+          <summary>เพิ่มทรัพย์ (วางรายการหรือเลือกไฟล์)</summary>
+          <p class="pp-help">หนึ่งบรรทัดต่อหนึ่งทรัพย์ ใส่ <b>พิกัด</b> (เช่น 14.4100, 100.5800) หรือ <b>ลิงก์ Google Maps แบบเต็ม</b> ราคา ขนาด (ไร่-งาน-วา หรือ ตร.ว.) ประเภท และวันขายได้ตามสะดวก คัดลอกจากตาราง Google Sheets/Excel ทั้งตารางพร้อมหัวคอลัมน์ก็ได้ ค้นทรัพย์ขายทอดตลาดได้ที่ <a href="https://asset.led.go.th/newbidreg/" target="_blank" rel="noopener">เว็บกรมบังคับคดี</a> แล้วคัดลอกพิกัดของทรัพย์มาวาง</p>
+          <textarea id="ppText" rows="5" spellcheck="false" placeholder="ที่ดินเปล่า 2 ไร่ 1 งาน | 14.4100, 100.5800 | ราคา 3,200,000 บาท | ขาย 24 ต.ค. 2569&#10;บ้านเดี่ยว 60 ตร.วา https://www.google.com/maps/@13.9930,100.6100,17z 2.1 ล้านบาท"></textarea>
+          <div class="pp-iacts">
+            <button type="button" class="btn-ghost pp-add" id="ppAdd">เพิ่มและตรวจทำเล</button>
+            <label class="btn-ghost pp-file">เลือกไฟล์ CSV<input id="ppFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain"></label>
+            <button type="button" class="btn-ghost" id="ppSample">ลองด้วยรายการตัวอย่าง</button>
+            <button type="button" class="btn-ghost pp-clear" id="ppClear">ลบทั้งหมด</button>
+          </div>
+        </details>
+        <div id="ppBody"></div>
+      </div>
+      <footer class="cv-foot">ผลตรวจทำเลใช้ข้อมูลชุดเดียวกับการ์ด "ตรวจทำเล": น้ำในอดีตจาก JRC Global Surface Water · แบบจำลองน้ำท่วมใหญ่ JRC GloFAS (CC BY 4.0) · ความสูงจาก Terrain Tiles · ChatGeo ไม่ได้เก็บหรือคัดลอกประกาศขายทรัพย์ของหน่วยงานใด ข้อมูลในรายการมาจากผู้ใช้เอง</footer>
+    </section>
+  </main>
+
   <div class="palette" id="palette" hidden>
     <div class="pal-backdrop" data-close></div>
     <div class="pal-dialog" role="dialog" aria-modal="true" aria-labelledby="palTitle">
@@ -237,7 +357,7 @@
       </div>
       <div class="cc-body help-body">
         <nav class="help-toc" aria-label="หัวข้อ">
-          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
+          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-twin">วิเคราะห์ที่ดิน</a><a href="#h-ops">ห้องควบคุม</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-cctv">หน้ากล้อง</a><a href="#h-props">หน้าทรัพย์</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
         </nav>
 
         <section id="h-start">
@@ -271,6 +391,14 @@
             <dt><i class="sq" style="background:#FFE15A"></i>ร่างผังเมืองรวม (ทดลอง)</dt><dd>สีผังเมืองจากเซิร์ฟเวอร์ของกรมโยธาธิการและผังเมือง ซูมถึงระดับอำเภอจึงจะเห็น เหลือง = ที่อยู่อาศัยหนาแน่นน้อย ส้ม = ปานกลาง น้ำตาล = มาก แดง = พาณิชยกรรม ม่วง = อุตสาหกรรม เขียว = เกษตรกรรม ตอนนี้หน่วยงานเปิดให้ดูผ่านเว็บอื่นได้เฉพาะ<b>ร่างผังที่กำลังรับฟังความเห็นของเพชรบุรีและสระบุรี</b> จังหวัดอื่นใช้ลิงก์ระบบตรวจสอบผังเมืองในการ์ดตรวจทำเล ใช้อ้างอิงทางกฎหมายไม่ได้</dd>
             <dt><i class="cc-dot" style="background:#9AA8BC"></i>ความสูงพื้นดิน</dt><dd>เปิดแล้วกดจุดใดก็ได้ จะบอกความสูงจากระดับน้ำทะเล และบอกว่าเป็นที่ลุ่มหรือที่ดอนเมื่อเทียบกับรอบๆ 1 กม. ดูแบบ 3 มิติได้จากป๊อปอัป</dd>
             <dt><i class="cc-dot" style="background:#3A6B4C"></i>ภาพดาวเทียม</dt><dd>ภาพพื้นผิวโลกจริงเป็นพื้นหลัง</dd>
+            <dt><i class="cc-dot" style="background:#FF3B30"></i>แผ่นดินไหวทั่วโลก</dt><dd>ขนาด 2.5 ขึ้นไปใน 7 วัน (USGS) วงใหญ่ = แรง สีแดง = เพิ่งเกิด เหลือง = หลายวันแล้ว</dd>
+            <dt><i class="cc-dot" style="background:#FF9500"></i>พายุ น้ำท่วม ภูเขาไฟ</dt><dd>เหตุภัยพิบัติทั่วโลกจาก GDACS ขอบสีบอกระดับผลกระทบ (เขียว ส้ม แดง) กดพายุเพื่อดูเส้นทาง</dd>
+            <dt><i class="cc-dot" style="background:#FF7A1A"></i>จุดความร้อน/ไฟป่า</dt><dd>จุดที่ดาวเทียม NOAA-20 เห็นความร้อนผิดปกติใน 24 ชม. ซูมออกเป็นกลุ่ม ซูมเข้าแถบเอเชียตะวันออกเฉียงใต้เห็นรายจุด อาจเป็นไฟป่า การเผาในไร่ หรือโรงงาน</dd>
+            <dt><i class="cc-dot" style="background:#02081A"></i>กลางวัน/กลางคืน</dt><dd>ส่วนที่มืดคือกลางคืน วงเหลืองคือจุดที่ดวงอาทิตย์อยู่ตรงหัว อัปเดตทุกนาที</dd>
+            <dt><i class="cc-dot" style="background:#7FD4FF"></i>ดาวเทียม</dt><dd>ตำแหน่งคำนวณสดทุกวินาที ป้ายสีทองคือดาวเทียมของไทย กดเพื่อดูเส้นทาง 90 นาทีข้างหน้า เปิด "แสดงดาวเทียมทั้งหมด" ในเมนูได้</dd>
+            <dt><i class="cc-dot" style="background:#5CC8FF"></i>เครื่องบิน และ เรือ</dt><dd>ภาพตำแหน่งทุกราว 20 นาที (ไม่ใช่สด) เครื่องบินรอบไทยและเพื่อนบ้าน เรือทั่วโลก</dd>
+            <dt><i class="cc-dot" style="background:#B07CFF"></i>ข่าวล่าสุดบนแผนที่</dt><dd>หัวข่าว 48 ชม. จาก Bangkok Post, BBC, DW ปักตามจังหวัดหรือประเทศที่ข่าวพูดถึง กดเพื่ออ่านข่าวต้นฉบับ</dd>
+            <dt><i class="cc-dot" style="background:#36D1DC"></i>สายเคเบิลใต้ทะเล</dt><dd>แนวสายอินเทอร์เน็ตใต้ทะเลจาก OpenStreetMap อาจไม่ครบทุกเส้น</dd>
           </dl>
         </section>
 
@@ -289,6 +417,30 @@
           <p>ข้อควรรู้: ดาวเทียมมองไม่เห็นน้ำท่วมขังในเมืองจากฝนหนัก และแบบจำลองไม่รวมคันกั้นน้ำ "ไม่พบสัญญาณ" จึงไม่ได้แปลว่าไม่เคยท่วม ผลนี้ใช้คัดกรองเบื้องต้น ไม่ใช่คำแนะนำการลงทุน ควรดูหน้างานหลังฝนหนัก ถามคนในพื้นที่ และตรวจเอกสารกับหน่วยงาน ChatGeo ไม่ได้คัดลอกประกาศขายทอดตลาดมาเก็บ ให้ค้นทรัพย์ที่เว็บกรมบังคับคดี แล้วนำพิกัดมาตรวจที่นี่</p>
         </section>
 
+        <section id="h-twin">
+          <h3>วิเคราะห์ที่ดิน (Digital Twin) · ที่ดินนี้ปลูกอะไรได้</h3>
+          <p>เหมือนสร้างฝาแฝดของแปลงที่ดินไว้ในคอมพิวเตอร์ เปิดรายงานตรวจทำเลของจุดไหนก็ได้ แล้วกดแท็บ <b>ดิน · เพาะปลูก</b> (หรือถามแชท เช่น "ที่ดิน 14.30, 100.40 ปลูกอะไรดี" ลิงก์ <kbd>#twin=ละติจูด,ลองจิจูด</kbd>)</p>
+          <ul>
+            <li><b>ภาพตัดชั้นดินลึก 2 เมตร</b> เนื้อดิน pH อินทรียวัตถุ จากแบบจำลองดินโลก SoilGrids (ใช้เวลาโหลดราว 10–20 วินาที)</li>
+            <li><b>ฝนและอุณหภูมิรายเดือน</b> ค่าเฉลี่ยหลายสิบปีจาก NASA POWER บอกจำนวนเดือนแล้ง</li>
+            <li><b>ความลาดชัน การระบายน้ำ และน้ำท่วม</b> จากแผนที่ความสูงและรายงานทำเล</li>
+            <li><b>ความเหมาะกับพืช 8 ชนิด</b> ข้าว มันสำปะหลัง อ้อย ข้าวโพด ยางพารา ปาล์มน้ำมัน ทุเรียน มะม่วง กดชื่อพืชเพื่อดูทีละปัจจัยว่าอะไรเป็นข้อจำกัด</li>
+            <li><b>วาดขอบเขตแปลง</b> แตะมุมแปลงบนแผนที่ทีละจุด ได้เนื้อที่เป็นไร่-งาน-ตารางวา ใส่ราคาเพื่อคิดราคาต่อไร่ และกด <b>ดูภูมิประเทศ 3 มิติ</b></li>
+          </ul>
+          <p>ข้อควรรู้: ค่าดินมาจากแบบจำลองความละเอียด 250 ม. อาจต่างจากดินจริงในแปลงมาก ใช้คัดกรองก่อนไปดูที่ ก่อนซื้อหรือลงทุนควรเก็บตัวอย่างดินส่งตรวจที่สถานีพัฒนาที่ดินจังหวัด เนื้อที่จากแผนที่ไม่ใช่การรังวัด ให้ดูในโฉนดหรือ LandsMaps</p>
+        </section>
+
+        <section id="h-ops">
+          <h3>ห้องควบคุม · ดูทั้งโลกในจอเดียว</h3>
+          <p>กดปุ่ม <b>ห้องควบคุม</b> มุมขวาบน (หรือลิงก์ <kbd>#ops</kbd>) แผนที่จะเป็นลูกโลกมืดเต็มจอ หมุนช้าๆ เอง</p>
+          <ul>
+            <li><b>แถบซ้าย</b> ตัวเลขของแต่ละชั้น เช่น แผ่นดินไหว 24 ชม. จุดความร้อน เครื่องบิน เรือ กดเพื่อเปิดหรือปิดชั้นนั้น</li>
+            <li><b>แถบขวา</b> เหตุการณ์ล่าสุดทั่วโลก (แผ่นดินไหวแรงหรือใกล้ไทย พายุ ภัยพิบัติระดับส้ม/แดง ข่าว) กดเพื่อบินไปดู</li>
+            <li>นาฬิกาเวลาไทยและ UTC เดินตลอด ข้อมูลรีเฟรชเองทุกนาที</li>
+            <li>กด <kbd>Esc</kbd> หรือปุ่ม <b>ออก</b> เพื่อกลับ ชั้นข้อมูลจะกลับเป็นแบบเดิม</li>
+          </ul>
+        </section>
+
         <section id="h-chat">
           <h3>ถามแชท (กดตัวอย่างเพื่อลองถามได้เลย)</h3>
           <div class="help-qs">
@@ -302,6 +454,10 @@
             <button type="button" class="q-chip" data-help-q="ความสูงพื้นดิน">ความสูงพื้นดิน</button>
             <button type="button" class="q-chip" data-help-q="ตรวจทำเล 13.9100, 100.4000">ตรวจทำเล 13.9100, 100.4000</button>
             <button type="button" class="q-chip" data-help-q="ที่ดินแถวรังสิต น้ำเคยท่วมไหม">ที่ดินแถวรังสิต น้ำเคยท่วมไหม</button>
+            <button type="button" class="q-chip" data-help-q="แผ่นดินไหวล่าสุด">แผ่นดินไหวล่าสุด</button>
+            <button type="button" class="q-chip" data-help-q="พายุตอนนี้มีที่ไหนบ้าง">พายุตอนนี้มีที่ไหนบ้าง</button>
+            <button type="button" class="q-chip" data-help-q="ISS ผ่านหัวคืนนี้ไหม">ISS ผ่านหัวคืนนี้ไหม</button>
+            <button type="button" class="q-chip" data-help-q="ห้องควบคุม">ห้องควบคุม</button>
             <button type="button" class="q-chip" data-help-q="ข่าวเศรษฐกิจและตลาดล่าสุด">ข่าวเศรษฐกิจและตลาดล่าสุด</button>
           </div>
           <p>แชทตอบจากข้อมูลที่บันทึกไว้จริงเท่านั้น (ข่าวเช้านี้ สถานี ดาวเทียม กล้อง) และบอกเวลาของข้อมูลทุกครั้ง ถ้าไม่มีข้อมูลจะบอกตรงๆ</p>
@@ -310,6 +466,30 @@
         <section id="h-brief">
           <h3>หน้า "สรุปเช้านี้"</h3>
           <p>ข่าวเช้าที่ Claude สรุปเป็นภาษาไทย แบ่งตาม 6 ภาค ข่าว AI โลก และข่าวต่างประเทศที่กระทบไทย กดฟังเสียงอ่านได้ ด้านขวามีการ์ดน้ำ ฝน พยากรณ์ และกล้องที่ AI เห็นน้ำ ทุกข่าวมีลิงก์ไปข่าวต้นฉบับ</p>
+        </section>
+
+        <section id="h-cctv">
+          <h3>หน้า "กล้อง" · ดูกล้อง CCTV ทุกตัวในจอเดียว</h3>
+          <p>กดเมนู <b>กล้อง</b> ด้านบน (หรือลิงก์ <kbd>#cctv</kbd>) จะเห็นภาพจากกล้องทุกตัวเรียงเป็นตาราง แยกตามจุด ภาพโหลดตรงจากกล้องต้นทางและรีเฟรชเองทุก 2 นาที เฉพาะภาพที่อยู่บนจอ</p>
+          <ul>
+            <li><b>แถบซ้าย</b> (มือถืออยู่ด้านบน) ค้นชื่อกล้อง เลือก ทั้งหมด / AI เห็นน้ำ / ใกล้ฉัน เลือกประเภท ถนน คลอง เขื่อน หรือเลือกพื้นที่ทีละจุด</li>
+            <li><b>ขอบภาพสีแดงหรือส้ม</b> คือกล้องที่ AI รอบล่าสุดเห็นน้ำมากกว่าปกติ กล้องกลุ่มนี้ขึ้นแถบบนสุด</li>
+            <li>ปุ่ม <b>เล็ก กลาง ใหญ่</b> ปรับขนาดภาพ ปุ่ม <b>เต็มจอ</b> ซ่อนเมนูให้เหลือแต่ภาพ เหมาะเปิดค้างบนจอใหญ่</li>
+            <li>กดภาพเพื่อดูคำอธิบายจาก AI และแถบสีย้อนหลัง 48 ชม. ปุ่ม <b>ดูบนแผนที่</b> พาไปดูตำแหน่งกล้อง</li>
+            <li>ลิงก์แชร์เฉพาะจุดได้ เช่น <kbd>#cctv=wet</kbd> หรือ <kbd>#cctv=src:egat</kbd></li>
+          </ul>
+        </section>
+
+        <section id="h-props">
+          <h3>หน้า "ทรัพย์" · ตรวจทำเลทีละหลายแปลง</h3>
+          <p>เหมือนจดรายการบ้านหรือที่ดินที่อยากไปดู แล้วให้ผู้ช่วยเช็กให้ทีละแปลงว่าน้ำเคยท่วมไหม ก่อนเสียเวลาขับรถไปดู (ลิงก์ <kbd>#props</kbd>)</p>
+          <ul>
+            <li><b>เพิ่มทรัพย์</b> วางรายการ หนึ่งบรรทัดต่อหนึ่งทรัพย์ ใส่พิกัดหรือลิงก์ Google Maps แบบเต็ม ราคา (เช่น 2,500,000 บาท หรือ 2.5 ล้าน) ขนาด (2-1-50 ไร่ หรือ 60 ตร.ว.) และวันขาย คัดลอกทั้งตารางจาก Google Sheets/Excel พร้อมหัวคอลัมน์ หรือเลือกไฟล์ CSV ก็ได้</li>
+            <li>ระบบตรวจทำเลให้ทุกแปลงที่มีพิกัด (น้ำในอดีต แบบจำลองน้ำท่วมใหญ่ ที่ลุ่มที่ดอน) แปลงที่ไม่มีพิกัด กด <b>ปักหมุดบนแผนที่</b></li>
+            <li><b>กรองและเรียง</b> ตามประเภท สัญญาณน้ำท่วม จังหวัด ช่วงราคา เรียงตามราคา ราคาต่อตารางวา เนื้อที่ วันขาย ความเสี่ยง หรือใกล้ฉัน</li>
+            <li><b>ดูบนแผนที่</b> แสดงหมุดราคาสีตามความเสี่ยง · <b>ส่งออก CSV</b> พร้อมผลตรวจ เปิดใน Excel ได้</li>
+          </ul>
+          <p>รายการเก็บในเบราว์เซอร์นี้เท่านั้น ชื่อบุคคล (จำเลย โจทก์ เจ้าของ) และเบอร์โทรถูกตัดออกตั้งแต่ตอนอ่าน ChatGeo ไม่ได้ดึงประกาศของกรมบังคับคดีหรือเว็บใดมาเก็บ</p>
         </section>
 
         <section id="h-fresh">
@@ -324,6 +504,9 @@
               <tr><td>เมฆจากดาวเทียม</td><td>ทุก 10 นาที (ช้ากว่าจริงราว 1 ชม.)</td></tr>
               <tr><td>น้ำจากดาวเทียม Sentinel-1</td><td>เช็กภาพใหม่วันละ 2 รอบ ภาพมาช้ากว่าจริง 5–7 วัน</td></tr>
               <tr><td>พยากรณ์ 3 วัน</td><td>ดึงสดทุกครั้งที่เปิดเว็บ</td></tr>
+              <tr><td>แผ่นดินไหว (USGS) และภัยพิบัติ (GDACS)</td><td>ดึงสดทุกครั้งที่เปิด และทุก 5 นาที</td></tr>
+              <tr><td>จุดความร้อน เครื่องบิน เรือ ข่าวบนแผนที่</td><td>ระบบอัตโนมัติดึงทุกราว 20 นาที (ภาพดาวเทียมมาช้ากว่าจริงราว 3 ชม.)</td></tr>
+              <tr><td>วงโคจรดาวเทียม</td><td>ทุก 12 ชม. ตำแหน่งคำนวณสดทุกวินาที</td></tr>
               <tr><td>น้ำในอดีต (Landsat)</td><td>ข้อมูลปี 1984–2024 (ชุดล่าสุดของ JRC)</td></tr>
               <tr><td>แบบจำลองน้ำท่วมใหญ่</td><td>JRC GloFAS v2.1 คิดจากภูมิอากาศปัจจุบัน ไม่ใช่พยากรณ์</td></tr>
               <tr><td>ผังเมือง</td><td>ภาพจากเซิร์ฟเวอร์กรมโยธาฯ ตามที่หน่วยงานปรับปรุง</td></tr>
