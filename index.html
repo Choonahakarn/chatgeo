@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610101158">
+<link rel="stylesheet" href="style.css?v=202610110019">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -37,7 +37,6 @@
       <a href="#cctv" id="navCctv" data-page="cctv" aria-current="false">กล้อง</a>
       <a href="#props" id="navPp" data-page="props" aria-current="false">ทรัพย์</a>
     </nav>
-    <span class="badge" id="badgeText">ต้นแบบ</span>
     <div class="top-actions">
       <button type="button" id="btnOps" class="icon-btn ops-btn" aria-pressed="false" title="ห้องควบคุม: ลูกโลกเต็มจอ แผ่นดินไหว พายุ ไฟป่า ดาวเทียม เครื่องบิน เรือ ข่าวทั่วโลก">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6-6"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
@@ -60,7 +59,7 @@
 
   <!-- หน้า 1: คุยกับโลก -->
   <main class="page-chat" id="pageChat">
-    <aside class="panel" aria-label="แชท">
+    <aside class="panel" id="chatPanel" aria-label="แชท">
       <div class="suggest" id="suggest"></div>
       <div class="msgs-scroll" id="msgsScroll"><div class="msgs" id="msgs" aria-live="polite"></div></div>
       <form class="ask" id="askForm">
@@ -76,6 +75,9 @@
 
     <section class="mapwrap" aria-label="แผนที่">
       <div id="mapChat" class="map"></div>
+      <button type="button" class="chat-tab" id="btnChatTab" aria-controls="chatPanel" aria-expanded="true" aria-label="ซ่อนแชท ให้แผนที่เต็มจอ" title="ซ่อนแชท">
+        <svg class="ct-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span class="ct-t"></span>
+      </button>
       <div class="map-top">
         <div class="mapbar">
           <svg class="pin-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
@@ -84,7 +86,7 @@
       </div>
       <!-- แถบเครื่องมือด้านขวาของแผนที่ (แบบห้องควบคุม: ไอคอน + ป้ายสั้น) -->
       <nav class="map-rail" aria-label="เครื่องมือแผนที่">
-        <button type="button" class="rail-btn" id="btnFilter" aria-expanded="false" aria-controls="filterPop" title="เปิด/ปิดชั้นข้อมูลบนแผนที่">
+        <button type="button" class="rail-btn" id="btnFilter" aria-expanded="false" aria-controls="filterPop" title="เปลี่ยนแผนที่ฐาน และเปิด/ปิดชั้นข้อมูลบนแผนที่">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5" opacity=".55"/></svg>
           <span class="rl">ชั้นข้อมูล</span><span class="rail-badge" id="filterCount"></span><span class="fb-dots" id="filterDots" hidden></span>
         </button>
@@ -108,10 +110,12 @@
       </nav>
       <div class="filter-pop drawer" id="filterPop" role="dialog" aria-labelledby="drTitle" hidden>
         <div class="dr-head">
-          <b id="drTitle">ชั้นข้อมูล</b><span class="dr-n" id="drCount"></span>
+          <b id="drTitle">แผนที่ · ชั้นข้อมูล</b><span class="dr-n" id="drCount"></span>
           <button type="button" class="dr-x" id="filterClose" aria-label="ปิดชั้นข้อมูล"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
         </div>
         <div class="dr-body">
+          <div class="dr-t">แผนที่ฐาน</div>
+          <div class="base-grid" id="baseChips" role="group" aria-label="เลือกแผนที่ฐาน"></div>
           <div class="dr-t">มุมมองสำเร็จรูป</div>
           <div class="dr-presets" id="presetChips" role="group" aria-label="มุมมองสำเร็จรูป"></div>
           <div class="fp-list" id="dataChips" role="group" aria-label="ชั้นข้อมูลสาธารณะ"></div>
@@ -122,17 +126,44 @@
           </button>
         </div>
       </div>
+      <!-- ห้องควบคุม (หน้าตาแบบศูนย์ปฏิบัติการ: โลกเต็มจอ แถบไอคอนซ้าย เครื่องมือขวา แถบข่าววิ่งด้านล่าง) -->
       <div class="ops-hud" id="opsHud" hidden>
-        <div class="ops-top">
-          <div class="ops-brand"><span class="ops-live" aria-hidden="true"></span><b>ห้องควบคุม</b><span class="ops-sub">ChatGeo · โลกตอนนี้</span></div>
-          <div class="ops-clock" id="opsClock" aria-live="off"></div>
-          <button type="button" class="ops-x" id="opsExit">ออก <kbd>Esc</kbd></button>
+        <div class="ops-brand">
+          <svg class="ob-mark" width="34" height="34" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="16" cy="16" r="9.5"/><path d="M6.5 16h19"/><path d="M16 6.5c2.6 2.6 3.9 5.8 3.9 9.5s-1.3 6.9-3.9 9.5"/><path d="M16 6.5c-2.6 2.6-3.9 5.8-3.9 9.5s1.3 6.9 3.9 9.5"/><ellipse cx="16" cy="16" rx="15" ry="5.2" transform="rotate(-22 16 16)" opacity=".75"/><circle cx="29" cy="10.6" r="1.5" fill="currentColor" stroke="none"/></svg>
+          <div class="ob-t"><b>CHATGEO</b><span>ห้องควบคุม · ภาพรวมโลกแบบสด</span></div>
         </div>
-        <div class="ops-stats" id="opsStats" role="group" aria-label="ชั้นข้อมูลห้องควบคุม"></div>
-        <aside class="ops-feed" aria-label="เหตุการณ์ล่าสุด">
-          <div class="ops-feed-h"><b>เหตุการณ์ล่าสุด</b><span id="opsFeedN"></span><button type="button" id="opsFeedT" aria-label="ย่อหรือขยายรายการ">▾</button></div>
+        <div class="ops-topr">
+          <div class="ops-status" id="opsStatus"><span class="os-t" id="opsClock"></span><span class="os-rest" id="opsStatRest"></span></div>
+          <button type="button" class="ops-pill" id="opsFeedBtn" aria-pressed="false" aria-controls="opsFeed"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span class="op-l">เหตุการณ์</span><b id="opsFeedN"></b></button>
+          <button type="button" class="ops-pill ops-x" id="opsExit">ออก <kbd>Esc</kbd></button>
+        </div>
+        <nav class="ops-rail" id="opsStats" aria-label="ชั้นข้อมูลห้องควบคุม"></nav>
+        <nav class="ops-tools" aria-label="เครื่องมือห้องควบคุม">
+          <button type="button" class="ops-rb" data-ops-tool="search" aria-label="ค้นหาพื้นที่"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="ops-tip">ค้นหาพื้นที่ <kbd>/</kbd></span></button>
+          <button type="button" class="ops-rb" data-ops-tool="th" aria-label="บินไปประเทศไทย"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span class="ops-tip">ประเทศไทย</span></button>
+          <button type="button" class="ops-rb" data-ops-tool="world" aria-label="มองทั้งโลก"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.4 3.8 5.4 3.8 9s-1.3 6.6-3.8 9"/><path d="M12 3c-2.5 2.4-3.8 5.4-3.8 9s1.3 6.6 3.8 9"/></svg><span class="ops-tip">มองทั้งโลก</span></button>
+          <button type="button" class="ops-rb" data-ops-tool="spin" aria-pressed="true" aria-label="หมุนลูกโลกเอง"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/></svg><span class="ops-tip">หมุนลูกโลกเอง</span></button>
+          <button type="button" class="ops-rb" data-ops-tool="fs" aria-pressed="false" aria-label="เต็มจอ"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="ops-tip">เต็มจอ</span></button>
+        </nav>
+        <aside class="ops-feed" id="opsFeed" hidden aria-label="เหตุการณ์ล่าสุด">
+          <div class="ops-feed-h"><b>เหตุการณ์ล่าสุด</b><span id="opsFeedN2"></span><button type="button" id="opsFeedX" aria-label="ปิดรายการเหตุการณ์"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button></div>
           <div class="ops-feed-list" id="opsFeedList"></div>
         </aside>
+        <div class="ops-mode">
+          <div class="ops-seg" role="group" aria-label="รูปทรงแผนที่"><button type="button" data-ops-proj="globe" aria-pressed="true">3D</button><button type="button" data-ops-proj="flat" aria-pressed="false">2D</button></div>
+          <div class="ops-seg" role="group" aria-label="ภาพพื้นหลัง"><button type="button" data-ops-base="map" aria-pressed="true">แผนที่</button><button type="button" data-ops-base="sat" aria-pressed="false">ดาวเทียม</button></div>
+          <div class="ops-scale" id="opsScale" aria-hidden="true"><i></i><span></span></div>
+        </div>
+        <div class="ops-cursor" id="opsCursor" aria-hidden="true"></div>
+        <div class="ops-zoom" role="group" aria-label="ซูม">
+          <button type="button" data-ops-zoom="in" aria-label="ซูมเข้า"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button type="button" data-ops-zoom="out" aria-label="ซูมออก"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <button type="button" data-ops-zoom="north" aria-label="หันทิศเหนือขึ้น"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 7 20l5-4 5 4-5-17z"/></svg></button>
+        </div>
+        <div class="ops-ticker" aria-label="แถบเหตุการณ์ล่าสุด">
+          <span class="ot-live"><i aria-hidden="true"></i>ออนไลน์</span>
+          <div class="ot-track"><div class="ot-run" id="opsTicker"></div></div>
+        </div>
       </div>
       <div class="site-pick" id="sitePick" hidden role="status"><span id="sitePickText">แตะจุดบนแผนที่ที่อยากตรวจทำเล</span><button type="button" class="btn-ghost" id="sitePickX">ยกเลิก</button></div>
       <section class="site-card" id="siteCard" hidden aria-labelledby="siteTitle">
@@ -271,6 +302,7 @@
         </div>
         <div class="cv-stats" id="cvStats"></div>
         <div class="cv-tools">
+          <div class="seg cv-mode" id="cvMode" role="group" aria-label="รูปแบบหน้า"></div>
           <div class="seg cv-size" id="cvSize" role="group" aria-label="ขนาดภาพ"></div>
           <button type="button" class="btn-ghost" id="cvRefresh" title="โหลดภาพใหม่ทันที (ปกติรีเฟรชเองทุก 2 นาที)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
@@ -284,6 +316,26 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
             <span class="cv-bt" id="cvFullT">เต็มจอ</span>
           </button>
+        </div>
+      </div>
+      <!-- มุมมองแผนที่: แถบสถานการณ์น้ำ + แผนที่ (ฝน ลม น้ำท่วม) + คอลัมน์ภาพกล้องในกรอบแผนที่ -->
+      <div class="cvm" id="cvMapView" hidden>
+        <div class="cvm-tick" aria-label="สถานการณ์น้ำจาก AI และดาวเทียม">
+          <span class="cvm-tl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 2.5 20h19L12 3.5z"/><path d="M12 10v4.5"/><path d="M12 17.4v.1"/></svg>สถานการณ์น้ำ</span>
+          <div class="cvm-tt"><div class="cvm-run" id="cvmTick"></div></div>
+        </div>
+        <div class="cvm-grid">
+          <div class="cvm-mapbox">
+            <div id="cvmMap" class="cvm-map" role="region" aria-label="แผนที่กล้อง"></div>
+            <div class="cvm-btns" role="group" aria-label="ชั้นบนแผนที่กล้อง">
+              <button type="button" data-cvm="wind" aria-pressed="true" title="เส้นลมเคลื่อนไหว (Open-Meteo)">ลม</button>
+              <button type="button" data-cvm="radar" aria-pressed="true" title="เรดาร์ฝนล่าสุด (RainViewer)">ฝน</button>
+              <button type="button" data-cvm="flood" aria-pressed="false" title="น้ำท่วมจากดาวเทียม Sentinel-1 รายจังหวัด">น้ำท่วม</button>
+              <button type="button" data-cvm="ai" aria-pressed="false" class="cvm-b-ai" title="แสดงเฉพาะกล้องที่ AI เห็นน้ำ">AI<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5s-6.5 7.2-6.5 11.8a6.5 6.5 0 0 0 13 0C18.5 9.7 12 2.5 12 2.5z"/></svg></button>
+            </div>
+            <div class="cvm-leg" id="cvmLeg"></div>
+          </div>
+          <aside class="cvm-col" id="cvmCol" aria-label="ภาพกล้องในกรอบแผนที่"></aside>
         </div>
       </div>
       <div class="cv-body" id="cvBody"></div>
@@ -392,7 +444,9 @@
             <li><b>ซูม</b> ด้วยปุ่ม + − หรือหมุนเมาส์ ยิ่งซูมเข้า ยิ่งเห็นสถานีและรายละเอียดมาก</li>
             <li><b>กดจุดบนแผนที่</b> (สามเหลี่ยมระดับน้ำ วงกลมฝน หมุดกล้อง ปื้นน้ำ) เพื่อดูรายละเอียดและแหล่งที่มา</li>
             <li><b>แถบเครื่องมือด้านขวาของแผนที่</b> ชั้นข้อมูล · ค้นหา · รอบตัวฉัน · ตรวจทำเล · ภูมิประเทศ 3 มิติ (บนมือถือเหลือแต่ไอคอน)</li>
-            <li><b>ลูกโลก</b> และ <b>ธีม</b> อยู่มุมขวาบนของหน้า (ธีมเริ่มต้นน้ำเงิน-ขาว กดเปลี่ยนเป็นน้ำเงินกรมท่าได้)</li>
+            <li><b>ลูกโลก</b> และ <b>ธีม</b> อยู่มุมขวาบนของหน้า (ธีมเริ่มต้นน้ำเงิน-ขาว กดเปลี่ยนเป็นน้ำเงินกรมท่าได้) เปิดเว็บครั้งแรกจะเห็นลูกโลกเต็มใบก่อน กด <b>ไทย</b> ที่แถบด้านบนเพื่อบินเข้าประเทศไทย</li>
+            <li><b>แผนที่ฐาน</b> (ปุ่มชั้นข้อมูล › แผนที่ฐาน) เลือกได้ 5 แบบ: ChatGeo ตามธีม · ถนนสีสด · OpenStreetMap · ภูมิประเทศ · ภาพดาวเทียม Sentinel-2 เว็บจำไว้ให้ ถ้าแบบที่เลือกโหลดไม่ได้จะกลับมาใช้แบบ ChatGeo ชั่วคราว</li>
+            <li><b>ซ่อนแชท</b> กดลูกศรที่ขอบซ้ายของแผนที่ (มือถือเป็นปุ่มใต้แถบพื้นที่) แผนที่จะเต็มกว้าง กดปุ่ม <b>แชท</b> เพื่อเปิดกลับ</li>
           </ul>
         </section>
 
@@ -453,11 +507,14 @@
 
         <section id="h-ops">
           <h3>ห้องควบคุม · ดูทั้งโลกในจอเดียว</h3>
-          <p>กดปุ่ม <b>ห้องควบคุม</b> มุมขวาบน (หรือลิงก์ <kbd>#ops</kbd>) แผนที่จะเป็นลูกโลกมืดเต็มจอ หมุนช้าๆ เอง</p>
+          <p>กดปุ่ม <b>ห้องควบคุม</b> มุมขวาบน (หรือลิงก์ <kbd>#ops</kbd>) จอจะกลายเป็นอวกาศสีดำ มีลูกโลกหมุนช้าๆ อยู่ตรงกลาง เหมือนห้องควบคุมภารกิจ</p>
           <ul>
-            <li><b>แถบซ้าย</b> ตัวเลขของแต่ละชั้น เช่น แผ่นดินไหว 24 ชม. จุดความร้อน เครื่องบิน เรือ กดเพื่อเปิดหรือปิดชั้นนั้น</li>
-            <li><b>แถบขวา</b> เหตุการณ์ล่าสุดทั่วโลก (แผ่นดินไหวแรงหรือใกล้ไทย พายุ ภัยพิบัติระดับส้ม/แดง ข่าว) กดเพื่อบินไปดู</li>
-            <li>นาฬิกาเวลาไทยและ UTC เดินตลอด ข้อมูลรีเฟรชเองทุกนาที</li>
+            <li><b>มุมขวาบน</b> เวลา UTC (ตัว Z) และเวลาไทย สถานะสด จำนวนชั้นที่เปิด จำนวนจุดข้อมูลทั้งหมด และสภาพอวกาศ (ดัชนี Kp จาก NOAA ยิ่งสูงยิ่งมีพายุสุริยะ)</li>
+            <li><b>แถบไอคอนซ้าย</b> แต่ละชั้นข้อมูล ตัวเลขสีฟ้าคือจำนวนที่เห็นตอนนี้ ชี้ค้างเพื่อดูชื่อ กดเพื่อเปิดหรือปิด</li>
+            <li><b>แถบขวา</b> ค้นหาพื้นที่ บินไปไทย มองทั้งโลก หยุดหรือหมุนลูกโลก และเต็มจอ</li>
+            <li><b>ปุ่มเหตุการณ์</b> เปิดรายการเหตุการณ์ล่าสุด (แผ่นดินไหว พายุ ภัยพิบัติ ข่าว) กดเพื่อบินไปดู</li>
+            <li><b>มุมซ้ายล่าง</b> สลับลูกโลก 3D กับแผนที่แบน 2D และสลับแผนที่กับภาพดาวเทียม พร้อมแถบมาตราส่วน</li>
+            <li><b>แถบล่างสุด</b> ตัวหนังสือวิ่งเหตุการณ์ล่าสุด ชี้เมาส์เพื่อหยุด กดเรื่องไหนก็บินไปดูได้</li>
             <li>กด <kbd>Esc</kbd> หรือปุ่ม <b>ออก</b> เพื่อกลับ ชั้นข้อมูลจะกลับเป็นแบบเดิม</li>
           </ul>
         </section>
@@ -499,6 +556,8 @@
             <li>กดภาพเพื่อดูคำอธิบายจาก AI และแถบสีย้อนหลัง 48 ชม. ปุ่ม <b>ดูบนแผนที่</b> พาไปดูตำแหน่งกล้อง</li>
             <li>ลิงก์แชร์เฉพาะจุดได้ เช่น <kbd>#cctv=wet</kbd> หรือ <kbd>#cctv=src:egat</kbd></li>
           </ul>
+                  <p><b>มุมมองแผนที่</b> (ปุ่ม จอรวมภาพ | แผนที่ ด้านบน) แบบเว็บรวมกล้องน้ำท่วม: แถบสถานการณ์น้ำวิ่งด้านบน (กล้องที่ AI เห็นน้ำ และจังหวัดที่ดาวเทียมเห็นน้ำท่วม กดเพื่อไปดู) · แผนที่มืดพร้อมปุ่ม ลม · ฝน (เรดาร์) · น้ำท่วม (ดาวเทียม) · AI (เฉพาะกล้องที่ AI เห็นน้ำ) · จุดกล้องรวมเป็นวงตัวเลข สีแดงคือมีกล้องที่ AI เห็นน้ำ กดวงเพื่อซูม กดจุดเพื่อดูเฉพาะจุดนั้น · คอลัมน์ขวาคือภาพจากกล้องที่อยู่ในกรอบแผนที่ (AI เห็นน้ำขึ้นก่อน)</p>
+          <p>ภาพจากต้นทางเป็นภาพนิ่ง ไม่ใช่วิดีโอ กดภาพเพื่อดูกล้องเดียว จะขอภาพใหม่ทุก 20 วินาที พร้อมบอกว่าภาพล่าสุดเมื่อกี่วินาทีก่อน</p>
         </section>
 
         <section id="h-props">
@@ -555,9 +614,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610101158"></script>
-<script src="data/countries.js?v=202610101158"></script>
-<script src="data/th-regions.js?v=202610101158"></script>
-<script src="app.js?v=202610101158"></script>
+<script src="data/data.js?v=202610110019"></script>
+<script src="data/countries.js?v=202610110019"></script>
+<script src="data/th-regions.js?v=202610110019"></script>
+<script src="app.js?v=202610110019"></script>
 </body>
 </html>

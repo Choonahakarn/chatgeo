@@ -39,14 +39,15 @@ MOCK = None  # โฟลเดอร์ไฟล์จำลองสำหร�
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 EVERY = {'sats': 12 * 3600, 'cables': 7 * 86400}  # งานที่ไม่ต้องทำทุกรอบ (วินาที)
+RETRY_AFTER = {'cables': 6 * 3600}  # งานหนักที่พังแล้ว รอเท่านี้ก่อนลองใหม่ (ไม่ทุบเซิร์ฟเวอร์ทุก 20 นาที)
 
 
 def now_iso():
     return datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
-def get(url, timeout=60, data=None, headers=None, mock=None):
-    """ดาวน์โหลด (ลองใหม่ 2 ครั้ง) ถ้าอยู่ในโหมดทดสอบอ่านจากไฟล์จำลองแทน"""
+def get(url, timeout=60, data=None, headers=None, mock=None, tries=3):
+    """ดาวน์โหลด (ลองใหม่ได้ tries ครั้ง) ถ้าอยู่ในโหมดทดสอบอ่านจากไฟล์จำลองแทน"""
     if MOCK is not None:
         p = os.path.join(MOCK, mock or '')
         if not mock or not os.path.exists(p):
@@ -56,7 +57,7 @@ def get(url, timeout=60, data=None, headers=None, mock=None):
     h = {'User-Agent': UA, 'Accept-Encoding': 'gzip'}
     h.update(headers or {})
     err = None
-    for attempt in range(3):
+    for attempt in range(tries):
         try:
             req = urllib.request.Request(url, data=data, headers=h)
             with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -70,7 +71,8 @@ def get(url, timeout=60, data=None, headers=None, mock=None):
             err = e
         except Exception as e:  # noqa: BLE001
             err = e
-        time.sleep(3 * (attempt + 1))
+        if attempt < tries - 1:
+            time.sleep(3 * (attempt + 1))
     raise err
 
 
@@ -432,8 +434,12 @@ def task_sats(out):
 
 
 # ---------------------------------------------------------------- สายเคเบิลใต้ทะเล
-OVERPASS = 'https://overpass-api.de/api/interpreter'
-CABLE_Q = """[out:json][timeout:600];
+# ถามทั้งโลกทีเดียวเซิร์ฟเวอร์ตอบไม่ทัน (504) จึงแบ่งเป็น 8 กล่อง ถามทีละกล่อง ถ้าเซิร์ฟเวอร์หลักไม่ตอบลองเซิร์ฟเวอร์สำรอง
+# กล่องที่ได้แล้วเก็บไว้ใน cables_parts.json รอบหน้าถามเฉพาะกล่องที่ยังขาด ครบทุกกล่องแล้วค่อยเขียน cables.geojson
+OVERPASS_MIRRORS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+                    'https://overpass.private.coffee/api/interpreter']
+CABLE_BOXES = [(s, w, s + 90, w + 90) for s in (-90, 0) for w in (-180, -90, 0, 90)]  # ใต้ ตะวันตก เหนือ ตะวันออก
+CABLE_Q = """[out:json][timeout:170][bbox:{s},{w},{n},{e}];
 (
   way["communication"="line"]["location"~"underwater|underground_sea"];
   way["telecom"="line"]["location"="underwater"];
@@ -441,16 +447,28 @@ CABLE_Q = """[out:json][timeout:600];
   way["submarine"="yes"]["power"!~"."]["communication"];
 );
 out tags geom;"""
+CABLE_BUDGET = 9 * 60  # วินาที (งานทั้งหมดต้องจบใน 20 นาทีของ workflow)
+CABLE_PARTS = 'cables_parts.json'
 
 
-def task_cables(out):
-    raw = get(OVERPASS, timeout=900, data=urllib.parse.urlencode({'data': CABLE_Q}).encode(), mock='cables.json')
-    j = json.loads(raw)
-    feats = []
+def cable_box(box):
+    q = CABLE_Q.format(s=box[0], w=box[1], n=box[2], e=box[3])
+    err = None
+    for u in OVERPASS_MIRRORS:
+        try:
+            return json.loads(get(u, timeout=200, data=urllib.parse.urlencode({'data': q}).encode(), mock='cables.json', tries=1))
+        except Exception as e:  # noqa: BLE001
+            err = e
+            print('   cables %s ที่ %s ไม่สำเร็จ: %s' % (box, u.split('/')[2], str(e)[:120]), flush=True)
+            if MOCK is not None:
+                break
+    raise err
+
+
+def cable_ways(j):
+    out = []
     for el in j.get('elements') or []:
         g = el.get('geometry') or []
-        if len(g) < 2:
-            continue
         coords, last = [], None
         for p in g:
             c = [round(p['lon'], 3), round(p['lat'], 3)]
@@ -460,11 +478,50 @@ def task_cables(out):
         if len(coords) < 2:
             continue
         tg = el.get('tags') or {}
-        feats.append({'type': 'Feature', 'properties': {'name': tg.get('name') or tg.get('cable_name') or '', 'operator': tg.get('operator', '')},
-                      'geometry': {'type': 'LineString', 'coordinates': coords}})
+        out.append([el.get('id'), tg.get('name') or tg.get('cable_name') or '', tg.get('operator', ''), coords])
+    return out
+
+
+def task_cables(out):
+    pp = os.path.join(out, CABLE_PARTS)
+    try:
+        parts = json.load(open(pp, encoding='utf-8'))
+        if time.time() - parts.get('ts', 0) > 3 * 86400:  # ของเก่าเกิน 3 วัน เริ่มใหม่
+            parts = {}
+    except (OSError, ValueError):
+        parts = {}
+    parts.setdefault('ts', int(time.time()))
+    parts.setdefault('boxes', {})
+    t0 = time.time()
+    for box in CABLE_BOXES:
+        key = ','.join(str(x) for x in box)
+        if key in parts['boxes']:
+            continue
+        if time.time() - t0 > CABLE_BUDGET:
+            break
+        try:
+            parts['boxes'][key] = cable_ways(cable_box(box))
+            print('   cables %s ได้ %d เส้น' % (key, len(parts['boxes'][key])), flush=True)
+        except Exception:  # noqa: BLE001  กล่องนี้ไว้รอบหน้า
+            pass
+    missing = [b for b in CABLE_BOXES if ','.join(str(x) for x in b) not in parts['boxes']]
+    if missing:
+        write_json(out, CABLE_PARTS, parts)
+        raise RuntimeError('ได้ %d/%d กล่อง เก็บส่วนที่ได้ไว้ รอบหน้าถามต่อ' % (len(CABLE_BOXES) - len(missing), len(CABLE_BOXES)))
+    seen, feats = set(), []
+    for key in parts['boxes']:
+        for wid, name, op, coords in parts['boxes'][key]:
+            if wid in seen:  # เส้นที่พาดข้ามกล่องได้มาซ้ำ
+                continue
+            seen.add(wid)
+            feats.append({'type': 'Feature', 'properties': {'name': name, 'operator': op}, 'geometry': {'type': 'LineString', 'coordinates': coords}})
     if len(feats) < 10:
         raise RuntimeError('ได้สายเคเบิลน้อยผิดปกติ %d เส้น' % len(feats))
     write_json(out, 'cables.geojson', {'type': 'FeatureCollection', 'src': '© OpenStreetMap contributors (ODbL)', 't': now_iso(), 'features': feats})
+    try:
+        os.remove(pp)
+    except OSError:
+        pass
     return {'n': len(feats), 'named': sum(1 for f in feats if f['properties']['name'])}
 
 
@@ -496,6 +553,9 @@ def main():
         if not a.force and not only and name in EVERY and prev.get('ok') and now - prev.get('ts', 0) < EVERY[name]:
             print('%-8s ข้าม (ยังไม่ถึงรอบ)' % name)
             continue
+        if not a.force and not only and name in RETRY_AFTER and not prev.get('ok') and now - prev.get('err_ts', 0) < RETRY_AFTER[name]:
+            print('%-8s ข้าม (เพิ่งพังเมื่อ %s รอลองใหม่)' % (name, prev.get('err_at', '')))
+            continue
         t0 = time.time()
         try:
             info = fn(a.out) or {}
@@ -506,7 +566,7 @@ def main():
             print('%-8s %s %.1fs %s' % (name, 'ข้าม' if 'skip' in info else 'สำเร็จ', time.time() - t0, json.dumps(info, ensure_ascii=False)), flush=True)
         except Exception as e:  # noqa: BLE001  งานหนึ่งพังไม่กระทบงานอื่น
             rec = dict(prev)
-            rec.update({'ok': False, 'err': str(e)[:300], 'err_at': now_iso()})
+            rec.update({'ok': False, 'err': str(e)[:300], 'err_at': now_iso(), 'err_ts': int(now)})
             print('%-8s ไม่สำเร็จ (เก็บไฟล์เดิมไว้): %s' % (name, e), flush=True)
         status['tasks'][name] = rec
     status['updated'] = now_iso()

@@ -73,6 +73,29 @@
     }
     return OSM_STYLE[theme];
   }
+  // แผนที่ฐานให้เลือกแบบ Longdo (ใช้ได้ฟรีไม่ต้องมีคีย์ ใส่เครดิตทุกแหล่ง)
+  // ไม่มี Google / GISTDA / Longdo เพราะต้องใช้คีย์ และเงื่อนไขให้แสดงผ่านแผนที่ของเขาเองเท่านั้น
+  var BASES = [
+    { id: 'auto', t: 'ChatGeo', sub: 'ตามธีม สว่าง/มืด' },
+    { id: 'liberty', t: 'ถนนสีสด', sub: 'OpenFreeMap', url: 'https://tiles.openfreemap.org/styles/liberty' },
+    { id: 'osm', t: 'OpenStreetMap', sub: 'แผนที่มาตรฐาน', raster: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19,
+      thumb: 'https://tile.openstreetmap.org/5/24/14.png', attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors' },
+    { id: 'topo', t: 'ภูมิประเทศ', sub: 'OpenTopoMap', raster: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], max: 17,
+      thumb: 'https://a.tile.opentopomap.org/5/24/14.png', attr: 'แผนที่ © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA) · ข้อมูล © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, SRTM' },
+    { id: 'sat', t: 'ภาพดาวเทียม', sub: 'Sentinel-2 · EOX', raster: [SAT_URL], max: 14, thumb: SAT_URL.replace('{z}/{y}/{x}', '5/14/24'), attr: SAT_ATTR }
+  ];
+  var BASE = { id: 'auto' };
+  try { var bsv = localStorage.getItem('cg-base'); if (BASES.some(function (b) { return b.id === bsv; })) BASE.id = bsv; } catch (e) { /* ไม่มีที่เก็บ */ }
+  function baseStyle(theme) {
+    if (usingFallback) return fallbackStyle(theme);
+    var id = typeof OPS !== 'undefined' && OPS && OPS.on ? 'auto' : BASE.id;
+    var b = BASES.filter(function (x) { return x.id === id; })[0];
+    if (!b || b.id === 'auto' || styleOverride) return osmStyleUrl(theme);
+    if (b.url) return b.url;
+    return { version: 8, name: 'ChatGeo ' + b.id,
+      sources: { base: { type: 'raster', tiles: b.raster, tileSize: 256, maxzoom: b.max, attribution: b.attr } },
+      layers: [{ id: 'base-bg', type: 'background', paint: { 'background-color': theme === 'dark' ? '#0A0F1F' : '#E8EBF2' } }, { id: 'base', type: 'raster', source: 'base' }] };
+  }
 
   var FB_COLORS = {
     dark: { ocean: '#070C1A', land: '#111A33', border: '#2C3963', coast: '#232D5E' },
@@ -355,7 +378,7 @@
     };
     var map = v.map = new maplibregl.Map({
       container: v.el,
-      style: usingFallback ? fallbackStyle(state.theme) : osmStyleUrl(state.theme),
+      style: baseStyle(state.theme),
       center: state.globe ? [95, 15] : [20, 20],
       zoom: worldZoom(v),
       minZoom: -1,
@@ -373,11 +396,11 @@
 
     armFallbackTimer(v);
     map.on('error', function (e) {
-      if (usingFallback) return;
-      if (v.styleLoading) { switchToFallback('ต้องต่ออินเทอร์เน็ต'); return; }
+      if (usingFallback || Date.now() - (BASE.revertAt || 0) < 4000) return;
+      if (v.styleLoading) { if (!baseFailed()) switchToFallback('ต้องต่ออินเทอร์เน็ต'); return; }
       if (e && e.sourceId && e.sourceId.indexOf('cg-') !== 0 && !v.tileOK) {
         v.tileErrors += 1;
-        if (v.tileErrors >= 8) switchToFallback('โหลดภาพแผนที่ไม่ได้');
+        if (v.tileErrors >= 8 && !baseFailed()) switchToFallback('โหลดภาพแผนที่ไม่ได้');
       }
     });
     // เครดิตแผนที่ยาวขึ้นหลังเพิ่มชั้นข้อมูล หุบไว้ก่อน กดปุ่ม i เพื่อดู
@@ -506,7 +529,7 @@
   function armFallbackTimer(v) {
     clearTimeout(v.fbTimer);
     if (usingFallback) return;
-    v.fbTimer = setTimeout(function () { if (v.styleLoading) switchToFallback('ช้าเกินไป'); }, 9000);
+    v.fbTimer = setTimeout(function () { if (v.styleLoading && !baseFailed()) switchToFallback('ช้าเกินไป'); }, 9000);
   }
   function eachView(fn) { Object.keys(views).forEach(function (k) { fn(views[k]); }); }
 
@@ -524,6 +547,7 @@
 
   function applyProjection(v) {
     try { v.map.setProjection({ type: state.globe ? 'globe' : 'mercator' }); } catch (e) { /* รุ่นเก่าไม่มีลูกโลก */ }
+    if (OPS && OPS.on) opsSky(v);
   }
   function firstSymbolId(map) {
     var layers = map.getStyle().layers || [];
@@ -744,7 +768,8 @@
     cvStop();
     var v = views[page] || createView(page);
     v.map.resize();
-    if (v.shownPlace !== state.place) flyToPlace(v, byId[state.place], true);
+    if (opts.intro && page === 'chat') { v.shownPlace = state.place; v.map.jumpTo({ center: [100.5, 12], zoom: worldZoom(v) }); }
+    else if (v.shownPlace !== state.place) flyToPlace(v, byId[state.place], true);
     refreshView(v);
     if (page === 'brief') renderBrief();
     if (!opts.fromHash) writeHash(true);
@@ -2056,6 +2081,30 @@
     if (speech.playing) stopSpeech(true); else startSpeech();
   });
 
+  /* ---------- ซ่อน/แสดงแชทด้านข้าง (แผนที่เต็มกว้าง) ---------- */
+  var chatHidden = false;
+  try { chatHidden = localStorage.getItem('cg-chat-hidden') === '1'; } catch (e) { /* ข้าม */ }
+  function setChatHidden(h, quiet) {
+    chatHidden = !!h;
+    document.body.classList.toggle('chat-hidden', chatHidden);
+    var b = $('btnChatTab');
+    if (b) {
+      b.setAttribute('aria-expanded', String(!chatHidden));
+      b.setAttribute('aria-label', chatHidden ? 'แสดงแชท' : 'ซ่อนแชท ให้แผนที่เต็มจอ');
+      b.title = chatHidden ? 'แสดงแชท' : 'ซ่อนแชท';
+      b.querySelector('.ct-t').textContent = chatHidden ? 'แชท' : '';
+    }
+    if (quiet) return;
+    try { localStorage.setItem('cg-chat-hidden', chatHidden ? '1' : '0'); } catch (e) { /* ข้าม */ }
+    var v = views.chat;
+    if (v) setTimeout(function () { v.map.resize(); }, 30);
+    if (!chatHidden && $('askInput') && window.matchMedia('(min-width: 861px)').matches) $('askInput').focus();
+  }
+  if ($('btnChatTab')) {
+    setChatHidden(chatHidden, true);
+    $('btnChatTab').addEventListener('click', function () { setChatHidden(!chatHidden); });
+  }
+
   /* ---------- ธีม / ลูกโลก ---------- */
   function applyThemeChrome() {
     document.body.classList.toggle('cg-dark', state.theme === 'dark');
@@ -2064,16 +2113,48 @@
     $('icoMoon').hidden = state.theme === 'dark';
     $('btnTheme').setAttribute('aria-label', state.theme === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด');
   }
-  $('btnTheme').addEventListener('click', function () {
-    state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    try { localStorage.setItem('cg-theme2', state.theme); } catch (e) { /* ไม่มี storage */ }
-    applyThemeChrome();
+  function reloadBase() {
     eachView(function (v) {
       v.styleLoading = true;
       v.tileOK = false; v.tileErrors = 0;
       if (!usingFallback) armFallbackTimer(v);
-      v.map.setStyle(usingFallback ? fallbackStyle(state.theme) : osmStyleUrl(state.theme), { diff: false });
+      v.map.setStyle(baseStyle(state.theme), { diff: false });
     });
+  }
+  // แผนที่ฐานที่เลือกโหลดไม่ได้: กลับไปใช้แผนที่ ChatGeo ชั่วคราว (ไม่ลบค่าที่เลือกไว้ เปิดครั้งหน้าจะลองใหม่)
+  function baseFailed() {
+    if (BASE.id === 'auto' || (OPS && OPS.on) || usingFallback || styleOverride) return false;
+    var b = BASES.filter(function (x) { return x.id === BASE.id; })[0];
+    BASE.id = 'auto'; BASE.revertAt = Date.now();
+    toast('โหลดแผนที่ ' + (b ? b.t : '') + ' ไม่ได้ตอนนี้ กลับมาใช้แผนที่ ChatGeo ก่อน');
+    reloadBase(); renderBaseChips();
+    return true;
+  }
+  function setBase(id) {
+    if (id === BASE.id) return;
+    BASE.id = id;
+    try { localStorage.setItem('cg-base', id); } catch (e) { /* ข้าม */ }
+    if (!(OPS && OPS.on)) reloadBase();
+    renderBaseChips();
+  }
+  function renderBaseChips() {
+    var el = $('baseChips');
+    if (!el) return;
+    el.innerHTML = BASES.map(function (b) {
+      return '<button type="button" class="base-opt" data-base="' + b.id + '" aria-pressed="' + (BASE.id === b.id) + '" title="' + esc(b.t + ' · ' + b.sub) + '">' +
+        '<span class="base-th base-' + b.id + '" aria-hidden="true">' + (b.thumb && !usingFallback ? '<img alt="" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" src="' + esc(b.thumb) + '">' : '') + '</span>' +
+        '<span class="base-t">' + esc(b.t) + '</span><small>' + esc(b.sub) + '</small></button>';
+    }).join('') + (usingFallback ? '<p class="fp-fine">โหมดออฟไลน์ใช้แผนที่สำรองแบบเดียว</p>' : '');
+  }
+  if ($('baseChips')) $('baseChips').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-base]');
+    if (b) setBase(b.getAttribute('data-base'));
+  });
+  $('btnTheme').addEventListener('click', function () {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('cg-theme2', state.theme); } catch (e) { /* ไม่มี storage */ }
+    applyThemeChrome();
+    reloadBase();
     renderSuggest();
     renderMsgs();
     renderChips();
@@ -2199,8 +2280,10 @@
   function renderMeta() {
     $('briefDate').textContent = D.META.dateLong || '';
     var old = archive.pinned ? 0 : staleDays(D.META.date);
-    $('badgeText').textContent = (old ? 'ข่าวล่าสุด ณ ' : 'ข่าว ณ ') + (D.META.dateShort || '');
-    $('badgeText').classList.toggle('stale', !!old);
+    if ($('badgeText')) {
+      $('badgeText').textContent = (old ? 'ข่าวล่าสุด ณ ' : 'ข่าว ณ ') + (D.META.dateShort || '');
+      $('badgeText').classList.toggle('stale', !!old);
+    }
     $('srcCount').textContent = String(D.META.sources || 0);
     var sn = $('staleNote');
     if (sn) {
@@ -2603,6 +2686,8 @@
     }).catch(function () { FLOOD.index = { tiles: [], provinces: [] }; }).then(function () {
       FLOOD.provFC = buildProvFC();
       eachView(refreshLive);
+      if (CVM.ready) cvmFlood();
+      if (state.page === 'cctv' && CV.mode === 'map') cvmTicker();
       renderDataChips();
       renderLiveCards();
       renderSuggest();
@@ -3000,6 +3085,7 @@
   function closeCcModal(silent) {
     if ($('ccModal').hidden) return;
     $('ccModal').hidden = true;
+    ccLiveStop();
     $('ccBody').innerHTML = '';
     if (!silent && ccView.opener && ccView.opener.focus) ccView.opener.focus();
   }
@@ -3037,7 +3123,8 @@
     else if (r.seen) times.push('ตรวจเมื่อ ' + ccTime(r.seen));
     $('ccTitle').textContent = c.name + ' · ' + s.name;
     $('ccBody').innerHTML = '<div class="cc-view">' +
-      '<div class="cc-big"><img referrerpolicy="no-referrer" alt="ภาพล่าสุดจากกล้อง ' + esc(c.name) + '" src="' + esc(ccImg(c, true)) + '" onerror="this.parentNode.classList.add(\'err\')"><span class="cc-err">โหลดภาพจากต้นทางไม่ได้ตอนนี้</span></div>' +
+      '<div class="cc-big"><img referrerpolicy="no-referrer" alt="ภาพล่าสุดจากกล้อง ' + esc(c.name) + '" src="' + esc(c.img + (c.img.indexOf('?') < 0 ? '?' : '&') + 't=' + Math.floor(Date.now() / CC_LIVE_MS)) + '" onerror="this.parentNode.classList.add(\'err\')">' +
+        '<span class="cc-live" title="ต้นทางเป็นภาพนิ่ง เราขอภาพใหม่ทุก ' + (CC_LIVE_MS / 1000) + ' วินาทีขณะเปิดกล้องนี้ (ต้นทางบางแห่งอัปเดตภาพช้ากว่านี้)"><i></i>ภาพล่าสุด</span><span class="cc-err">โหลดภาพจากต้นทางไม่ได้ตอนนี้</span></div>' +
       '<div class="cc-info">' +
         '<div class="cc-line">' + ccChip(l) + (r.veh != null ? '<span class="cc-veh">รถราว ' + r.veh + ' คัน</span>' : '') + '</div>' +
         (r.th ? '<p class="cc-th">' + esc(r.th) + '</p>' : '<p class="cc-th">ยังไม่มีผลจาก AI สำหรับกล้องนี้ ดูภาพสดจากต้นทางได้ด้านบน</p>') +
@@ -3056,6 +3143,42 @@
       (next ? '<button type="button" class="cc-nav next" data-cc-cam="' + esc(next.id) + '" aria-label="กล้องถัดไป: ' + esc(next.name) + '">›</button>' : '') +
       '</div>';
     if (CCTV.hist) renderCcHist();
+    ccLiveStart(c);
+  }
+  // ดูกล้องเดียว: ขอภาพใหม่จากต้นทางทุก 20 วินาที ให้ใกล้เคียงภาพสด (ต้นทางเป็นภาพนิ่ง ไม่ใช่วิดีโอ จึงไม่เขียนว่า LIVE)
+  var CC_LIVE_MS = 20e3;
+  function ccLiveStop() { clearInterval(ccView.liveTick); ccView.liveTick = 0; ccView.liveBusy = false; }
+  function ccLiveStart(c) {
+    ccLiveStop();
+    ccView.liveAt = Date.now(); ccView.liveNext = Date.now() + CC_LIVE_MS; ccView.liveErr = 0;
+    var paint = function () {
+      var box = document.querySelector('#ccBody .cc-big'), b = box && box.querySelector('.cc-live'), now = Date.now();
+      if (!b) return;
+      var ago = Math.max(0, Math.round((now - ccView.liveAt) / 1000)), nx = Math.max(0, Math.ceil((ccView.liveNext - now) / 1000));
+      b.innerHTML = ccView.liveErr ? '<i class="off"></i>ต้นทางไม่ตอบ จะลองใหม่ใน ' + nx + ' วิ'
+        : '<i></i>ภาพล่าสุด · ' + (ago < 5 ? 'เมื่อสักครู่' : ago + ' วิที่แล้ว') + '<span class="ccl-n"> · ภาพใหม่ใน ' + nx + ' วิ</span>';
+    };
+    paint();
+    ccView.liveTick = setInterval(function () {
+      var box = document.querySelector('#ccBody .cc-big');
+      if ($('ccModal').hidden || ccView.mode !== 'cam' || ccView.cam !== c.id || !box) { ccLiveStop(); return; }
+      var now = Date.now();
+      if (!document.hidden && now >= ccView.liveNext && !ccView.liveBusy) {
+        ccView.liveBusy = true;
+        var im = new Image();
+        im.referrerPolicy = 'no-referrer';
+        im.onload = function () {
+          ccView.liveBusy = false;
+          if (ccView.cam !== c.id) return;
+          var cur = box.querySelector('img');
+          if (cur) { im.alt = cur.alt; im.onerror = cur.onerror; im.onload = null; cur.replaceWith(im); box.classList.remove('err'); } // ใช้รูปที่โหลดแล้ว ไม่ต้องดึงซ้ำ
+          ccView.liveAt = Date.now(); ccView.liveErr = 0; ccView.liveNext = Date.now() + CC_LIVE_MS; paint();
+        };
+        im.onerror = function () { ccView.liveBusy = false; ccView.liveErr++; ccView.liveNext = Date.now() + CC_LIVE_MS * Math.min(4, 1 + ccView.liveErr); paint(); };
+        im.src = c.img + (c.img.indexOf('?') < 0 ? '?' : '&') + 't=' + now;
+      }
+      paint();
+    }, 1000);
   }
   // แถบสีรายชั่วโมง: แต่ละช่องคือผลหนึ่งรอบ (ป้ายและคะแนน AI)
   function renderCcHist() {
@@ -3178,6 +3301,9 @@
     $('cvKinds').innerHTML = '<span class="cv-lbl">ประเภท</span>' + CV_KINDS.map(function (o) {
       return '<button type="button" class="q-chip" data-cv-k="' + o[0] + '" aria-pressed="' + (CV.kind === o[0]) + '">' + esc(o[1]) + '</button>';
     }).join('');
+    $('cvMode').innerHTML = [['wall', 'จอรวมภาพ'], ['map', 'แผนที่']].map(function (o) {
+      return '<button type="button" data-cv-mode="' + o[0] + '" aria-pressed="' + (CV.mode === o[0]) + '">' + esc(o[1]) + '</button>';
+    }).join('');
     $('cvSize').innerHTML = CV_SIZES.map(function (o) {
       return '<button type="button" data-cv-size="' + o[0] + '" aria-pressed="' + (CV.size === o[0]) + '">' + esc(o[1]) + '</button>';
     }).join('');
@@ -3237,6 +3363,17 @@
       (badN ? '<span class="cv-stat"><i class="cc-dot" style="background:' + CC_L.stale.c + '"></i>ภาพค้าง/ไม่มีภาพ <b>' + badN + '</b></span>' : '') +
       '<span class="cv-stat dim">AI ล่าสุด ' + (CCTV.idx ? esc(ccTime(CCTV.idx.updated)) : '–') + '</span>';
 
+    var mapMode = CV.mode === 'map';
+    $('pageCctv').classList.toggle('cv-mapmode', mapMode);
+    $('cvMapView').hidden = !mapMode;
+    body.hidden = mapMode;
+    if (mapMode) {
+      body.innerHTML = '';
+      $('cvFoot').innerHTML = ccFootNote() + ' · มุมมองแผนที่: จุดคือที่ตั้งกล้อง ตัวเลขคือจำนวนกล้อง คอลัมน์ขวาคือภาพจากกล้องที่อยู่ในกรอบแผนที่ (รีเฟรชทุก 2 นาที)';
+      cvmRender();
+      cvTick();
+      return;
+    }
     var html = '';
     var oldH = CCTV.idx && ccHoursAgo(CCTV.idx.updated);
     if (oldH != null && oldH >= 3) html += '<p class="cv-warn">ป้ายสีจาก AI ไม่ได้อัปเดตมาราว ' + Math.round(oldH) + ' ชม. (อาจไม่ตรงกับภาพตอนนี้) แต่ภาพในหน้านี้ยังโหลดสดจากกล้องต้นทาง</p>';
@@ -3300,12 +3437,12 @@
         else if (i >= 0) CV.vis.splice(i, 1);
       });
     }, { rootMargin: '200px 0px' });
-    $('cvBody').querySelectorAll('.cv-img img').forEach(function (im) { CV.io.observe(im); });
+    $('pageCctv').querySelectorAll('#cvBody .cv-img img, #cvmCol .cv-img img').forEach(function (im) { CV.io.observe(im); });
   }
   function cvRefreshNow() {
     CV.bucket = Math.max(CV.bucket + 1, Math.floor(Date.now() / CV_REFRESH));
     CV.next = Date.now() + CV_REFRESH;
-    (CV.io ? CV.vis : Array.prototype.slice.call($('cvBody').querySelectorAll('.cv-img img'))).forEach(cvSwap);
+    (CV.io ? CV.vis : Array.prototype.slice.call($('pageCctv').querySelectorAll('#cvBody .cv-img img, #cvmCol .cv-img img'))).forEach(cvSwap);
   }
   function cvClockText() {
     var b = new Date(Date.now() + 7 * 3600e3);
@@ -3331,6 +3468,7 @@
     CV.timer = 0;
     if (CV.io) { CV.io.disconnect(); CV.io = null; CV.vis = []; }
     if (CV.fs) cvFull(false);
+    if (typeof cvmStopWind === 'function') cvmStopWind();
   }
   function cvSetFilter(f) {
     CV.filter = f;
@@ -3386,8 +3524,9 @@
   }
   if ($('pageCctv')) {
     $('pageCctv').addEventListener('click', function (e) {
-      var t = e.target.closest('[data-cv-f],[data-cv-k],[data-cv-size],[data-cv-reset]');
+      var t = e.target.closest('[data-cv-f],[data-cv-k],[data-cv-size],[data-cv-reset],[data-cv-mode]');
       if (!t) return;
+      if (t.hasAttribute('data-cv-mode')) { cvSetMode(t.getAttribute('data-cv-mode')); return; }
       if (t.hasAttribute('data-cv-f')) {
         var f = t.getAttribute('data-cv-f');
         if (f === 'near') cvNear(); else cvSetFilter(f);
@@ -3420,6 +3559,253 @@
     $('cvFull').addEventListener('click', function () { cvFull(!CV.fs); });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && CV.fs && !e.defaultPrevented && $('ccModal').hidden) cvFull(false);
+    });
+  }
+
+  /* ---------- หน้ากล้อง: มุมมองแผนที่ (แผนที่มืด + เรดาร์ฝน + ลม ซ้าย · คอลัมน์ภาพกล้องขวา · แถบสถานการณ์น้ำวิ่งด้านบน) ---------- */
+  var CVM = { map: null, v: null, ready: false, wind: true, radar: true, flood: false, ai: false, site: null, mk: [], colSig: '', tickSig: '', radarT: 0, colT: 0 };
+  try {
+    var cvmP = JSON.parse(localStorage.getItem('cg-cvm') || '{}');
+    ['wind', 'radar', 'flood', 'ai'].forEach(function (k) { if (typeof cvmP[k] === 'boolean') CVM[k] = cvmP[k]; });
+    if (localStorage.getItem('cg-cv-mode') === 'map') CV.mode = 'map';
+  } catch (e) { /* ไม่มีที่เก็บ */ }
+  if (!CV.mode) CV.mode = 'wall';
+  function cvmSave() { try { localStorage.setItem('cg-cvm', JSON.stringify({ wind: CVM.wind, radar: CVM.radar, flood: CVM.flood, ai: CVM.ai })); localStorage.setItem('cg-cv-mode', CV.mode); } catch (e) { /* ข้าม */ } }
+  var CVM_STILL = '#38A8F0';
+  function cvmWet(c) { return CC_WET.indexOf(ccLab(c.id)) >= 0; }
+  function cvmCams() { var cams = cvCams(); return CVM.ai ? cams.filter(cvmWet) : cams; }
+  // จุดบนแผนที่ = จุดติดตั้ง (กล้องในจุดเดียวกันใช้พิกัดเดียวกัน) รวมจุดที่อยู่ชิดกันบนจอเป็นวงตัวเลข
+  function cvmSites(cams) {
+    var by = {}, out = [];
+    cams.forEach(function (c) {
+      var s = CCTV.siteOf[c.id];
+      if (!s) return;
+      if (!by[s.id]) { by[s.id] = { s: s, cams: [], wet: 0 }; out.push(by[s.id]); }
+      by[s.id].cams.push(c);
+      if (cvmWet(c)) by[s.id].wet++;
+    });
+    return out;
+  }
+  function cvmClusters(sites) {
+    var map = CVM.map, cl = [];
+    sites.slice().sort(function (a, b) { return b.wet - a.wet; }).forEach(function (g) {
+      var p = map.project([g.s.lon, g.s.lat]), hit = null;
+      for (var i = 0; i < cl.length; i++) { var q = cl[i]; if (Math.abs(q.px - p.x) < 42 && Math.abs(q.py - p.y) < 42) { hit = q; break; } }
+      if (!hit) { hit = { px: p.x, py: p.y, groups: [], n: 0, wet: 0 }; cl.push(hit); }
+      hit.groups.push(g); hit.n += g.cams.length; hit.wet += g.wet;
+    });
+    cl.forEach(function (q) {
+      q.lon = q.groups.reduce(function (t, g) { return t + g.s.lon; }, 0) / q.groups.length;
+      q.lat = q.groups.reduce(function (t, g) { return t + g.s.lat; }, 0) / q.groups.length;
+    });
+    return cl;
+  }
+  function cvmMarkers() {
+    if (!CVM.ready) return;
+    CVM.mk.forEach(function (m) { m.remove(); });
+    CVM.mk = [];
+    cvmClusters(cvmSites(cvmCams())).forEach(function (q) {
+      var el = document.createElement('button'), one = q.groups.length === 1, g = q.groups[0];
+      el.type = 'button';
+      el.className = 'cvm-pin' + (q.wet ? ' wet' : '') + (one && CVM.site === g.s.id ? ' sel' : '') + (q.n >= 10 ? ' big' : '');
+      el.innerHTML = '<b>' + q.n + '</b>' + (q.wet ? '<i class="cvm-ai" aria-hidden="true">AI ' + q.wet + '</i>' : '');
+      var nm = one ? g.s.name + ' · จ.' + g.s.prov : q.groups.length + ' จุด';
+      el.title = nm + ' · ' + q.n + ' กล้อง' + (q.wet ? ' · AI เห็นน้ำ ' + q.wet + ' กล้อง' : '');
+      el.setAttribute('aria-label', el.title);
+      if (one) el.setAttribute('data-site', g.s.id);
+      el.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (one) { cvmPickSite(g.s.id, true); return; }
+        var b = q.groups.reduce(function (bb, x) { return [Math.min(bb[0], x.s.lon), Math.min(bb[1], x.s.lat), Math.max(bb[2], x.s.lon), Math.max(bb[3], x.s.lat)]; }, [999, 999, -999, -999]);
+        CVM.map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 70, maxZoom: 15, duration: reduceMotion ? 0 : 700 });
+      });
+      CVM.mk.push(new maplibregl.Marker({ element: el }).setLngLat([q.lon, q.lat]).addTo(CVM.map));
+    });
+  }
+  function cvmPickSite(id, fly) {
+    CVM.site = CVM.site === id && !fly ? null : id;
+    var s = CCTV.site[id];
+    if (fly && s) CVM.map.flyTo({ center: [s.lon, s.lat], zoom: Math.max(CVM.map.getZoom(), 13), duration: reduceMotion ? 0 : 800 });
+    CVM.colSig = '';
+    cvmMarkers(); cvmCol();
+    var col = $('cvmCol'); if (col) col.scrollTop = 0;
+  }
+  // คอลัมน์ขวา: กล้องที่อยู่ในกรอบแผนที่ตอนนี้ (AI เห็นน้ำขึ้นก่อน)
+  function cvmCol() {
+    var col = $('cvmCol');
+    if (!col || !CVM.ready) return;
+    var all = cvmCams(), b = CVM.map.getBounds(), cams;
+    if (CVM.site && CCTV.site[CVM.site]) cams = all.filter(function (c) { return CCTV.siteOf[c.id].id === CVM.site; });
+    else { CVM.site = null; cams = all.filter(function (c) { var s = CCTV.siteOf[c.id]; return b.contains([s.lon, s.lat]); }); }
+    cams = ccSorted(cams);
+    var shown = cams.slice(0, 60), sig = CV.bucket + '|' + (CVM.site || '') + '|' + shown.map(function (c) { return c.id + ':' + ccLab(c.id); }).join(',');
+    var head = CVM.site ? '<span class="cvm-h-t">' + esc(CCTV.site[CVM.site].name) + '</span><button type="button" class="cv-sec-a" data-cvm-site="">ดูทั้งกรอบ</button>'
+      : '<span class="cvm-h-t">ในกรอบแผนที่</span>';
+    var n = '<span class="cvm-h-n">แสดง <b>' + cams.length + '</b>/' + ccAllCams().length + ' กล้อง' + (CVM.ai ? ' · เฉพาะ AI เห็นน้ำ' : '') + (cams.length > shown.length ? ' · ' + shown.length + ' แรก' : '') + '</span>';
+    if (sig === CVM.colSig) { var hh = col.querySelector('.cvm-h'); if (hh) hh.innerHTML = head + n; return; }
+    CVM.colSig = sig;
+    col.innerHTML = '<div class="cvm-h">' + head + n + '</div>' + (shown.length ? '<div class="cvm-list">' + shown.map(function (c) { return cvTile(c, { ctx: 'all', site: true }); }).join('') + '</div>'
+      : '<p class="cv-empty">' + (CVM.ai ? 'ตอนนี้ AI ยังไม่เห็นน้ำในกล้องที่อยู่ในกรอบนี้' : 'ไม่มีกล้องในกรอบนี้ ลองซูมออกหรือเลื่อนแผนที่') + '</p>');
+    cvObserve();
+  }
+  function cvmColSoon() { clearTimeout(CVM.colT); CVM.colT = setTimeout(cvmCol, 120); }
+  // แถบบน: AI เห็นน้ำในกล้อง + จังหวัดที่ดาวเทียมเห็นน้ำท่วม
+  function cvmTickItems() {
+    var out = [];
+    ccSorted(ccFilterCams('wet')).forEach(function (c) {
+      var r = ccRec(c.id) || {}, l = ccLab(c.id), s = CCTV.siteOf[c.id];
+      out.push({ k: 'AI ' + CC_L[l].t, c: CC_L[l].c, t: c.name + ' · ' + s.name, ago: r.ai ? ccTime(r.ai) : '', cam: c.id });
+    });
+    topFloodProvinces(6, FL_PROV_MIN).forEach(function (r) {
+      out.push({ k: 'ดาวเทียม', c: FL_C.flood, t: 'น่าจะมีน้ำท่วม จ.' + r.name + ' ราว ' + fmtKm2(r.flood_high) + ' ตร.กม.', ago: FLOOD.index && FLOOD.index.date_max ? 'ภาพ' + ageText(FLOOD.index.date_max) : '', prov: PID_BY_NAME[r.name] });
+    });
+    return out;
+  }
+  function cvmTicker() {
+    var run = $('cvmTick');
+    if (!run) return;
+    var items = cvmTickItems(), sig = items.map(function (it) { return it.k + it.t + it.ago; }).join('~');
+    if (sig === CVM.tickSig && run.innerHTML) return;
+    CVM.tickSig = sig;
+    CVM.tick = items;
+    if (!items.length) {
+      run.classList.remove('go');
+      run.innerHTML = '<span class="cvm-ti quiet">ตอนนี้ AI ยังไม่เห็นน้ำผิดปกติในกล้องไหน' + (CCTV.idx ? ' (ดูเมื่อ ' + esc(ccTime(CCTV.idx.updated)) + ')' : '') + ' และดาวเทียมยังไม่เห็นน้ำท่วมเด่นชัด</span>';
+      return;
+    }
+    var one = function (hid) {
+      return items.map(function (it, i) {
+        return '<button type="button" class="cvm-ti" data-cvm-tk="' + i + '"' + (hid ? ' tabindex="-1" aria-hidden="true"' : '') + '><span class="cvm-tk" style="--c:' + it.c + '">' + esc(it.k) + '</span>' + esc(it.t) +
+          (it.ago ? '<span class="cvm-ago">' + esc(it.ago) + '</span>' : '') + '</button>';
+      }).join('<span class="cvm-sep" aria-hidden="true">·</span>');
+    };
+    run.innerHTML = '<span class="ot-half">' + one(false) + '<span class="cvm-sep" aria-hidden="true">·</span></span><span class="ot-half" aria-hidden="true">' + one(true) + '<span class="cvm-sep">·</span></span>';
+    run.classList.add('go');
+    run.style.animationDuration = Math.max(25, Math.round(run.scrollWidth / 2 / 60)) + 's';
+  }
+  function cvmLegend() {
+    var el = $('cvmLeg');
+    if (!el) return;
+    var h = '<div class="cvm-li"><i style="background:' + CVM_STILL + '"></i>กล้องภาพนิ่ง (รีเฟรชเอง)</div>' +
+      '<div class="cvm-li"><i style="background:' + CC_L.flood.c + '"></i>AI เห็นน้ำในภาพกล้อง</div>';
+    if (CVM.flood) h += '<div class="cvm-li"><i class="sq" style="background:' + FL_C.flood + '"></i>น้ำท่วมจากดาวเทียม (รายจังหวัด)</div>';
+    if (CVM.radar && RADAR.frames.length) h += '<div class="cvm-li cvm-rain"><span>ฝน</span><span class="cvm-grad" style="background:linear-gradient(90deg,' + RADAR_LEG.slice(0, 6).map(function (x) { return x[0]; }).join(',') + ')"></span><span>เบา · หนัก</span></div>' +
+      '<div class="cvm-li dim">เรดาร์ ' + esc(radarTime(RADAR.frames.length - 1)) + '</div>';
+    else if (CVM.radar && RADAR.err) h += '<div class="cvm-li dim">เรดาร์ฝนโหลดไม่ได้ตอนนี้</div>';
+    if (CVM.wind && WIND.grid) h += '<div class="cvm-li dim">ลม ' + (WIND.grid.time ? esc(ccTime(WIND.grid.time)) : '') + ' · Open-Meteo</div>';
+    el.innerHTML = h;
+  }
+  function cvmBtns() {
+    document.querySelectorAll('[data-cvm]').forEach(function (b) { b.setAttribute('aria-pressed', String(!!CVM[b.getAttribute('data-cvm')])); });
+  }
+  function cvmRadar() {
+    var map = CVM.map;
+    if (!CVM.ready) return;
+    var f = RADAR.frames[RADAR.frames.length - 1], on = CVM.radar && !!f;
+    if (on && CVM.radarT !== f.time) {
+      if (map.getLayer('cvm-radar')) map.removeLayer('cvm-radar');
+      if (map.getSource('cvm-radar')) map.removeSource('cvm-radar');
+      map.addSource('cvm-radar', { type: 'raster', tiles: [RADAR.host + f.path + '/512/{z}/{x}/{y}/2/1_1.png'], tileSize: 512, maxzoom: 7,
+        attribution: 'เรดาร์ฝน: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>' });
+      map.addLayer({ id: 'cvm-radar', type: 'raster', source: 'cvm-radar', paint: { 'raster-opacity': 0.75, 'raster-fade-duration': 0 } }, map.getLayer('cvm-fl') ? 'cvm-fl' : undefined);
+      CVM.radarT = f.time;
+    }
+    if (map.getLayer('cvm-radar')) map.setLayoutProperty('cvm-radar', 'visibility', on ? 'visible' : 'none');
+    cvmLegend();
+  }
+  function cvmFlood() {
+    var map = CVM.map;
+    if (!CVM.ready) return;
+    if (!map.getSource('cvm-fl')) {
+      map.addSource('cvm-fl', { type: 'geojson', data: FLOOD.provFC || emptyFC(), attribution: floodAttr() });
+      map.addLayer({ id: 'cvm-fl', type: 'fill', source: 'cvm-fl', filter: ['>=', ['get', 'fh'], FL_PROV_MIN],
+        paint: { 'fill-color': FL_C.flood, 'fill-opacity': ['interpolate', ['linear'], ['get', 'fh'], FL_PROV_MIN, 0.18, 20, 0.3, 50, 0.42, 150, 0.55] } });
+      map.addLayer({ id: 'cvm-fl-l', type: 'line', source: 'cvm-fl', filter: ['>=', ['get', 'fh'], 20], paint: { 'line-color': FL_C.flood, 'line-width': 1, 'line-opacity': 0.8 } });
+      CVM.flSet = FLOOD.provFC;
+    } else if (CVM.flSet !== FLOOD.provFC) { map.getSource('cvm-fl').setData(FLOOD.provFC || emptyFC()); CVM.flSet = FLOOD.provFC; }
+    ['cvm-fl', 'cvm-fl-l'].forEach(function (id) { map.setLayoutProperty(id, 'visibility', CVM.flood ? 'visible' : 'none'); });
+    cvmLegend();
+  }
+  function cvmWind() {
+    if (!CVM.v) return;
+    if (CVM.wind && state.page === 'cctv' && CV.mode === 'map') loadWind();
+    updateWind(CVM.v);
+    cvmLegend();
+  }
+  function cvmEnsure() {
+    if (CVM.map) { CVM.map.resize(); return; }
+    var el = $('cvmMap');
+    if (!el || !window.maplibregl) return;
+    var map = CVM.map = new maplibregl.Map({
+      container: el, style: usingFallback ? fallbackStyle('dark') : osmStyleUrl('dark'),
+      center: [100.6, 12.9], zoom: el.clientWidth < 600 ? 4.4 : 5.2, minZoom: 2.5, maxZoom: usingFallback ? FB_MAXZOOM : 18,
+      dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: { compact: true }, locale: UI_TH
+    });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+    CVM.v = { kind: 'cvm', map: map, el: el };
+    map.on('load', function () {
+      CVM.ready = true;
+      // เริ่มที่กรอบที่เห็นกล้องครบทุกจุด
+      var ss = (CCTV.reg && CCTV.reg.sites) || [];
+      if (ss.length) {
+        var bb = ss.reduce(function (b, x) { return [Math.min(b[0], x.lon), Math.min(b[1], x.lat), Math.max(b[2], x.lon), Math.max(b[3], x.lat)]; }, [999, 999, -999, -999]);
+        map.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], { padding: { top: 70, bottom: el.clientWidth < 600 ? 150 : 40, left: 40, right: 40 }, maxZoom: 9, duration: 0 });
+      }
+      cvmFlood(); cvmRadar(); cvmWind();
+      cvmMarkers(); cvmCol();
+    });
+    map.on('moveend', function () { cvmMarkers(); cvmColSoon(); });
+    map.on('click', function () { if (CVM.site) cvmPickSite(CVM.site); });
+    if (CVM.radar) loadRadar();
+  }
+  function cvmRender() {
+    cvmEnsure();
+    cvmBtns(); cvmTicker(); cvmLegend();
+    if (CVM.ready) { cvmFlood(); cvmRadar(); cvmWind(); cvmMarkers(); cvmCol(); }
+  }
+  function cvmStopWind() { var v = CVM.v; if (v && v.wind) { cancelAnimationFrame(v.wind.raf); v.wind.cv.remove(); v.wind = null; } }
+  function cvSetMode(m) {
+    CV.mode = m;
+    cvmSave();
+    if (m !== 'map') cvmStopWind();
+    renderCctvPage();
+    if (m === 'map' && CVM.map) setTimeout(function () { CVM.map.resize(); cvmMarkers(); cvmCol(); }, 30);
+  }
+  if ($('cvMapView')) {
+    $('cvMapView').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cvm]');
+      if (b) {
+        var k = b.getAttribute('data-cvm');
+        CVM[k] = !CVM[k];
+        cvmSave(); cvmBtns();
+        if (k === 'radar') { if (CVM.radar) loadRadar(); cvmRadar(); }
+        else if (k === 'flood') cvmFlood();
+        else if (k === 'wind') cvmWind();
+        else { CVM.colSig = ''; cvmMarkers(); cvmCol(); }
+        return;
+      }
+      var st = e.target.closest('[data-cvm-site]');
+      if (st) { if (st.getAttribute('data-cvm-site')) cvmPickSite(st.getAttribute('data-cvm-site'), true); else { CVM.site = null; CVM.colSig = ''; cvmMarkers(); cvmCol(); } return; }
+      var tk = e.target.closest('[data-cvm-tk]');
+      if (tk) {
+        var it = (CVM.tick || [])[+tk.getAttribute('data-cvm-tk')];
+        if (!it) return;
+        if (it.cam) { var s = CCTV.siteOf[it.cam]; if (s) cvmPickSite(s.id, true); openCcModal('cam', it.cam, 'wet'); }
+        else if (it.prov) {
+          if (!CVM.flood) { CVM.flood = true; cvmSave(); cvmBtns(); cvmFlood(); }
+          var f = TH && TH.provinces && TH.provinces.features.filter(function (x) { return x.properties.id === it.prov; })[0];
+          if (f) CVM.map.flyTo({ center: [f.properties.cx, f.properties.cy], zoom: 7.5, duration: reduceMotion ? 0 : 900 });
+        }
+      }
+    });
+    // ชี้ภาพในคอลัมน์ = จุดบนแผนที่สว่างขึ้น
+    $('cvMapView').addEventListener('mouseover', function (e) {
+      var t = e.target.closest && e.target.closest('#cvmCol [data-cc-cam]');
+      var sid = t && CCTV.siteOf[t.getAttribute('data-cc-cam')] && CCTV.siteOf[t.getAttribute('data-cc-cam')].id;
+      if (sid === CVM.hl) return;
+      CVM.hl = sid;
+      CVM.mk.forEach(function (m) { var el = m.getElement(); el.classList.toggle('hl', !!sid && el.getAttribute('data-site') === sid); });
     });
   }
 
@@ -3600,6 +3986,7 @@
       RADAR.err = false;
     }).catch(function () { RADAR.err = true; }).then(function () {
       eachView(updateRadar);
+      if (CVM.ready) cvmRadar();
       renderDataChips();
     });
   }
@@ -3811,7 +4198,7 @@
     WIND.at = Date.now();
     fetch(CCTV_BASE + 'wind.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
       if (j && j.nx && j.ny && j.u && j.u.length === j.nx * j.ny) WIND.grid = j;
-    }).catch(function () { /* ไม่มีข้อมูลลม ข้ามไป */ }).then(function () { eachView(updateWind); renderDataChips(); });
+    }).catch(function () { /* ไม่มีข้อมูลลม ข้ามไป */ }).then(function () { eachView(updateWind); if (CVM.v) { updateWind(CVM.v); cvmLegend(); } renderDataChips(); });
   }
   function windAt(lon, lat) {
     var g = WIND.grid;
@@ -3827,9 +4214,10 @@
   function windColor(s) {
     return s < 2 ? 'rgba(170,205,235,.55)' : s < 5 ? 'rgba(130,215,235,.7)' : s < 9 ? 'rgba(240,235,150,.8)' : s < 14 ? 'rgba(250,170,90,.85)' : 'rgba(255,110,110,.9)';
   }
+  function windWanted(v) { return (v.kind === 'cvm' ? CVM.wind && state.page === 'cctv' && CV.mode === 'map' : !!state.data.wind) && !!WIND.grid; }
   function updateWind(v) {
-    if (!v || v.kind !== 'chat') return;
-    var on = !!state.data.wind && !!WIND.grid;
+    if (!v || (v.kind !== 'chat' && v.kind !== 'cvm')) return;
+    var on = windWanted(v);
     if (!on) { if (v.wind) { cancelAnimationFrame(v.wind.raf); v.wind.cv.remove(); v.wind = null; } updateWindNote(v); return; }
     if (!v.wind) {
       var cv = document.createElement('canvas');
@@ -3845,8 +4233,9 @@
     updateWindNote(v);
   }
   function updateWindNote(v) {
+    if (v.kind === 'cvm') return; // มุมมองแผนที่กล้องบอกเวลาลมในคำอธิบายสีแทน
     var el = v.windNote;
-    var on = !!state.data.wind && !!WIND.grid;
+    var on = windWanted(v);
     if (!el && !on) return;
     if (!el) { el = v.windNote = document.createElement('div'); el.className = 'wx-wind-note'; v.el.appendChild(el); }
     el.hidden = !on;
@@ -6380,6 +6769,7 @@
       clearInterval(t0);
       v.satTimer = setInterval(function () { if (document.hidden) return; tick(); if (++k % 5 === 0) all(); }, 1000);
     }
+    opsSatPaint(map);
     vis(map, ['cg-sat-all'], !!S.all);
     vis(map, ['cg-sat-trk'], !!S.sel);
   }
@@ -6666,13 +7056,39 @@
     eachView(function (v) { updateSats(v); });
     renderDataChips();
   });
-  /* ---------- โหมดห้องควบคุม (เต็มจอ มืด ลูกโลกหมุน แถบตัวเลข และรายการเหตุการณ์ล่าสุด) ---------- */
-  var OPS = { on: false, prev: null, clock: 0, raf: 0, idleAt: 0, theme: null, globe: null };
+  /* ---------- โหมดห้องควบคุม (หน้าตาแบบศูนย์ปฏิบัติการ: อวกาศมืด ลูกโลกหมุน แถบไอคอน แถบข่าววิ่ง) ---------- */
+  var OPS = { on: false, prev: null, clock: 0, raf: 0, idleAt: 0, theme: null, globe: null, spin: true, satAll: null, kp: null, kpAt: 0, tickSig: '', items: [], tick: [] };
+  function opsIco(d, extra) { return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + d + '</svg>'; }
   var OPS_ROWS = [
-    ['quakes', 'แผ่นดินไหว 24 ชม.', '〰️'], ['gdacs', 'ภัยพิบัติโลก', '⚠️'], ['fires', 'จุดความร้อน 24 ชม.', '🔥'], ['sats', 'ดาวเทียม', '🛰'],
-    ['aircraft', 'เครื่องบิน', '✈️'], ['ships', 'เรือ', '🚢'], ['news', 'ข่าว 48 ชม.', '📰'], ['cables', 'สายเคเบิลใต้ทะเล', '🔌'],
-    ['daynight', 'กลางวัน/กลางคืน', '🌗'], ['cctv', 'กล้อง CCTV', '📷'], ['radar', 'เรดาร์ฝน', '🌧']
+    ['quakes', 'แผ่นดินไหว 24 ชม.', '<path d="M2 12h3.5l2-5 3.5 11 3-14 2.5 10 1.5-2H22"/>'],
+    ['gdacs', 'ภัยพิบัติโลก', '<path d="M12 3.5 2.5 20h19L12 3.5z"/><path d="M12 10v4.5"/><path d="M12 17.4v.1"/>'],
+    ['fires', 'จุดความร้อน 24 ชม.', '<path d="M12 21a6 6 0 0 0 6-6c0-4-3-6-4-10-2 2-3 4-3 6-1-1-1.5-2-1.5-3C7.5 10 6 12.5 6 15a6 6 0 0 0 6 6z"/>'],
+    ['sats', 'ดาวเทียม', '<path d="M12 9l3 3-3 3-3-3z"/><path d="M10.5 10.5 8 8"/><path d="M3.5 7 7 3.5 9.5 6 6 9.5z"/><path d="M13.5 13.5 16 16"/><path d="M14.5 18 18 14.5l2.5 2.5-3.5 3.5z"/>'],
+    ['aircraft', 'เครื่องบิน', '<path d="M10.5 3.5a1.5 1.5 0 0 1 3 0V9l8 5v2l-8-2.5V19l2.5 2v1.5L12 21.6l-4 .9V21l2.5-2v-5.5l-8 2.5v-2l8-5V3.5z"/>'],
+    ['ships', 'เรือ', '<path d="M3 15h18l-2.5 5h-13L3 15z"/><path d="M6 15V9.5h12V15"/><path d="M10 9.5V5.5h4v4"/>'],
+    ['news', 'ข่าว 48 ชม.', '<path d="M4 5h12v14H6a2 2 0 0 1-2-2V5z"/><path d="M16 9h4v8a2 2 0 0 1-2 2h-2"/><path d="M7 9h6M7 12.5h6M7 16h4"/>'],
+    ['cables', 'สายเคเบิลใต้ทะเล', '<path d="M3 15c3 0 3-6 6-6s3 6 6 6 3-6 6-6"/><circle cx="3" cy="15" r="1.3"/><circle cx="21" cy="9" r="1.3"/>'],
+    ['daynight', 'กลางวัน / กลางคืน', '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/>'],
+    ['cctv', 'กล้อง CCTV ในไทย', '<path d="M3 6l13 3.5-1.5 5L1.5 11z"/><path d="M8 12.8 7 18H3"/><path d="M16 10.4l4.5-1.2v4.3l-5.2.4"/>'],
+    ['radar', 'เรดาร์ฝน', '<path d="M7 16.5a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.5 1.5 3.75 3.75 0 0 1-.5 7.5H7z"/><path d="M9 19.5l-.8 1.5M13 19.5l-.8 1.5M17 19.5l-.8 1.5"/>']
   ];
+  // สีจุดดาวเทียมทั้งหมดในห้องควบคุม: เขียว = วงโคจรต่ำ เหลือง = ระดับกลาง ฟ้า = ค้างฟ้า (เส้นวงแหวนรอบเส้นศูนย์สูตร)
+  var SAT_ALL_OPS = ['case', ['==', ['get', 'geo'], 1], '#3FE6FF', ['<', ['get', 'h'], 2000], '#3DFF9A', '#FFE07A'];
+  var SAT_ALL_DEF = ['case', ['==', ['get', 'geo'], 1], '#B48CFF', ['<', ['get', 'h'], 2000], '#7FD4FF', '#FFE07A'];
+  function opsSatPaint(map) {
+    if (!map.getLayer('cg-sat-all')) return;
+    var on = !!(OPS && OPS.on);
+    map.setPaintProperty('cg-sat-all', 'circle-color', on ? SAT_ALL_OPS : SAT_ALL_DEF);
+    map.setPaintProperty('cg-sat-all', 'circle-opacity', on ? 0.9 : 0.8);
+  }
+  // แสงบรรยากาศรอบลูกโลก (เฉพาะห้องควบคุม)
+  function opsSky(v) {
+    if (!v || v.kind !== 'chat' || !v.map.setSky) return;
+    try {
+      v.map.setSky(OPS.on ? { 'sky-color': '#00030A', 'horizon-color': '#0E4C86', 'fog-color': '#06223D', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.9,
+        'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 4, 0.75, 6.5, 0] } : { 'atmosphere-blend': 0 });
+    } catch (e) { /* รุ่นเก่าไม่มี */ }
+  }
   function opsCount(id) {
     var W = WD[id];
     if (id === 'quakes') return W.fc ? (W.fc.features || []).filter(function (f) { return Date.now() - f.properties.time < 86400e3; }).length : null;
@@ -6686,40 +7102,96 @@
     if (id === 'cctv') return ccReady() ? ccAllCams().length : null;
     return null;
   }
+  function opsCompact(n) {
+    if (n >= 1e6) return (Math.round(n / 1e5) / 10) + 'M';
+    if (n >= 1e4) return Math.round(n / 1e3) + 'K';
+    if (n >= 1e3) return (Math.round(n / 100) / 10) + 'K';
+    return String(n);
+  }
   function opsFeedItems() {
     var out = [], now = Date.now();
     var Q = WD.quakes.fc;
     ((Q && Q.features) || []).forEach(function (f) {
       var p = f.properties, c = f.geometry.coordinates, d = kmFromThai(c[0], c[1]);
       if ((p.mag >= 4.5 && now - p.time < 48 * 3600e3) || (p.mag >= 3 && d < 1500)) {
-        out.push({ t: p.time, ico: '〰️', c: p.mag >= 6 ? 'red' : p.mag >= 5 ? 'orange' : '', title: 'แผ่นดินไหว M' + (Math.round(p.mag * 10) / 10) + ' · ' + (p.place || ''),
-          sub: (d < 1500 ? 'ห่างไทย ' + fmtN(Math.round(d)) + ' กม. · ' : '') + agoText(p.time), lon: c[0], lat: c[1], z: 5, kind: 'quake', f: f });
+        out.push({ t: p.time, ico: '〰️', c: p.mag >= 6 ? 'red' : p.mag >= 5 ? 'orange' : '', k: 'แผ่นดินไหว', title: 'แผ่นดินไหว M' + (Math.round(p.mag * 10) / 10) + ' · ' + (p.place || ''),
+          tk: 'M' + (Math.round(p.mag * 10) / 10) + ' ' + (p.place || ''), sub: (d < 1500 ? 'ห่างไทย ' + fmtN(Math.round(d)) + ' กม. · ' : '') + agoText(p.time), lon: c[0], lat: c[1], z: 5, kind: 'quake', f: f });
       }
     });
     gdacsEvents().forEach(function (f) {
       var p = f.properties;
       if (p.alertlevel === 'Green' && p.eventtype !== 'TC') return;
-      out.push({ t: isoMs(p.fromdate + 'Z'), ico: (GD_T[p.eventtype] || ['', '⚠️'])[1], c: p.alertlevel === 'Red' ? 'red' : p.alertlevel === 'Orange' ? 'orange' : '',
-        title: (GD_T[p.eventtype] || ['ภัยพิบัติ'])[0] + ' · ' + (p.name || ''), sub: (GD_L[p.alertlevel] || '') + (p.country ? ' · ' + p.country : ''),
+      var nm = (GD_T[p.eventtype] || ['ภัยพิบัติ'])[0];
+      out.push({ t: isoMs(p.fromdate + 'Z'), ico: (GD_T[p.eventtype] || ['', '⚠️'])[1], c: p.alertlevel === 'Red' ? 'red' : p.alertlevel === 'Orange' ? 'orange' : '', k: nm,
+        title: nm + ' · ' + (p.name || ''), tk: (p.name || '') + (p.country ? ' · ' + p.country : '') + ' · ' + (GD_L[p.alertlevel] || ''), sub: (GD_L[p.alertlevel] || '') + (p.country ? ' · ' + p.country : ''),
         lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], z: 4, kind: 'gdacs', f: f });
     });
     var N = WD.news.doc;
     ((N && N.items) || []).slice(0, 25).forEach(function (it) {
-      out.push({ t: isoMs(it.t), ico: '📰', title: it.title, sub: it.src + (it.place ? ' · ' + it.place.name : '') + ' · ' + agoText(isoMs(it.t)),
+      out.push({ t: isoMs(it.t), ico: '📰', c: 'news', k: 'ข่าว', title: it.title, tk: it.title + ' (' + it.src + ')', sub: it.src + (it.place ? ' · ' + it.place.name : '') + ' · ' + agoText(isoMs(it.t)),
         lon: it.place && it.place.lon, lat: it.place && it.place.lat, z: it.place && it.place.kind === 'prov' ? 8 : 4, kind: 'news', url: it.url });
     });
     var F = firesInThai();
     if (F && F.n) {
       var top = F.top[0] && byId[F.top[0].id];
-      out.push({ t: isoMs(WD.fires.grid.t), ico: '🔥', title: 'จุดความร้อนในไทย 24 ชม. ' + fmtN(F.n) + ' จุด', sub: top ? 'มากสุด ' + (top.full || top.name) + ' ' + F.top[0].n + ' จุด' : '',
-        lon: 100.8, lat: 15.2, z: 5.6, kind: 'fires' });
+      out.push({ t: isoMs(WD.fires.grid.t), ico: '🔥', c: 'fire', k: 'จุดความร้อน', title: 'จุดความร้อนในไทย 24 ชม. ' + fmtN(F.n) + ' จุด', tk: 'ในไทย 24 ชม. ' + fmtN(F.n) + ' จุด' + (top ? ' · มากสุด ' + (top.full || top.name) : ''),
+        sub: top ? 'มากสุด ' + (top.full || top.name) + ' ' + F.top[0].n + ' จุด' : '', lon: 100.8, lat: 15.2, z: 5.6, kind: 'fires' });
     }
     return out.sort(function (a, b) { return b.t - a.t; }).slice(0, 50);
   }
+  function opsHms(x) { return ('0' + x.getUTCHours()).slice(-2) + ':' + ('0' + x.getUTCMinutes()).slice(-2) + ':' + ('0' + x.getUTCSeconds()).slice(-2); }
   function opsClockText() {
     var d = new Date(), b = new Date(d.getTime() + 7 * 3600e3);
-    function hms(x) { return ('0' + x.getUTCHours()).slice(-2) + ':' + ('0' + x.getUTCMinutes()).slice(-2) + ':' + ('0' + x.getUTCSeconds()).slice(-2); }
-    return '<b>' + hms(b) + '</b><span class="oc-l"> น. ไทย</span><span class="oc-u"> · UTC ' + hms(d) + '</span><span class="oc-d"> · ' + b.getUTCDate() + ' ' + TH_MON_S[b.getUTCMonth()] + ' ' + (b.getUTCFullYear() + 543) + '</span>';
+    return '<b>' + opsHms(d) + 'Z</b><span class="oc-l"> · ไทย ' + opsHms(b).slice(0, 5) + ' น.</span><span class="oc-d"> · ' + b.getUTCDate() + ' ' + TH_MON_S[b.getUTCMonth()] + ' ' + String(b.getUTCFullYear() + 543).slice(-2) + '</span>';
+  }
+  // ดัชนีสนามแม่เหล็กโลก (Kp) จาก NOAA SWPC: 0–2 สงบ 3–4 ปั่นป่วน 5 ขึ้นไป = พายุสุริยะ G1–G5
+  function opsKp() {
+    if (OPS.kpAt && Date.now() - OPS.kpAt < 30 * 60e3) return;
+    OPS.kpAt = Date.now();
+    fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', { cache: 'no-cache' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
+      var last = j && j[j.length - 1], v = last && (Array.isArray(last) ? parseFloat(last[1]) : parseFloat(last.Kp != null ? last.Kp : last.kp_index));
+      if (isFinite(v)) { OPS.kp = { v: v, t: Array.isArray(last) ? last[0] : last.time_tag }; if (OPS.on) renderOpsStatus(); }
+    }).catch(function () { OPS.kpAt = Date.now() - 25 * 60e3; });
+  }
+  function kpText(v) {
+    var k = Math.round(v);
+    return k >= 5 ? 'พายุสุริยะ G' + Math.min(5, k - 4) : k >= 4 ? 'ปั่นป่วน' : k >= 3 ? 'ปั่นป่วนเล็กน้อย' : 'สงบ';
+  }
+  function renderOpsStatus() {
+    var on = 0, ent = 0;
+    OPS_ROWS.forEach(function (r) { if (!state.data[r[0]]) return; on++; var n = opsCount(r[0]); if (n) ent += n; });
+    var h = '<span class="os-live"><i aria-hidden="true"></i>สด</span><span class="os-n os-layers"><b>' + on + '</b> ชั้น</span><span class="os-n os-ent"><b>' + fmtN(ent) + '</b> จุดข้อมูล</span>';
+    if (OPS.kp) {
+      var k = OPS.kp.v;
+      h += '<span class="os-kp' + (k >= 5 ? ' storm' : k >= 4 ? ' warn' : '') + '" title="ดัชนีสนามแม่เหล็กโลก (Kp) จาก NOAA SWPC · 0–2 สงบ 3–4 ปั่นป่วน 5 ขึ้นไปคือพายุสุริยะ">อวกาศ <b>Kp ' + (Math.round(k * 10) / 10) + '</b> ' + kpText(k) + '</span>';
+    }
+    $('opsStatRest').innerHTML = h;
+  }
+  function renderOpsRail() {
+    $('opsStats').innerHTML = OPS_ROWS.map(function (r) {
+      var n = opsCount(r[0]), on = !!state.data[r[0]], W = WD[r[0]];
+      var badge = n == null ? (on && W && W.loading ? '…' : on && W && W.err ? '!' : '') : n ? opsCompact(n) : '0';
+      var lab = r[1] + (n != null ? ' · ' + fmtN(n) : on && W && W.err ? ' · โหลดไม่ได้' : '');
+      return '<button type="button" class="ops-rb" data-ops-layer="' + r[0] + '" aria-pressed="' + on + '" aria-label="' + esc(lab) + '">' + opsIco(r[2]) +
+        (badge && on ? '<span class="ops-badge">' + badge + '</span>' : '') + '<span class="ops-tip">' + esc(lab) + (on ? '' : ' (ปิดอยู่)') + '</span></button>';
+    }).join('');
+  }
+  function renderOpsTicker(items) {
+    var tk = items.slice(0, 24), sig = tk.map(function (it) { return it.tk + '|' + it.t; }).join('~');
+    OPS.tick = tk;
+    if (sig === OPS.tickSig) return;
+    OPS.tickSig = sig;
+    var one = function (hid) {
+      return tk.map(function (it, i) {
+        return '<button type="button" class="ot-it" data-ops-tk="' + i + '"' + (hid ? ' tabindex="-1" aria-hidden="true"' : '') + '><span class="ot-k ' + (it.c || '') + '">' + esc(it.k) + '</span>' + esc(it.tk) +
+          '<span class="ot-ago">' + esc(agoText(it.t)) + '</span></button>';
+      }).join('<span class="ot-sep" aria-hidden="true">◆</span>');
+    };
+    var run = $('opsTicker');
+    if (!tk.length) { run.innerHTML = '<span class="ot-it">กำลังรวบรวมเหตุการณ์…</span>'; run.style.animationDuration = ''; run.classList.remove('go'); return; }
+    run.innerHTML = '<span class="ot-half">' + one(false) + '<span class="ot-sep" aria-hidden="true">◆</span></span><span class="ot-half" aria-hidden="true">' + one(true) + '<span class="ot-sep">◆</span></span>';
+    run.classList.add('go');
+    run.style.animationDuration = Math.max(30, Math.round(run.scrollWidth / 2 / 70)) + 's'; // ราว 70 พิกเซลต่อวินาที
   }
   function renderOpsHud() {
     var hud = $('opsHud');
@@ -6727,24 +7199,54 @@
     hud.hidden = !OPS.on;
     if (!OPS.on) return;
     $('opsClock').innerHTML = opsClockText();
-    $('opsStats').innerHTML = OPS_ROWS.map(function (r) {
-      var n = opsCount(r[0]), on = !!state.data[r[0]], W = WD[r[0]];
-      return '<button type="button" class="ops-stat" data-ops-layer="' + r[0] + '" aria-pressed="' + on + '"><span class="ops-ico" aria-hidden="true">' + r[2] + '</span><span class="ops-lab">' + esc(r[1]) + '</span>' +
-        '<b>' + (n == null ? (on && W && W.loading ? '…' : on && W && W.err ? '–' : '') : fmtN(n)) + '</b></button>';
-    }).join('');
+    renderOpsStatus();
+    renderOpsRail();
     var items = opsFeedItems();
     $('opsFeedN').textContent = items.length ? items.length : '';
+    $('opsFeedN2').textContent = items.length ? items.length : '';
     $('opsFeedList').innerHTML = items.length ? items.map(function (it, i) {
       return '<button type="button" class="ops-ev' + (it.c ? ' ' + it.c : '') + '" data-ops-ev="' + i + '"><span class="ops-ico" aria-hidden="true">' + it.ico + '</span><span class="ops-ev-t"><b>' + esc(it.title) + '</b><small>' + esc(it.sub || '') + '</small></span></button>';
     }).join('') : '<p class="ops-empty">กำลังรวบรวมเหตุการณ์…</p>';
     OPS.items = items;
+    renderOpsTicker(items);
+    opsModeState();
+  }
+  function opsModeState() {
+    document.querySelectorAll('[data-ops-proj]').forEach(function (b) { b.setAttribute('aria-pressed', String((b.getAttribute('data-ops-proj') === 'globe') === !!state.globe)); });
+    document.querySelectorAll('[data-ops-base]').forEach(function (b) { b.setAttribute('aria-pressed', String((b.getAttribute('data-ops-base') === 'sat') === !!state.data.sat)); });
+    var sp = document.querySelector('[data-ops-tool="spin"]'); if (sp) sp.setAttribute('aria-pressed', String(OPS.spin && !reduceMotion));
+    var fs = document.querySelector('[data-ops-tool="fs"]'); if (fs) fs.setAttribute('aria-pressed', String(!!document.fullscreenElement));
+  }
+  // แถบมาตราส่วนและพิกัดใต้เมาส์ (อัปเดตไม่เกินเฟรมละครั้ง)
+  function opsNiceDist(m) { var p = Math.pow(10, Math.floor(Math.log10(m))), d = m / p; return (d >= 5 ? 5 : d >= 2 ? 2 : 1) * p; }
+  function opsMeasure(lngLat) {
+    var v = views.chat;
+    if (!OPS.on || !v) return;
+    var map = v.map, z = map.getZoom(), c = map.getCenter();
+    var mpp = 40075016.686 * Math.cos(c.lat * Math.PI / 180) / (512 * Math.pow(2, z)), nice = opsNiceDist(mpp * 90), w = Math.round(nice / mpp);
+    var sc = $('opsScale');
+    sc.querySelector('i').style.width = w + 'px';
+    sc.querySelector('span').textContent = nice >= 1000 ? fmtN(nice / 1000) + ' กม.' : fmtN(nice) + ' ม.';
+    var p = lngLat || c, pid = provinceAt(p.lng, p.lat), pr = pid && byId[pid];
+    $('opsCursor').innerHTML = '<span>' + Math.abs(p.lat).toFixed(3) + '°' + (p.lat >= 0 ? 'N' : 'S') + ' ' + Math.abs(((p.lng + 540) % 360) - 180).toFixed(3) + '°' + ((((p.lng + 540) % 360) - 180) >= 0 ? 'E' : 'W') + '</span>' +
+      (pr ? '<span>' + esc(pr.full || pr.name) + '</span>' : '') + '<span>ซูม ' + z.toFixed(1) + '</span>' + (lngLat ? '' : '<span class="oc-c">กลางจอ</span>');
+  }
+  var opsMeasureQ = 0, opsMouse = null;
+  function opsMeasureSoon() { if (opsMeasureQ) return; opsMeasureQ = requestAnimationFrame(function () { opsMeasureQ = 0; opsMeasure(opsMouse); }); }
+  function opsBindMap() {
+    var v = views.chat;
+    if (!v || v.opsBound) return;
+    v.opsBound = true;
+    v.map.on('mousemove', function (e) { if (!OPS.on) return; opsMouse = e.lngLat; opsMeasureSoon(); });
+    v.map.getCanvas().addEventListener('mouseleave', function () { opsMouse = null; if (OPS.on) opsMeasureSoon(); });
+    v.map.on('move', function () { if (OPS.on) opsMeasureSoon(); });
   }
   function opsSpin() {
     cancelAnimationFrame(OPS.raf);
-    if (!OPS.on || reduceMotion) return;
+    if (!OPS.on || reduceMotion || !OPS.spin) return;
     var v = views.chat, last = performance.now();
     function frame(now) {
-      if (!OPS.on) return;
+      if (!OPS.on || !OPS.spin) return;
       var dt = Math.min(100, now - last); last = now;
       if (v && !document.hidden && Date.now() - OPS.idleAt > 12000 && v.map.getZoom() < 3.2 && !v.map.isMoving()) {
         var c = v.map.getCenter();
@@ -6754,26 +7256,31 @@
     }
     OPS.raf = requestAnimationFrame(frame);
   }
+  function opsWorldView(v) { return { center: [100.5, 14], zoom: v.el.clientWidth < 700 ? 1.15 : 2.1 }; }
   function enterOps() {
     if (OPS.on || IN_ARTIFACT) return;
     if (state.page !== 'chat') setPage('chat');
     OPS.on = true;
     OPS.prev = Object.assign({}, state.data);
-    ['quakes', 'gdacs', 'fires', 'daynight', 'sats', 'aircraft', 'ships', 'news', 'cables', 'cctv'].forEach(function (k) { state.data[k] = true; });
-    ['water', 'rain', 'fc', 'flood', 'hist', 'hazard', 'zoning', 'terrain', 'wind', 'radar', 'cloud', 'props'].forEach(function (k) { state.data[k] = false; });
+    ['quakes', 'gdacs', 'fires', 'daynight', 'sats', 'aircraft', 'ships', 'news', 'cables'].forEach(function (k) { state.data[k] = true; });
+    ['water', 'rain', 'fc', 'flood', 'hist', 'hazard', 'zoning', 'terrain', 'wind', 'radar', 'cloud', 'props', 'sat', 'cctv'].forEach(function (k) { state.data[k] = false; });
+    OPS.satAll = WD.sats.all; WD.sats.all = true;
     OPS.theme = state.theme; OPS.globe = state.globe;
     if (state.theme !== 'dark') $('btnTheme').click();
+    else if (BASE.id !== 'auto') reloadBase(); // ห้องควบคุมใช้แผนที่มืดเสมอ
     if (!state.globe) $('btnGlobe').click();
     document.body.classList.add('ops');
-    if ($('opsHud')) $('opsHud').classList.toggle('feed-min', window.innerWidth < 700);
+    if ($('opsFeed')) { $('opsFeed').hidden = true; $('opsFeedBtn').setAttribute('aria-pressed', 'false'); }
     if (SITE.cur) closeSite();
-    OPS.idleAt = 0;
+    OPS.idleAt = 0; OPS.tickSig = '';
     var v = views.chat;
     if (v && v.popup) { v.popup.remove(); v.popup = null; }
-    setTimeout(function () { if (v) { v.map.resize(); v.map.flyTo({ center: [100.5, 14], zoom: v.el.clientWidth < 700 ? 1.3 : 2.2, duration: reduceMotion ? 0 : 1600 }); } }, 60);
+    opsBindMap();
+    setTimeout(function () { if (v) { v.map.resize(); opsSky(v); var w = opsWorldView(v); v.map.flyTo({ center: w.center, zoom: w.zoom, duration: reduceMotion ? 0 : 1600 }); opsMeasure(null); } }, 60);
     clearInterval(OPS.clock);
     OPS.clock = setInterval(function () { if (OPS.on && !document.hidden) { $('opsClock').innerHTML = opsClockText(); } }, 1000);
-    OPS.refresh = setInterval(function () { if (OPS.on && !document.hidden) { WORLD_IDS.forEach(function (k) { if (state.data[k]) loadWorld(k); }); renderOpsHud(); } }, 60e3);
+    OPS.refresh = setInterval(function () { if (OPS.on && !document.hidden) { WORLD_IDS.forEach(function (k) { if (state.data[k]) loadWorld(k); }); opsKp(); renderOpsHud(); } }, 60e3);
+    opsKp();
     eachView(refreshLive);
     renderDataChips();
     renderOpsHud();
@@ -6787,10 +7294,14 @@
     cancelAnimationFrame(OPS.raf);
     clearInterval(OPS.clock); clearInterval(OPS.refresh);
     if (OPS.prev) state.data = OPS.prev;
+    if (OPS.satAll != null) WD.sats.all = OPS.satAll;
     document.body.classList.remove('ops');
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(function () { /* ข้าม */ });
     if (OPS.theme && state.theme !== OPS.theme) $('btnTheme').click();
+    else if (BASE.id !== 'auto') reloadBase();
     if (OPS.globe === false && state.globe) $('btnGlobe').click();
     var v = views.chat;
+    if (v) { opsSky(v); opsSatPaint(v.map); }
     setTimeout(function () { if (v) { v.map.resize(); goTo(state.place || HOME); } }, 60);
     eachView(refreshLive);
     renderDataChips();
@@ -6802,26 +7313,67 @@
     if (IN_ARTIFACT) $('btnOps').hidden = true;
     $('btnOps').addEventListener('click', function () { if (OPS.on) exitOps(); else enterOps(); });
   }
+  function opsGo(it) {
+    var v = views.chat;
+    if (!it || !v) return;
+    OPS.idleAt = Date.now() + 60e3;
+    if (it.lon == null) { if (it.url) window.open(it.url, '_blank', 'noopener'); return; }
+    v.map.flyTo({ center: [it.lon, it.lat], zoom: it.z || 5, duration: reduceMotion ? 0 : 1400 });
+    v.map.once('moveend', function () {
+      if (it.kind === 'gdacs') openGdacsPopup(v, it.f);
+      else if (it.kind === 'quake') openQuakePopup(v, it.f);
+      else if (it.kind === 'news') { var gi = (v.nwGroups || []).findIndex(function (g) { return Math.abs(g.place.lon - it.lon) < 0.01 && Math.abs(g.place.lat - it.lat) < 0.01; }); if (gi >= 0) openNewsPopup(v, gi, [it.lon, it.lat]); }
+    });
+  }
+  function opsFeedOpen(on) {
+    $('opsFeed').hidden = !on;
+    $('opsFeedBtn').setAttribute('aria-pressed', String(on));
+  }
   if ($('opsHud')) {
     $('opsHud').addEventListener('click', function (e) {
+      var v = views.chat;
       if (e.target.closest('#opsExit')) { exitOps(); return; }
-      if (e.target.closest('#opsFeedT')) { $('opsHud').classList.toggle('feed-min'); return; }
+      if (e.target.closest('#opsFeedBtn')) { opsFeedOpen($('opsFeed').hidden); return; }
+      if (e.target.closest('#opsFeedX')) { opsFeedOpen(false); $('opsFeedBtn').focus(); return; }
       var b = e.target.closest('[data-ops-layer]');
-      if (b) { var id = b.getAttribute('data-ops-layer'); state.data[id] = !state.data[id]; eachView(refreshLive); renderDataChips(); renderOpsHud(); return; }
-      var ev = e.target.closest('[data-ops-ev]');
-      if (ev) {
-        var it = (OPS.items || [])[+ev.getAttribute('data-ops-ev')], v = views.chat;
-        if (!it || !v) return;
-        OPS.idleAt = Date.now() + 60e3;
-        if (it.lon == null) { if (it.url) window.open(it.url, '_blank', 'noopener'); return; }
-        v.map.flyTo({ center: [it.lon, it.lat], zoom: it.z || 5, duration: reduceMotion ? 0 : 1400 });
-        v.map.once('moveend', function () {
-          if (it.kind === 'gdacs') openGdacsPopup(v, it.f);
-          else if (it.kind === 'quake') openQuakePopup(v, it.f);
-          else if (it.kind === 'news') { var gi = (v.nwGroups || []).findIndex(function (g) { return Math.abs(g.place.lon - it.lon) < 0.01 && Math.abs(g.place.lat - it.lat) < 0.01; }); if (gi >= 0) openNewsPopup(v, gi, [it.lon, it.lat]); }
-        });
+      if (b) {
+        var id = b.getAttribute('data-ops-layer');
+        state.data[id] = !state.data[id];
+        eachView(refreshLive); renderDataChips(); renderOpsHud();
+        var nb = document.querySelector('[data-ops-layer="' + id + '"]'); if (nb) nb.focus();
+        return;
       }
+      var t = e.target.closest('[data-ops-tool]');
+      if (t && v) {
+        var k = t.getAttribute('data-ops-tool');
+        if (k === 'search') { openPalette(t); return; }
+        if (k === 'th') { OPS.idleAt = Date.now() + 60e3; v.map.flyTo({ center: [100.8, 13.2], zoom: v.el.clientWidth < 700 ? 4.2 : 4.9, duration: reduceMotion ? 0 : 1600 }); return; }
+        if (k === 'world') { OPS.idleAt = 0; var w = opsWorldView(v); v.map.flyTo({ center: w.center, zoom: w.zoom, pitch: 0, bearing: 0, duration: reduceMotion ? 0 : 1600 }); return; }
+        if (k === 'spin') { OPS.spin = !OPS.spin; OPS.idleAt = 0; opsSpin(); opsModeState(); return; }
+        if (k === 'fs') {
+          var de = document.documentElement;
+          if (document.fullscreenElement) { if (document.exitFullscreen) document.exitFullscreen().catch(function () { /* ข้าม */ }); }
+          else if (de.requestFullscreen) de.requestFullscreen().catch(function () { toast('เบราว์เซอร์นี้ไม่ให้เปิดเต็มจอ'); });
+          return;
+        }
+      }
+      var pj = e.target.closest('[data-ops-proj]');
+      if (pj) { if ((pj.getAttribute('data-ops-proj') === 'globe') !== !!state.globe) $('btnGlobe').click(); opsModeState(); return; }
+      var bs = e.target.closest('[data-ops-base]');
+      if (bs) { var sat = bs.getAttribute('data-ops-base') === 'sat'; if (sat !== !!state.data.sat) { state.data.sat = sat; eachView(refreshLive); renderDataChips(); } opsModeState(); return; }
+      var zm = e.target.closest('[data-ops-zoom]');
+      if (zm && v) {
+        var a = zm.getAttribute('data-ops-zoom');
+        OPS.idleAt = Date.now();
+        if (a === 'in') v.map.zoomIn(); else if (a === 'out') v.map.zoomOut(); else v.map.easeTo({ bearing: 0, pitch: 0 });
+        return;
+      }
+      var tk = e.target.closest('[data-ops-tk]');
+      if (tk) { opsGo(OPS.tick[+tk.getAttribute('data-ops-tk')]); return; }
+      var ev = e.target.closest('[data-ops-ev]');
+      if (ev) opsGo((OPS.items || [])[+ev.getAttribute('data-ops-ev')]);
     });
+    document.addEventListener('fullscreenchange', function () { if (OPS.on) { opsModeState(); setTimeout(function () { if (views.chat) views.chat.map.resize(); }, 120); } });
   }
   ['mousedown', 'touchstart', 'wheel', 'keydown'].forEach(function (t) {
     document.addEventListener(t, function (e) { if (OPS.on && (t === 'keydown' || (e.target.closest && e.target.closest('#mapChat')))) OPS.idleAt = Date.now(); }, { passive: true });
@@ -6829,7 +7381,9 @@
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape' || !OPS.on) return;
     var modal = ($('helpModal') && !$('helpModal').hidden) || ($('ccModal') && !$('ccModal').hidden) || ($('palette') && !$('palette').hidden) || SITE.cur || SITE.pick;
-    if (!modal) exitOps();
+    if (modal) return;
+    if ($('opsFeed') && !$('opsFeed').hidden) { opsFeedOpen(false); $('opsFeedBtn').focus(); return; }
+    exitOps();
   });
 
   // ---------- แชท: ถามเรื่องโลกตอนนี้ ----------
@@ -7293,7 +7847,11 @@
   renderChips();
   renderExplorers();
   renderAside();
-  setPage(start.page, { fromHash: true });
+  // เปิดเว็บครั้งแรก (ไม่มีลิงก์เฉพาะ) เห็นลูกโลกเต็มใบก่อน ซูมเข้าเองได้ หรือกดชื่อพื้นที่ด้านบนเพื่อบินไป
+  var intro = start.page === 'chat' && !location.hash && !IN_ARTIFACT;
+  if (intro) { state.globe = true; $('btnGlobe').setAttribute('aria-pressed', 'true'); $('globeText').textContent = 'แผนที่แบน'; }
+  setPage(start.page, { fromHash: true, intro: intro });
+  renderBaseChips();
   connectRuntime();
   renderDataChips();
   loadLive();
