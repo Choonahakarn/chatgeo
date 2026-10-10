@@ -1,3 +1,4 @@
 .DS_Store
 publish.command
 __pycache__/
+.fuse_hidden*
