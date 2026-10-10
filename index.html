@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610110034">
+<link rel="stylesheet" href="style.css?v=202610110041">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -442,7 +442,7 @@
             <li><b>แถบเครื่องมือด้านขวาของแผนที่</b> ชั้นข้อมูล · ค้นหา · รอบตัวฉัน · ตรวจทำเล (บนมือถือเหลือแต่ไอคอน) · มุมมองภูมิประเทศ 3 มิติเปิดได้จากการ์ดวิเคราะห์ที่ดิน</li>
             <li><b>ลูกโลก</b> และ <b>ธีม</b> อยู่มุมขวาบนของหน้า (ธีมเริ่มต้นน้ำเงิน-ขาว กดเปลี่ยนเป็นน้ำเงินกรมท่าได้) เปิดเว็บครั้งแรกจะเห็นลูกโลกเต็มใบก่อน กด <b>ไทย</b> ที่แถบด้านบนเพื่อบินเข้าประเทศไทย</li>
             <li><b>แผนที่ฐาน</b> (ปุ่มชั้นข้อมูล › แผนที่ฐาน) เลือกได้ 5 แบบ: ChatGeo ตามธีม · ถนนสีสด · OpenStreetMap · ภูมิประเทศ · ภาพดาวเทียม Sentinel-2 เว็บจำไว้ให้ ถ้าแบบที่เลือกโหลดไม่ได้จะกลับมาใช้แบบ ChatGeo ชั่วคราว</li>
-            <li><b>แถบล่างสุด</b> ตัวหนังสือวิ่ง: แผ่นดินไหวล่าสุด (USGS) ราคา BTC/ETH (CoinGecko) อัตรา USD/THB (ECB) ผล AI กล้อง น้ำท่วมจากดาวเทียม สภาพอวกาศ และข่าวเด่น ชี้เมาส์เพื่อหยุด กดแผ่นดินไหว น้ำท่วม กล้อง หรือข่าว เพื่อไปดู · ราคาเป็นข้อมูลอ้างอิง ไม่ใช่คำแนะนำการลงทุน</li>
+            <li><b>แถบล่างสุด</b> ซ้ายสุดเป็นลิงก์ Discord · X · Facebook ถัดมาเป็นตัวหนังสือวิ่ง: แผ่นดินไหวล่าสุด (USGS) ราคา BTC/ETH (CoinGecko) อัตรา USD/THB (ECB) ผล AI กล้อง น้ำท่วมจากดาวเทียม สภาพอวกาศ และข่าวเด่น ชี้เมาส์เพื่อหยุด กดแผ่นดินไหว น้ำท่วม กล้อง หรือข่าว เพื่อไปดู · ราคาเป็นข้อมูลอ้างอิง ไม่ใช่คำแนะนำการลงทุน</li>
             <li><b>ซ่อนแชท</b> กดลูกศรที่ขอบซ้ายของแผนที่ (มือถือเป็นปุ่มใต้แถบพื้นที่) แผนที่จะเต็มกว้าง กดปุ่ม <b>แชท</b> เพื่อเปิดกลับ</li>
           </ul>
         </section>
@@ -619,10 +619,11 @@
 
   <!-- แถบสถานะล่างสุด (แบบ OSIRIS): ลิงก์ · ตัวหนังสือวิ่งเหตุการณ์และราคา · สถานะออนไลน์ -->
   <footer class="sbar" id="sbar" aria-label="แถบสถานะและเหตุการณ์ล่าสุด">
+    <!-- ลิงก์โซเชียล: วางลิงก์ของคุณใน href="" ได้เลย (ถ้ายังว่าง กดแล้วจะขึ้นว่ายังไม่ได้ใส่ลิงก์) · ไอคอนจาก Simple Icons (CC0) -->
     <div class="sb-links">
-      <a class="sb-l" href="https://github.com/Choonahakarn/chatgeo" target="_blank" rel="noopener" title="ซอร์สโค้ดของเว็บนี้ (GitHub)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l-5 5 5 5"/><path d="M16 7l5 5-5 5"/></svg><span>โค้ด</span></a>
-      <button type="button" class="sb-l gold" data-sb="help"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/></svg><span>วิธีใช้</span></button>
-      <button type="button" class="sb-l sb-priv" data-sb="privacy"><span>ความเป็นส่วนตัว</span></button>
+      <a class="sb-soc" data-soc="Discord" href="" target="_blank" rel="noopener" aria-label="Discord" title="Discord"><i style="--ico:url(https://cdn.jsdelivr.net/npm/simple-icons@15.0.0/icons/discord.svg)"></i></a>
+      <a class="sb-soc" data-soc="X" href="" target="_blank" rel="noopener" aria-label="X (Twitter)" title="X"><i style="--ico:url(https://cdn.jsdelivr.net/npm/simple-icons@15.0.0/icons/x.svg)"></i></a>
+      <a class="sb-soc" data-soc="Facebook" href="" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook"><i style="--ico:url(https://cdn.jsdelivr.net/npm/simple-icons@15.0.0/icons/facebook.svg)"></i></a>
     </div>
     <div class="sb-track"><div class="sb-run" id="sbRun"></div></div>
     <span class="sb-on" id="sbOn" role="status"><i aria-hidden="true"></i><span>ออนไลน์</span></span>
@@ -633,9 +634,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610110034"></script>
-<script src="data/countries.js?v=202610110034"></script>
-<script src="data/th-regions.js?v=202610110034"></script>
-<script src="app.js?v=202610110034"></script>
+<script src="data/data.js?v=202610110041"></script>
+<script src="data/countries.js?v=202610110041"></script>
+<script src="data/th-regions.js?v=202610110041"></script>
+<script src="app.js?v=202610110041"></script>
 </body>
 </html>

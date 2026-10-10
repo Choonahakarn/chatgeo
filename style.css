@@ -1459,6 +1459,10 @@ body.ops .chat-tab { display: none; }
 .sbar { position: relative; z-index: 5; display: flex; align-items: center; height: 30px; min-width: 0; overflow: hidden; background: #070B14; color: #C9D6E8; border-top: 1px solid #1B2436;
   font-family: 'IBM Plex Mono', 'Sarabun', ui-monospace, monospace; font-size: 11.5px; }
 .sb-links { flex: 0 0 auto; display: flex; align-items: center; height: 100%; }
+.sb-soc { display: inline-grid; place-items: center; width: 38px; height: 100%; border-right: 1px solid #1B2436; color: #8FA3BC; }
+.sb-soc:hover { color: #fff; background: #0E1524; }
+.sb-soc:focus-visible { outline: 2px solid #3FE6FF; outline-offset: -2px; }
+.sb-soc i { width: 14px; height: 14px; background: currentColor; -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; }
 .sb-l { display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 12px; border: 0; border-right: 1px solid #1B2436; background: transparent; color: #8FA3BC; font: inherit; letter-spacing: .04em; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .sb-l:hover { color: #fff; background: #0E1524; }
 .sb-l.gold { color: #E8C36A; }
@@ -1484,8 +1488,7 @@ body.cv-fs-on .sbar { display: none; }
 .toast { bottom: 44px; }
 @media (max-width: 860px) {
   .sbar { height: 28px; font-size: 11px; }
-  .sb-l { padding: 0 9px; }
-  .sb-l span, .sb-priv { display: none; }
+  .sb-soc { width: 32px; }
   .sb-on { padding: 0 9px; }
   .sb-on span { display: none; }
   .sb-it { height: 28px; padding: 0 10px; }

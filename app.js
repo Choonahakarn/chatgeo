@@ -7938,11 +7938,10 @@
   }
   if ($('sbar')) {
     $('sbar').addEventListener('click', function (e) {
-      var l = e.target.closest('[data-sb]');
-      if (l) {
-        openHelp();
-        var sec = l.getAttribute('data-sb') === 'privacy' ? $('h-privacy') : null;
-        if (sec) setTimeout(function () { sec.scrollIntoView({ block: 'start' }); }, 30);
+      var soc = e.target.closest('[data-soc]');
+      if (soc) {
+        var hr = (soc.getAttribute('href') || '').trim();
+        if (!hr || hr === '#') { e.preventDefault(); toast('ยังไม่ได้ใส่ลิงก์ ' + soc.getAttribute('data-soc') + ' (ใส่ได้ในไฟล์ index.html ตรงแถบล่างสุด)'); }
         return;
       }
       var b = e.target.closest('button[data-sbk]');
