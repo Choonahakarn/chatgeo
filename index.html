@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610110105">
+<link rel="stylesheet" href="style.css?v=202610110138">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -36,6 +36,7 @@
       <a href="#brief" id="navBrief" data-page="brief"><span class="nl">สรุปเช้านี้</span><span class="ns" aria-hidden="true">สรุป</span></a>
       <a href="#cctv" id="navCctv" data-page="cctv" aria-current="false">กล้อง</a>
       <a href="#props" id="navPp" data-page="props" aria-current="false">ทรัพย์</a>
+      <a href="#hike" id="navHike" data-page="hike" aria-current="false">เดินป่า</a>
     </nav>
     <div class="top-actions">
       <button type="button" id="btnOps" class="icon-btn ops-btn" aria-pressed="false" title="ห้องควบคุม: ลูกโลกเต็มจอ แผ่นดินไหว พายุ ไฟป่า ดาวเทียม เครื่องบิน เรือ ข่าวทั่วโลก">
@@ -339,6 +340,32 @@
     </section>
   </main>
 
+  <!-- หน้า 5: เดินป่า (แรงบันดาลใจ hupkao): รายการ + แผนที่ภูมิประเทศ + รายละเอียดพร้อมกราฟความสูง อากาศ ฤดูฝนน้อย -->
+  <main class="page-hike" id="pageHike" hidden>
+    <aside class="hk-side" aria-label="เดินป่าและธรรมชาติ">
+      <div class="hk-listv" id="hkListView">
+        <div class="hk-top">
+          <h1>เดินป่า · ธรรมชาติ <span class="cv-tag">ทดลอง</span></h1>
+          <p class="hk-sub">ยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap พร้อมความสูง อากาศ และเดือนที่ฝนน้อย</p>
+          <label class="cv-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+            <input id="hkQ" type="search" placeholder="ค้นชื่อ ดอย น้ำตก อุทยาน หรือจังหวัด" autocomplete="off" spellcheck="false" aria-label="ค้นหาสถานที่เดินป่า">
+          </label>
+          <div class="hk-kinds" id="hkKinds" role="group" aria-label="ประเภท"></div>
+          <div class="hk-row"><select id="hkZone" class="hk-sel" aria-label="ภาค"></select><select id="hkSort" class="hk-sel" aria-label="เรียงตาม"></select></div>
+          <button type="button" class="fp-row fp-switch hk-inview" id="hkInView" aria-pressed="false"><span>เฉพาะที่อยู่ในกรอบแผนที่</span><span class="sw" aria-hidden="true"><i></i></span></button>
+          <div class="hk-n" id="hkN" aria-live="polite"></div>
+        </div>
+        <div class="hk-list" id="hkList"></div>
+        <p class="hk-foot" id="hkFoot"></p>
+      </div>
+      <div class="hk-detail" id="hkDetail" hidden></div>
+    </aside>
+    <section class="hk-mapbox" aria-label="แผนที่ภูมิประเทศ"><div id="hkMap" class="hk-map"></div>
+      <div class="hk-leg" aria-hidden="true"><span><i style="background:#E5484D"></i>เส้นทาง</span><span><i style="background:#A0522D"></i>ยอดเขา</span><span><i style="background:#2FA36B"></i>พื้นที่ธรรมชาติ</span><span><i style="background:#2F80ED"></i>น้ำตก</span><span><i style="background:#9B51E0"></i>จุดชมวิว</span><span><i style="background:#F2994A"></i>กางเต็นท์</span></div>
+    </section>
+  </main>
+
   <!-- หน้า 4: ทรัพย์ (วางรายการเอง ตรวจทำเลทีละหลายแปลง) -->
   <main class="page-cctv page-pp" id="pagePp" data-size="m" hidden>
     <aside class="cv-side pp-side" aria-label="กรองทรัพย์">
@@ -424,7 +451,7 @@
       </div>
       <div class="cc-body help-body">
         <nav class="help-toc" aria-label="หัวข้อ">
-          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-twin">วิเคราะห์ที่ดิน</a><a href="#h-ops">ห้องควบคุม</a><a href="#h-privacy">ความเป็นส่วนตัว</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-cctv">หน้ากล้อง</a><a href="#h-props">หน้าทรัพย์</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
+          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-twin">วิเคราะห์ที่ดิน</a><a href="#h-ops">ห้องควบคุม</a><a href="#h-privacy">ความเป็นส่วนตัว</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-cctv">หน้ากล้อง</a><a href="#h-hike">หน้าเดินป่า</a><a href="#h-props">หน้าทรัพย์</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
         </nav>
 
         <section id="h-start">
@@ -569,6 +596,11 @@
           <p>ภาพจากต้นทางเป็นภาพนิ่ง ไม่ใช่วิดีโอ กดภาพเพื่อดูกล้องเดียว จะขอภาพใหม่ทุก 20 วินาที พร้อมบอกว่าภาพล่าสุดเมื่อกี่วินาทีก่อน</p>
         </section>
 
+        <section id="h-hike">
+          <h3>หน้าเดินป่า</h3>
+          <p>รวมยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap (ลิงก์ <kbd>#hike</kbd>) กรองตามประเภท ภาค หรือค้นชื่อ กดรายการเพื่อดูความสูง กราฟขึ้นลงของเส้นทาง เวลาเดินโดยประมาณ อากาศ 4 วัน และเดือนที่ฝนน้อย ความยากและเวลาเป็นการประเมินคร่าวๆ ตรวจสอบกับอุทยานก่อนไปเสมอ</p>
+        </section>
+
         <section id="h-props">
           <h3>หน้า "ทรัพย์" · ตรวจทำเลทีละหลายแปลง</h3>
           <p>เหมือนจดรายการบ้านหรือที่ดินที่อยากไปดู แล้วให้ผู้ช่วยเช็กให้ทีละแปลงว่าน้ำเคยท่วมไหม ก่อนเสียเวลาขับรถไปดู (ลิงก์ <kbd>#props</kbd>)</p>
@@ -635,9 +667,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610110105"></script>
-<script src="data/countries.js?v=202610110105"></script>
-<script src="data/th-regions.js?v=202610110105"></script>
-<script src="app.js?v=202610110105"></script>
+<script src="data/data.js?v=202610110138"></script>
+<script src="data/countries.js?v=202610110138"></script>
+<script src="data/th-regions.js?v=202610110138"></script>
+<script src="app.js?v=202610110138"></script>
 </body>
 </html>

@@ -1,0 +1,53 @@
+# เดินป่าและธรรมชาติ: ดึงอุทยาน ยอดเขา จุดกางเต็นท์ น้ำตก จุดชมวิว และเส้นทางเดินป่าจาก OpenStreetMap
+# เดือนละครั้ง (ข้อมูล OSM เปลี่ยนช้า) ผลเก็บใน branch "outdoor-data" (commit เดียว เขียนทับทุกครั้ง)
+# หน้าเว็บอ่านจาก https://raw.githubusercontent.com/<repo>/outdoor-data/outdoor.json
+# ข้อมูล © OpenStreetMap contributors (ODbL)
+name: เดินป่าและธรรมชาติ (OSM)
+
+on:
+  schedule:
+    - cron: '23 4 2 * *'    # วันที่ 2 ของทุกเดือน 11:23 น. เวลาไทย
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: outdoor
+  cancel-in-progress: false
+
+jobs:
+  outdoor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATA: /tmp/outdoor-data
+      PBF: /tmp/thailand-latest.osm.pbf
+      REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: โหลดแผนที่ OSM ของไทย (Geofabrik)
+        run: |
+          curl -fsSL --retry 3 -A "ChatGeo-outdoor (+https://choonahakarn.github.io/chatgeo/)" -o "$PBF" https://download.geofabrik.de/asia/thailand-latest.osm.pbf
+          ls -la "$PBF"
+
+      - name: ติดตั้งไลบรารี
+        run: pip install -q osmium==4.3.1 shapely==2.1.2
+
+      - name: ดึงจุดเดินป่าและธรรมชาติ
+        run: python scripts/outdoor_osm.py --pbf "$PBF" --th data/th-regions.js --out "$DATA"
+
+      - name: เก็บลง branch outdoor-data
+        run: |
+          cd "$DATA"
+          git init -q -b outdoor-data
+          git config user.name "ChatGeo bot"
+          git config user.email "chatgeo-bot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "เดินป่าและธรรมชาติ (OSM) $(TZ=Asia/Bangkok date '+%Y-%m-%d')"
+          git push -q -f "$REMOTE" outdoor-data

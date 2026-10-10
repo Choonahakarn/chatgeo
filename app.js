@@ -760,6 +760,7 @@
   function hashFor(page, place) {
     if (page === 'cctv') return '#cctv' + (/^(wet|src:|site:)/.test(CV.filter) ? '=' + CV.filter : '');
     if (page === 'props') return '#props';
+    if (page === 'hike') return '#hike' + (HK.sel ? '=' + encodeURIComponent(HK.sel) : '');
     if (page === 'brief') return place === HOME ? '#brief' : '#brief-' + place;
     return place === HOME ? '' : '#' + place;
   }
@@ -773,6 +774,8 @@
     var h = decodeURIComponent((location.hash || '').slice(1));
     if (h === 'ops') return { page: 'chat', place: state.place || HOME, ops: true };
     if (h === 'props') return { page: 'props', place: state.place || HOME };
+    var hm = /^hike(?:=([nwr]\d+))?$/.exec(h);
+    if (hm) return { page: 'hike', place: state.place || HOME, hk: hm[1] || '' };
     var cm = /^cctv(?:=([\w:-]+))?$/.exec(h);
     if (cm) return { page: 'cctv', place: state.place || HOME, cv: cm[1] || 'all' };
     var sm = /^(site|twin)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(h);
@@ -791,15 +794,17 @@
     $('pageBrief').hidden = page !== 'brief';
     $('pageCctv').hidden = page !== 'cctv';
     $('pagePp').hidden = page !== 'props';
+    if ($('pageHike')) $('pageHike').hidden = page !== 'hike';
+    if ($('navHike')) $('navHike').setAttribute('aria-current', page === 'hike' ? 'page' : 'false');
     $('navChat').setAttribute('aria-current', page === 'chat' ? 'page' : 'false');
     $('navBrief').setAttribute('aria-current', page === 'brief' ? 'page' : 'false');
     $('navCctv').setAttribute('aria-current', page === 'cctv' ? 'page' : 'false');
     $('navPp').setAttribute('aria-current', page === 'props' ? 'page' : 'false');
-    document.title = page === 'brief' ? 'สรุปเช้านี้ · ChatGeo' : page === 'cctv' ? 'กล้อง CCTV สด · ChatGeo' : page === 'props' ? 'ค้นทรัพย์ · ตรวจทำเลหลายแปลง · ChatGeo' : 'ChatGeo · คุยกับโลก';
+    document.title = page === 'brief' ? 'สรุปเช้านี้ · ChatGeo' : page === 'cctv' ? 'กล้อง CCTV สด · ChatGeo' : page === 'props' ? 'ค้นทรัพย์ · ตรวจทำเลหลายแปลง · ChatGeo' : page === 'hike' ? 'เดินป่า · ยอดเขา น้ำตก เส้นทางทั่วไทย · ChatGeo' : 'ChatGeo · คุยกับโลก';
     if (page !== 'brief') stopSpeech();
     closeAllResults();
-    if (page === 'cctv' || page === 'props') {
-      if (page === 'cctv') cvStart(); else { cvStop(); renderPropsPage(); }
+    if (page === 'cctv' || page === 'props' || page === 'hike') {
+      if (page === 'cctv') cvStart(); else if (page === 'props') { cvStop(); renderPropsPage(); } else { cvStop(); hkStart(opts.hk); }
       if (!opts.fromHash) writeHash(true);
       return;
     }
@@ -827,6 +832,7 @@
     if (r.page !== state.page) setPage(r.page, { fromHash: true });
     if (r.site && !IN_ARTIFACT) openSite(r.site.lon, r.site.lat, { tab: r.tab });
     if (r.ops) enterOps();
+    if (r.page === 'hike' && state.page === 'hike') { if (r.hk && r.hk !== HK.sel) hkOpen(r.hk, true); else if (!r.hk && HK.sel) hkClose(); }
   }
   window.addEventListener('popstate', onRoute);
   window.addEventListener('hashchange', onRoute);
@@ -1371,6 +1377,7 @@
     }
     if (m.key === 'near') return nearAnswer(m);
     if (m.key === 'site') return siteAnswer(m);
+    if (m.key === 'hk') return hkAnswer(m);
     if (m.key === 'pp') return { title: 'ค้นทรัพย์ · ตรวจทำเลทีละหลายแปลง', text: (PP.list.length ? 'ในรายการของคุณมี ' + PP.list.length + ' ทรัพย์ ตรวจทำเลแล้ว ' + PP.list.filter(function (p) { return p.chk; }).length + ' รายการ ' : '') +
       'วางรายการทรัพย์ที่สนใจ (พิกัดหรือลิงก์ Google Maps ราคา ขนาด วันขาย) หรือไฟล์ CSV ที่หน้า "ทรัพย์" ระบบจะตรวจความเสี่ยงน้ำท่วมทีละแปลง แล้วกรองและเรียงตามราคา ราคาต่อตารางวา หรือความเสี่ยงได้ ' +
       'ChatGeo ไม่ได้เก็บประกาศขายทอดตลาดเอง ค้นทรัพย์ได้ที่เว็บกรมบังคับคดีแล้วคัดลอกพิกัดมาวาง',
@@ -1727,6 +1734,13 @@
     if (!IN_ARTIFACT && PP_RE.test(text) && !parseCoords(text)) {
       if (state.page !== 'chat') setPage('chat');
       state.messages.push({ role: 'user', text: text }, { role: 'bot', key: 'pp' });
+      renderMsgs();
+      return;
+    }
+    if (!IN_ARTIFACT && HK_RE.test(text) && !parseCoords(text) && !/ท่วม|ข่าว/.test(text)) {
+      if (state.page !== 'chat') setPage('chat');
+      state.messages.push({ role: 'user', text: text }, { role: 'bot', key: 'hk', q: text });
+      hkLoad();
       renderMsgs();
       return;
     }
@@ -8253,6 +8267,400 @@
     sbOnline();
   }
 
+  /* ---------- หน้าเดินป่า (แรงบันดาลใจ hupkao): จุดธรรมชาติและเส้นทางจาก OpenStreetMap ----------
+     ข้อมูลหลักมาจากงาน "เดินป่าและธรรมชาติ (OSM)" ใน GitHub Actions (branch outdoor-data) ไม่ได้คัดลอกฐานข้อมูลของเว็บอื่น
+     ส่วนที่ ChatGeo เติมให้เอง: ความสูงและกราฟขึ้นลงจากแผนที่ความสูง ความยากและเวลาเดินโดยประมาณ อากาศ 4 วัน ฤดูฝนน้อย จุดใกล้เคียง */
+  var OUTDOOR_BASE = 'https://raw.githubusercontent.com/Choonahakarn/chatgeo/outdoor-data/';
+  var HK_KINDS = [['all', 'ทั้งหมด'], ['trail', 'เส้นทาง'], ['peak', 'ยอดเขา'], ['park', 'อุทยาน'], ['fall', 'น้ำตก'], ['view', 'จุดชมวิว'], ['camp', 'กางเต็นท์']];
+  var HK_K = { trail: { t: 'เส้นทางเดินป่า', c: '#E5484D', i: '🥾' }, peak: { t: 'ยอดเขา', c: '#A0522D', i: '⛰️' }, park: { t: 'พื้นที่ธรรมชาติ', c: '#2FA36B', i: '🌳' },
+    fall: { t: 'น้ำตก', c: '#2F80ED', i: '💧' }, view: { t: 'จุดชมวิว', c: '#9B51E0', i: '🔭' }, camp: { t: 'ลานกางเต็นท์', c: '#F2994A', i: '⛺' }, head: { t: 'จุดเริ่มเส้นทาง', c: '#6B7280', i: '🚩' } };
+  var HK_PT = { np: 'อุทยานแห่งชาติ', fp: 'วนอุทยาน', ws: 'เขตรักษาพันธุ์สัตว์ป่า', nh: 'เขตห้ามล่าสัตว์ป่า', pa: 'พื้นที่คุ้มครอง' };
+  var HK_SORTS = [['top', 'แนะนำ'], ['ele', 'สูงที่สุด'], ['km', 'ยาวที่สุด'], ['near', 'ใกล้ฉัน'], ['name', 'ชื่อ ก–ฮ']];
+  var HK_DIFF = [{ t: 'ง่าย', c: '#2FA36B' }, { t: 'ปานกลาง', c: '#D99A1E' }, { t: 'ยาก', c: '#E5484D' }, { t: 'ยากมาก', c: '#7C3AED' }];
+  var HK_SAC = { hiking: 0, mountain_hiking: 1, demanding_mountain_hiking: 2, alpine_hiking: 3, demanding_alpine_hiking: 3, difficult_alpine_hiking: 3 };
+  var HK = { doc: null, err: false, loading: false, trails: null, trailsP: null, kind: 'all', zone: 'all', q: '', sort: 'top', inView: false, sel: null,
+    map: null, ready: false, limit: 80, info: {}, busy: false };
+  function hkZoneOf(p) { var pid = PID_BY_NAME[p], f = pid && PROV_FEAT[pid]; return f ? f.properties.zone : ''; }
+  function hkLoad() {
+    if (HK.doc || HK.loading || IN_ARTIFACT) return;
+    HK.loading = true; HK.err = false;
+    fetch(OUTDOOR_BASE + 'outdoor.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+      if (!j || !Array.isArray(j.items)) throw new Error('bad');
+      HK.byId = {};
+      j.items.forEach(function (it) { HK.byId[it.id] = it; it.z = hkZoneOf(it.p); });
+      HK.doc = j;
+    }).catch(function () { HK.err = true; }).then(function () {
+      HK.loading = false;
+      if (state.page === 'hike') { renderHike(); hkMapData(); if (HK.pending) { var id = HK.pending; HK.pending = null; hkOpen(id, true); } }
+      if (state.messages.some(function (m) { return m.key === 'hk'; })) renderMsgs();
+    });
+  }
+  function hkLoadTrails() {
+    if (HK.trails) return Promise.resolve(HK.trails);
+    if (!HK.trailsP) {
+      HK.trailsP = fetch(OUTDOOR_BASE + 'trails.geojson').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+        HK.trails = j; HK.trailById = {};
+        (j.features || []).forEach(function (f) { HK.trailById[f.properties.id] = f; });
+        if (HK.ready && HK.map.getSource('hk-trails')) HK.map.getSource('hk-trails').setData(j);
+        return j;
+      });
+      HK.trailsP.catch(function () { HK.trailsP = null; });
+    }
+    return HK.trailsP;
+  }
+  // ความยาก: ใช้ระดับ sac_scale ถ้ามี ไม่งั้นประเมินจากระยะทาง (และความชันสะสมเมื่อคำนวณแล้ว) เทียบเป็น "ระยะเทียบเท่า" = กม. + ขึ้นสะสม/100 ม.
+  function hkDiff(it, gain) {
+    var d = -1;
+    if (it.k === 'trail') {
+      var eq = (it.km || 0) + (gain || 0) / 100;
+      d = eq < 6 ? 0 : eq < 14 ? 1 : eq < 24 ? 2 : 3;
+    } else if (it.k === 'peak' && it.ele) d = it.ele < 800 ? 0 : it.ele < 1600 ? 1 : 2;
+    if (it.sac && HK_SAC[it.sac] != null) d = Math.max(d, HK_SAC[it.sac]);
+    return d;
+  }
+  function hkDiffChip(d, est) { return d < 0 ? '' : '<span class="hk-diff" style="--c:' + HK_DIFF[d].c + '" title="' + (est ? 'ประเมินจากระยะทางและความชัน ไม่ใช่ระดับทางการ' : '') + '">' + HK_DIFF[d].t + '</span>'; }
+  function hkScore(it) {
+    return it.k === 'trail' ? 3 + Math.min(2, (it.km || 0) / 10) : it.k === 'peak' ? 2 + (it.ele || 0) / 1500 : it.k === 'park' ? 1.5 + Math.log10(1 + (it.km2 || 0)) / 2 : it.x && it.x.wikidata ? 1.4 : 1;
+  }
+  function hkItems(noView) {
+    var all = (HK.doc && HK.doc.items) || [], q = cvNorm(HK.q), b = HK.inView && HK.ready && !noView ? HK.map.getBounds() : null;
+    var out = all.filter(function (it) {
+      if (it.k === 'head') return false;
+      if (HK.kind !== 'all' && it.k !== HK.kind) return false;
+      if (HK.zone !== 'all' && it.z !== HK.zone) return false;
+      if (q && cvNorm([it.n, it.en, it.p, 'จ.' + it.p, HK_K[it.k].t].join('|')).indexOf(q) < 0) return false;
+      if (b && !b.contains([it.lon, it.lat])) return false;
+      return true;
+    });
+    var near = HK.sort === 'near' && me.lon != null;
+    out.sort(function (a, b2) {
+      if (HK.sort === 'ele') return (b2.ele || 0) - (a.ele || 0);
+      if (HK.sort === 'km') return (b2.km || 0) - (a.km || 0);
+      if (near) return km(me.lon, me.lat, a.lon, a.lat) - km(me.lon, me.lat, b2.lon, b2.lat);
+      if (HK.sort === 'name') return a.n.localeCompare(b2.n, 'th');
+      return hkScore(b2) - hkScore(a);
+    });
+    return out;
+  }
+  function hkFacts(it) {
+    var f = [];
+    if (it.ele) f.push('สูง ' + fmtN(it.ele) + ' ม.');
+    if (it.km) f.push(it.km < 10 ? it.km.toFixed(1) + ' กม.' : fmtN(Math.round(it.km)) + ' กม.');
+    if (it.km2) f.push(fmtN(Math.round(it.km2)) + ' ตร.กม.');
+    if (it.k === 'park' && it.t) f.unshift(HK_PT[it.t] || '');
+    return f.filter(Boolean).join(' · ');
+  }
+  function hkCard(it) {
+    var K = HK_K[it.k], d = hkDiff(it, (HK.info[it.id] || {}).gain);
+    return '<button type="button" class="hk-card' + (HK.sel === it.id ? ' on' : '') + '" data-hk="' + esc(it.id) + '" style="--c:' + K.c + '">' +
+      '<span class="hk-ico" aria-hidden="true">' + K.i + '</span><span class="hk-main"><b>' + esc(it.n) + '</b>' + (it.en ? '<small>' + esc(it.en) + '</small>' : '') +
+      '<span class="hk-meta">' + esc(K.t) + ' · จ.' + esc(it.p) + (me.lon != null && HK.sort === 'near' ? ' · ' + nf(km(me.lon, me.lat, it.lon, it.lat)) + ' กม.' : '') + '</span>' +
+      '<span class="hk-f">' + esc(hkFacts(it)) + (it.k === 'trail' || it.k === 'peak' ? ' ' + hkDiffChip(d, true) : '') + '</span></span></button>';
+  }
+  function renderHike() {
+    if (state.page !== 'hike' || !$('pageHike')) return;
+    $('hkKinds').innerHTML = HK_KINDS.map(function (o) { return '<button type="button" class="q-chip" data-hk-k="' + o[0] + '" aria-pressed="' + (HK.kind === o[0]) + '">' + esc(o[1]) + '</button>'; }).join('');
+    if (!$('hkZone').options.length) {
+      $('hkZone').innerHTML = '<option value="all">ทุกภาค</option>' + ZONES.filter(function (z) { return /^th-/.test(z.id); }).map(function (z) { return '<option value="' + z.id + '">ภาค' + esc(z.name) + '</option>'; }).join('');
+      $('hkSort').innerHTML = HK_SORTS.map(function (o) { return '<option value="' + o[0] + '">เรียง: ' + esc(o[1]) + '</option>'; }).join('');
+    }
+    $('hkZone').value = HK.zone; $('hkSort').value = HK.sort;
+    $('hkInView').setAttribute('aria-pressed', String(HK.inView));
+    var list = $('hkList');
+    if (IN_ARTIFACT) { list.innerHTML = '<p class="cv-empty">หน้าเดินป่าใช้ได้บนเว็บจริง (choonahakarn.github.io/chatgeo)</p>'; return; }
+    if (!HK.doc) {
+      $('hkN').textContent = '';
+      list.innerHTML = HK.err ? '<p class="cv-empty">ยังโหลดข้อมูลเดินป่าไม่ได้ ข้อมูลชุดนี้สร้างเดือนละครั้งจาก OpenStreetMap ถ้าเพิ่งเปิดใช้ ต้องรันงาน "เดินป่าและธรรมชาติ (OSM)" ใน GitHub Actions หนึ่งครั้งก่อน</p>' +
+        '<button type="button" class="btn-ghost" data-hk-retry="1">ลองใหม่</button>' : '<div class="hk-skel"></div><div class="hk-skel"></div><div class="hk-skel"></div><p class="cv-empty">กำลังโหลดจุดเดินป่าทั่วไทย…</p>';
+      return;
+    }
+    var items = hkItems(), C = HK.doc.counts || {};
+    $('hkN').innerHTML = 'พบ <b>' + fmtN(items.length) + '</b> แห่ง' + (HK.inView ? ' ในกรอบแผนที่' : '') +
+      ' <span class="hk-n2">· ทั้งหมด ยอดเขา ' + fmtN(C.peak || 0) + ' · เส้นทาง ' + fmtN(C.trail || 0) + ' · น้ำตก ' + fmtN(C.fall || 0) + '</span>';
+    var y = list.scrollTop;
+    list.innerHTML = items.length ? items.slice(0, HK.limit).map(hkCard).join('') +
+      (items.length > HK.limit ? '<button type="button" class="btn-ghost hk-more" data-hk-more="1">แสดงเพิ่ม (อีก ' + fmtN(items.length - HK.limit) + ')</button>' : '')
+      : '<p class="cv-empty">ไม่พบสถานที่ที่ตรงกับตัวกรอง ลองล้างคำค้นหรือเลือกทุกภาค</p>';
+    list.scrollTop = y;
+    $('hkFoot').innerHTML = 'ข้อมูลจาก <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL) · อัปเดต ' + esc(HK.doc.updated || '') +
+      ' · ข้อมูลอาจไม่ครบหรือไม่เป็นปัจจุบัน ตรวจสอบกับอุทยานก่อนเดินทางเสมอ';
+  }
+  // ---------- แผนที่ภูมิประเทศของหน้าเดินป่า ----------
+  function hkFC() {
+    var items = HK.doc ? hkItems(true) : [];
+    return { type: 'FeatureCollection', features: items.map(function (it) { return { type: 'Feature', properties: { id: it.id, k: it.k, n: it.n }, geometry: { type: 'Point', coordinates: [it.lon, it.lat] } }; }) };
+  }
+  function hkMapData() { if (HK.ready && HK.map.getSource('hk-pts')) HK.map.getSource('hk-pts').setData(hkFC()); }
+  function hkEnsureMap() {
+    if (HK.map) { HK.map.resize(); return; }
+    var el = $('hkMap');
+    if (!el || !window.maplibregl) return;
+    var map = HK.map = new maplibregl.Map({ container: el, style: usingFallback ? fallbackStyle(state.theme) : OFM + 'liberty', center: [100.6, 13.2], zoom: el.clientWidth < 600 ? 4.3 : 5.1,
+      minZoom: 3.5, maxZoom: usingFallback ? FB_MAXZOOM : 17, dragRotate: false, pitchWithRotate: false, touchPitch: false, attributionControl: { compact: true }, locale: UI_TH });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.on('load', function () {
+      HK.ready = true;
+      var before = firstSymbolId(map), glyphs = !!map.getStyle().glyphs;
+      if (!usingFallback) {
+        map.addSource('hk-dem', { type: 'raster-dem', tiles: [DEM_URL], encoding: 'terrarium', tileSize: 256, maxzoom: 12, attribution: DEM_ATTR });
+        map.addLayer({ id: 'hk-hill', type: 'hillshade', source: 'hk-dem', paint: { 'hillshade-exaggeration': 0.4, 'hillshade-shadow-color': '#4A4A4A', 'hillshade-highlight-color': '#FFFFFF' } }, before);
+      }
+      map.addSource('hk-trails', { type: 'geojson', data: HK.trails || emptyFC() });
+      map.addLayer({ id: 'hk-trails', type: 'line', source: 'hk-trails', minzoom: 8.5, paint: { 'line-color': '#E5484D', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.6, 14, 3.4], 'line-dasharray': [2, 1.2], 'line-opacity': 0.9 } });
+      map.addSource('hk-sel', { type: 'geojson', data: emptyFC() });
+      map.addLayer({ id: 'hk-sel-line', type: 'line', source: 'hk-sel', filter: ['!=', ['geometry-type'], 'Point'], paint: { 'line-color': '#4F46E5', 'line-width': 5, 'line-opacity': 0.9 } });
+      map.addSource('hk-pts', { type: 'geojson', data: hkFC(), cluster: true, clusterRadius: 42, clusterMaxZoom: 10 });
+      map.addLayer({ id: 'hk-cl', type: 'circle', source: 'hk-pts', filter: ['has', 'point_count'],
+        paint: { 'circle-color': '#1E3A5F', 'circle-opacity': 0.88, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2, 'circle-radius': ['step', ['get', 'point_count'], 14, 20, 18, 100, 23, 500, 28] } });
+      if (glyphs) map.addLayer({ id: 'hk-cl-n', type: 'symbol', source: 'hk-pts', filter: ['has', 'point_count'],
+        layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Bold'], 'text-size': 12, 'text-allow-overlap': true }, paint: { 'text-color': '#FFFFFF' } });
+      var col = ['match', ['get', 'k']]; Object.keys(HK_K).forEach(function (k) { col.push(k, HK_K[k].c); }); col.push('#6B7280');
+      map.addLayer({ id: 'hk-pt', type: 'circle', source: 'hk-pts', filter: ['!', ['has', 'point_count']],
+        paint: { 'circle-color': col, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 4, 12, 7], 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 1.6 } });
+      if (glyphs) map.addLayer({ id: 'hk-pt-n', type: 'symbol', source: 'hk-pts', minzoom: 10, filter: ['!', ['has', 'point_count']],
+        layout: { 'text-field': ['get', 'n'], 'text-font': ['Noto Sans Regular'], 'text-size': 11.5, 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-optional': true }, paint: { 'text-color': '#1F2937', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.4 } });
+      map.addSource('hk-me', { type: 'geojson', data: emptyFC() });
+      map.addLayer({ id: 'hk-sel-pt', type: 'circle', source: 'hk-sel', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 10, 'circle-color': 'rgba(79,70,229,.25)', 'circle-stroke-color': '#4F46E5', 'circle-stroke-width': 3 } });
+      map.on('click', 'hk-cl', function (e) {
+        var f = e.features[0];
+        map.getSource('hk-pts').getClusterExpansionZoom(f.properties.cluster_id).then(function (z) { map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.3, duration: reduceMotion ? 0 : 600 }); });
+      });
+      map.on('click', 'hk-pt', function (e) { hkOpen(e.features[0].properties.id); });
+      map.on('click', 'hk-trails', function (e) { if (!map.queryRenderedFeatures(e.point, { layers: ['hk-pt'] }).length) hkOpen(e.features[0].properties.id); });
+      ['hk-cl', 'hk-pt', 'hk-trails'].forEach(function (l) {
+        map.on('mouseenter', l, function () { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', l, function () { map.getCanvas().style.cursor = ''; });
+      });
+      map.on('moveend', function () {
+        if (map.getZoom() >= 8.5) hkLoadTrails().catch(function () { /* ยังไม่มีไฟล์เส้นทาง */ });
+        if (HK.inView) { clearTimeout(HK.vt); HK.vt = setTimeout(renderHike, 150); }
+      });
+      if (HK.sel) hkShowSel(HK.byId && HK.byId[HK.sel]);
+    });
+  }
+  // ---------- รายละเอียด ----------
+  function hkFeature(it) { return HK.trailById && HK.trailById[it.id]; }
+  function hkShowSel(it) {
+    if (!HK.ready || !it) return;
+    var f = it.k === 'trail' && hkFeature(it);
+    HK.map.getSource('hk-sel').setData({ type: 'FeatureCollection', features: [f ? { type: 'Feature', properties: {}, geometry: f.geometry } : null,
+      { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [it.lon, it.lat] } }].filter(Boolean) });
+  }
+  function hkFly(it) {
+    if (!HK.ready) return;
+    var f = it.k === 'trail' && hkFeature(it), pad = window.matchMedia('(max-width: 860px)').matches ? 40 : 70;
+    if (f) {
+      var b = [999, 999, -999, -999];
+      f.geometry.coordinates.forEach(function (p) { p.forEach(function (c) { b = [Math.min(b[0], c[0]), Math.min(b[1], c[1]), Math.max(b[2], c[0]), Math.max(b[3], c[1])]; }); });
+      HK.map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: pad, maxZoom: 14.5, duration: reduceMotion ? 0 : 900 });
+    } else {
+      var z = it.k === 'park' ? Math.max(8, Math.min(12, 12.5 - Math.log2(1 + (it.km2 || 20)) / 1.6)) : 13;
+      HK.map.flyTo({ center: [it.lon, it.lat], zoom: z, duration: reduceMotion ? 0 : 900 });
+    }
+  }
+  // ความสูงตามแนวเส้นทาง (สุ่มจุดราว 120 จุดจากแผนที่ความสูง ซูม 12 ≈ 30 ม. ต่อพิกเซล)
+  function hkProfile(f) {
+    var pts = [];
+    f.geometry.coordinates.forEach(function (p) { p.forEach(function (c) { pts.push(c); }); });
+    var cum = [0];
+    for (var i = 1; i < pts.length; i++) cum.push(cum[i - 1] + km(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+    var total = cum[cum.length - 1] || 0.001, N = Math.min(160, Math.max(30, Math.round(total * 12))), samples = [];
+    for (var s = 0, j = 0; s <= N; s++) {
+      var d = total * s / N;
+      while (j < cum.length - 2 && cum[j + 1] < d) j++;
+      var seg = cum[j + 1] - cum[j] || 1, t = Math.max(0, Math.min(1, (d - cum[j]) / seg)), a = pts[j], b = pts[Math.min(j + 1, pts.length - 1)];
+      samples.push({ d: d, lon: a[0] + (b[0] - a[0]) * t, lat: a[1] + (b[1] - a[1]) * t });
+    }
+    var z = 12, n = Math.pow(2, z), r = Math.PI / 180, need = {};
+    samples.forEach(function (p) {
+      var fx = (p.lon + 180) / 360 * n, fy = (1 - Math.log(Math.tan(p.lat * r) + 1 / Math.cos(p.lat * r)) / Math.PI) / 2 * n;
+      p.tx = Math.floor(fx); p.ty = Math.floor(fy); p.px = Math.min(255, Math.floor((fx - p.tx) * 256)); p.py = Math.min(255, Math.floor((fy - p.ty) * 256));
+      need[p.tx + '/' + p.ty] = 1;
+    });
+    var keys = Object.keys(need);
+    if (keys.length > 24) return Promise.reject(new Error('ยาวเกิน'));
+    return Promise.all(keys.map(function (k) { var a = k.split('/'); return demTile(z, +a[0], +a[1]).then(function (img) { return [k, img]; }); })).then(function (arr) {
+      var imgs = {}; arr.forEach(function (x) { imgs[x[0]] = x[1]; });
+      var e = samples.map(function (p) { var img = imgs[p.tx + '/' + p.ty], q = (p.py * 256 + p.px) * 4, dd = img.data; return dd[q] * 256 + dd[q + 1] + dd[q + 2] / 256 - 32768; });
+      var sm = e.map(function (v, i) { var a = e[Math.max(0, i - 1)], b = e[Math.min(e.length - 1, i + 1)]; return (a + v + b) / 3; }), gain = 0, loss = 0;
+      for (var i2 = 1; i2 < sm.length; i2++) { var dv = sm[i2] - sm[i2 - 1]; if (dv > 0) gain += dv; else loss -= dv; }
+      return { d: samples.map(function (p) { return p.d; }), e: sm, total: total, gain: gain, loss: loss, max: Math.max.apply(null, sm), min: Math.min.apply(null, sm) };
+    });
+  }
+  function hkProfileSvg(P) {
+    var W = 340, H = 130, L = 40, R = 10, T = 10, B = 22, lo = Math.floor(P.min / 50) * 50, hi = Math.max(lo + 100, Math.ceil(P.max / 50) * 50);
+    var x = function (d) { return L + (W - L - R) * d / P.total; }, y = function (v) { return T + (H - T - B) * (1 - (v - lo) / (hi - lo)); };
+    var line = P.e.map(function (v, i) { return x(P.d[i]).toFixed(1) + ',' + y(v).toFixed(1); }).join(' ');
+    return '<svg class="hk-prof" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="ความสูงตามเส้นทาง ต่ำสุด ' + Math.round(P.min) + ' ม. สูงสุด ' + Math.round(P.max) + ' ม.">' +
+      [lo, hi].map(function (v) { return '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '" class="tw-grid"/><text class="tw-dl" x="' + (L - 5) + '" y="' + (y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + fmtN(v) + '</text>'; }).join('') +
+      '<polygon class="hk-pa" points="' + x(0).toFixed(1) + ',' + y(lo).toFixed(1) + ' ' + line + ' ' + x(P.total).toFixed(1) + ',' + y(lo).toFixed(1) + '"/>' +
+      '<polyline class="hk-pl" points="' + line + '"/>' +
+      '<text class="tw-ml" x="' + L + '" y="' + (H - 6) + '">0</text><text class="tw-ml" x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">' + (P.total < 10 ? P.total.toFixed(1) : Math.round(P.total)) + ' กม.</text></svg>';
+  }
+  function hkHours(kmv, gain) { var h = kmv / 4 + gain / 500; return h < 1 ? 'ไม่ถึง 1 ชม.' : 'ราว ' + (Math.round(h * 2) / 2) + '–' + (Math.round(h * 1.5 * 2) / 2) + ' ชม.'; }
+  function hkNearby(it) {
+    return ((HK.doc && HK.doc.items) || []).filter(function (o) { return o.id !== it.id && o.k !== 'head' && Math.abs(o.lat - it.lat) < 0.2 && Math.abs(o.lon - it.lon) < 0.2; })
+      .map(function (o) { return { o: o, d: km(it.lon, it.lat, o.lon, o.lat) }; }).filter(function (x) { return x.d <= 15; }).sort(function (a, b) { return a.d - b.d; }).slice(0, 6);
+  }
+  function hkOsmUrl(id) { var t = { n: 'node', w: 'way', r: 'relation' }[id[0]]; return t ? 'https://www.openstreetmap.org/' + t + '/' + id.slice(1) : ''; }
+  function hkWx(it) {
+    var I = HK.info[it.id];
+    if (I.wxP) return I.wxP;
+    I.wxP = fetch('https://api.open-meteo.com/v1/forecast?latitude=' + it.lat.toFixed(3) + '&longitude=' + it.lon.toFixed(3) +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FBangkok&forecast_days=4')
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) { I.wx = j.daily; }).catch(function () { I.wxErr = true; I.wxP = null; });
+    return I.wxP;
+  }
+  function hkDetailHtml(it) {
+    var K = HK_K[it.k], I = HK.info[it.id] || {}, P = I.prof, f = it.k === 'trail' && hkFeature(it);
+    var d = hkDiff(it, P ? P.gain : null), facts = [];
+    if (it.k === 'park') facts.push(['ประเภท', HK_PT[it.t] || 'พื้นที่คุ้มครอง'], ['พื้นที่', it.km2 ? fmtN(Math.round(it.km2)) + ' ตร.กม.' : '–']);
+    if (it.ele) facts.push(['ความสูง (OSM)', fmtN(it.ele) + ' ม.']);
+    else if (I.ele != null && it.k !== 'trail') facts.push(['ความสูงโดยประมาณ', fmtN(Math.round(I.ele)) + ' ม.']);
+    if (it.k === 'trail') {
+      facts.push(['ระยะทาง', it.km ? (it.km < 10 ? it.km.toFixed(1) : Math.round(it.km)) + ' กม.' : '–']);
+      facts.push(['ขึ้นสะสม', P ? fmtN(Math.round(P.gain)) + ' ม.' : I.profErr ? '–' : 'กำลังคำนวณ…']);
+      facts.push(['จุดสูงสุด', P ? fmtN(Math.round(P.max)) + ' ม.' : '–']);
+      facts.push(['เวลาเดินโดยประมาณ', it.km ? hkHours(it.km, P ? P.gain : 0) : '–']);
+    }
+    if (d >= 0) facts.push(['ความยาก', hkDiffChip(d, true) + (it.sac ? '' : ' <small>ประเมินเอง</small>')]);
+    var h = '<div class="hk-dh"><button type="button" class="btn-ghost hk-back" data-hk-back="1">' + '‹ กลับรายการ</button>' +
+      '<button type="button" class="btn-ghost" data-hk-share="1" title="คัดลอกลิงก์">แชร์</button></div>' +
+      '<div class="hk-kick" style="--c:' + K.c + '">' + K.i + ' ' + esc(K.t) + ' · จ.' + esc(it.p) + '</div><h2 class="hk-title">' + esc(it.n) + '</h2>' + (it.en ? '<div class="hk-en">' + esc(it.en) + '</div>' : '') +
+      '<div class="hk-facts">' + facts.map(function (x) { return '<div><span>' + esc(x[0]) + '</span><b>' + (/</.test(x[1]) ? x[1] : esc(x[1])) + '</b></div>'; }).join('') + '</div>';
+    if (it.k === 'trail') {
+      h += '<section class="hk-sec"><h3>ความสูงตามเส้นทาง</h3>' + (P ? hkProfileSvg(P) + '<p class="hk-note">จากแผนที่ความสูงความละเอียดราว 30 ม. ขึ้นสะสม ' + fmtN(Math.round(P.gain)) + ' ม. ลงสะสม ' + fmtN(Math.round(P.loss)) + ' ม. (ตามทิศที่เส้นถูกวาดไว้ใน OSM)</p>'
+        : I.profErr ? '<p class="hk-note">คำนวณความสูงไม่ได้ ' + (f ? '(เส้นทางยาวเกินหรือโหลดแผนที่ความสูงไม่ได้)' : '(ไม่มีเส้นทางในไฟล์)') + '</p>' : '<div class="hk-skel s"></div>') + '</section>';
+    }
+    h += '<section class="hk-sec"><h3>อากาศ 4 วันข้างหน้า</h3>';
+    if (I.wx) {
+      h += '<div class="hk-wx">' + I.wx.time.map(function (t, i) {
+        var p = I.wx.precipitation_probability_max[i];
+        return '<div class="' + (p >= 70 ? 'wet' : '') + '"><b>' + (i === 0 ? 'วันนี้' : dowOf(t)) + '</b><span>' + esc(wmoText(I.wx.weather_code[i])) + '</span><span>' + Math.round(I.wx.temperature_2m_min[i]) + '–' + Math.round(I.wx.temperature_2m_max[i]) + '°</span><span>ฝน ' + (p == null ? '–' : p + '%') + '</span></div>';
+      }).join('') + '</div><p class="hk-note">พยากรณ์ Open-Meteo ณ พิกัดนี้ · โอกาสฝนสูงสุดของวัน</p>';
+    } else h += I.wxErr ? '<p class="hk-note">โหลดพยากรณ์อากาศไม่ได้ตอนนี้</p>' : '<div class="hk-skel s"></div>';
+    h += '</section><section class="hk-sec"><h3>ช่วงไหนฝนน้อย (ค่าเฉลี่ยหลายปี)</h3>';
+    if (I.clim) {
+      var dr = dryRangeText(I.clim.dry);
+      h += climChartSvg(I.clim) + '<p class="hk-note">' + (dr ? '<b>ฝนน้อยช่วง ' + esc(dr) + '</b> (แท่งสีต่างคือเดือนที่ฝนน้อยกว่า ' + DRY_MM + ' มม.) ' : '') + 'ฝนรวมราว ' + fmtN(Math.round(I.clim.rainAnn)) + ' มม./ปี · NASA POWER ' + esc(I.clim.years || '') +
+        ' · ช่วงหน้าแล้งทางภาคเหนืออาจมีหมอกควัน ตรวจค่าฝุ่นก่อนไป</p>';
+    } else h += I.climErr ? '<p class="hk-note">โหลดข้อมูลภูมิอากาศไม่ได้ตอนนี้</p>' : '<div class="hk-skel s"></div>';
+    h += '</section>';
+    var nb = hkNearby(it);
+    if (nb.length) h += '<section class="hk-sec"><h3>ใกล้เคียงในรัศมี 15 กม.</h3><div class="hk-nb">' + nb.map(function (x) {
+      return '<button type="button" data-hk="' + esc(x.o.id) + '"><span aria-hidden="true">' + HK_K[x.o.k].i + '</span><b>' + esc(x.o.n) + '</b><small>' + nf(x.d) + ' กม.</small></button>';
+    }).join('') + '</div></section>';
+    var x = it.x || {}, links = [];
+    links.push('<a class="btn-ghost" href="https://www.google.com/maps/dir/?api=1&destination=' + it.lat + ',' + it.lon + '" target="_blank" rel="noopener">นำทางไปที่นี่' + ICO.ext + '</a>');
+    if (x.website) links.push('<a class="btn-ghost" href="' + esc(/^https?:/.test(x.website) ? x.website : 'https://' + x.website) + '" target="_blank" rel="noopener">เว็บไซต์' + ICO.ext + '</a>');
+    if (hkOsmUrl(it.id)) links.push('<a class="btn-ghost" href="' + hkOsmUrl(it.id) + '" target="_blank" rel="noopener">ดูใน OpenStreetMap' + ICO.ext + '</a>');
+    links.push('<button type="button" class="btn-ghost" data-hk-site="1">ตรวจทำเล/น้ำท่วมจุดนี้</button>');
+    h += '<div class="hk-links">' + links.join('') + '</div>' +
+      '<p class="hk-warn">ข้อมูลจาก OpenStreetMap ซึ่งอาสาสมัครช่วยกันวาด อาจไม่ครบหรือไม่เป็นปัจจุบัน ความยากและเวลาเดินเป็นการประเมินจากระยะและความชันเท่านั้น อุทยานหลายแห่งปิดเส้นทางบางช่วงในฤดูฝน และบางเส้นต้องจองหรือมีเจ้าหน้าที่นำทาง ตรวจสอบกับอุทยานหรือหน่วยงานในพื้นที่ก่อนเดินทางเสมอ</p>';
+    return h;
+  }
+  function hkRenderDetail() {
+    var it = HK.sel && HK.byId && HK.byId[HK.sel], box = $('hkDetail');
+    if (!box) return;
+    if (!it) { box.hidden = true; $('hkListView').hidden = false; return; }
+    $('hkListView').hidden = true; box.hidden = false;
+    box.innerHTML = hkDetailHtml(it);
+  }
+  function hkOpen(id, fromHash) {
+    if (!HK.doc) { HK.pending = id; return; }
+    var it = HK.byId[id];
+    if (!it) return;
+    HK.sel = id;
+    var I = HK.info[id] = HK.info[id] || {};
+    hkRenderDetail();
+    $('hkDetail').scrollTop = 0;
+    if (state.page === 'hike') { try { history[fromHash ? 'replaceState' : 'pushState'](null, '', location.pathname + location.search + '#hike=' + encodeURIComponent(id)); } catch (e) { /* ข้าม */ } }
+    var redraw = function () { if (HK.sel === id) hkRenderDetail(); };
+    var trailP = it.k === 'trail' ? hkLoadTrails().catch(function () { return null; }) : Promise.resolve(null);
+    trailP.then(function () { hkShowSel(it); hkFly(it); var f = it.k === 'trail' && hkFeature(it);
+      if (it.k === 'trail' && !I.prof && !I.profErr) {
+        if (!f) { I.profErr = true; redraw(); return; }
+        hkProfile(f).then(function (P) { I.prof = P; redraw(); }, function () { I.profErr = true; redraw(); });
+      }
+    });
+    if (it.k !== 'trail' && I.ele == null && !it.ele) elevationAt(it.lon, it.lat).then(function (o) { I.ele = o.ele; redraw(); }, function () { /* ข้าม */ });
+    if (!I.wx) hkWx(it).then(redraw);
+    if (!I.clim && !I.climErr) climAt(it.lon, it.lat).then(function (C) { I.clim = C; redraw(); }, function () { I.climErr = true; redraw(); });
+    if (HK.ready) document.querySelectorAll('.hk-card.on').forEach(function (c) { c.classList.remove('on'); });
+  }
+  function hkClose() {
+    HK.sel = null;
+    hkRenderDetail();
+    if (HK.ready) HK.map.getSource('hk-sel').setData(emptyFC());
+    try { history.replaceState(null, '', location.pathname + location.search + '#hike'); } catch (e) { /* ข้าม */ }
+    renderHike();
+  }
+  function hkStart(id) {
+    hkLoad();
+    hkEnsureMap();
+    renderHike();
+    if (id) hkOpen(id, true); else if (HK.sel) hkRenderDetail();
+  }
+  if ($('pageHike')) {
+    $('pageHike').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-hk],[data-hk-k],[data-hk-more],[data-hk-back],[data-hk-retry],[data-hk-share],[data-hk-site],#hkInView');
+      if (!t) return;
+      if (t.id === 'hkInView') { HK.inView = !HK.inView; HK.limit = 80; renderHike(); return; }
+      if (t.hasAttribute('data-hk')) { hkOpen(t.getAttribute('data-hk')); return; }
+      if (t.hasAttribute('data-hk-k')) { HK.kind = t.getAttribute('data-hk-k'); HK.limit = 80; renderHike(); hkMapData(); return; }
+      if (t.hasAttribute('data-hk-more')) { HK.limit += 120; renderHike(); return; }
+      if (t.hasAttribute('data-hk-back')) { hkClose(); return; }
+      if (t.hasAttribute('data-hk-retry')) { HK.err = false; hkLoad(); renderHike(); return; }
+      if (t.hasAttribute('data-hk-share')) {
+        var u = location.origin + location.pathname + '#hike=' + encodeURIComponent(HK.sel || '');
+        if (navigator.clipboard) navigator.clipboard.writeText(u).then(function () { toast('คัดลอกลิงก์แล้ว'); }, function () { toast(u); }); else toast(u);
+        return;
+      }
+      if (t.hasAttribute('data-hk-site')) { var it = HK.byId[HK.sel]; if (it) { setPage('chat'); setTimeout(function () { openSite(it.lon, it.lat); }, 200); } }
+    });
+    var hkQT = 0;
+    $('hkQ').addEventListener('input', function () { clearTimeout(hkQT); hkQT = setTimeout(function () { HK.q = $('hkQ').value.trim(); HK.limit = 80; renderHike(); hkMapData(); }, 200); });
+    $('hkZone').addEventListener('change', function () {
+      HK.zone = $('hkZone').value; HK.limit = 80; renderHike(); hkMapData();
+      var z = find(ZONES, function (x) { return x.id === HK.zone; });
+      if (HK.ready && z && byId[z.id]) { var b = boxOf(byId[z.id]), cx = byId[z.id].bx != null ? byId[z.id].bx : byId[z.id].lon, cy = byId[z.id].by != null ? byId[z.id].by : byId[z.id].lat;
+        HK.map.fitBounds([[cx - b.hw, cy - b.hh], [cx + b.hw, cy + b.hh]], { padding: 30, duration: reduceMotion ? 0 : 700 }); }
+    });
+    $('hkSort').addEventListener('change', function () {
+      HK.sort = $('hkSort').value;
+      if (HK.sort === 'near' && me.lon == null && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function (pos) { me.lon = pos.coords.longitude; me.lat = pos.coords.latitude; renderHike(); }, function () { toast('หาตำแหน่งไม่ได้ ลองอนุญาตตำแหน่งในเบราว์เซอร์'); }, { timeout: 12000, maximumAge: 600000 });
+      }
+      renderHike();
+    });
+  }
+  // แชท: ถามเรื่องเดินป่า ยอดเขา น้ำตก ลานกางเต็นท์
+  var HK_RE = /เดินป่า|ปีนเขา|ปีนดอย|ยอดเขา|ยอดดอย|ลานกางเต็นท์|กางเต็นท์|จุดชมวิว|เส้นทางธรรมชาติ|เส้นทางศึกษาธรรมชาติ|trekking|hiking|น้ำตก(?!.*(ท่วม|ไหลหลาก))/i;
+  function hkAnswer(m) {
+    if (!HK.doc) { hkLoad(); return { title: 'เดินป่า · ธรรมชาติ', text: HK.err ? 'ยังโหลดข้อมูลเดินป่าไม่ได้ตอนนี้ ลองเปิดหน้าเดินป่าอีกครั้งภายหลัง' : 'กำลังโหลดจุดเดินป่าทั่วไทย…', html: '<button type="button" class="btn-ghost sv-open" data-hk-go="">เปิดหน้าเดินป่า' + ICO.arrow + '</button>' }; }
+    var q = String(m.q || '').replace(HK_RE, ' ').replace(/[?？!]|ไหน|อะไร|บ้าง|ดี|แนะนำ|อยาก|ไป|ที่|ใน|แถว|จังหวัด|จ\.|ครับ|ค่ะ|หน่อย|มี|ไหม|เส้นทาง|ทาง/g, ' ').trim();
+    var words = q.split(/\s+/).filter(function (w) { return w.length >= 2; }), items = HK.doc.items.filter(function (it) { return it.k !== 'head'; });
+    var hits = words.length ? items.filter(function (it) { var s = [it.n, it.en, it.p].join(' '); return words.some(function (w) { return s.indexOf(w) >= 0; }); }) : [];
+    var kind = /น้ำตก/.test(m.q) ? 'fall' : /กางเต็นท์/.test(m.q) ? 'camp' : /จุดชมวิว/.test(m.q) ? 'view' : /ยอด|ปีน/.test(m.q) ? 'peak' : /เดินป่า|เส้นทาง|trek|hik/i.test(m.q) ? 'trail' : '';
+    if (kind && hits.some(function (it) { return it.k === kind; })) hits = hits.filter(function (it) { return it.k === kind; });
+    if (!hits.length) hits = items.filter(function (it) { return !kind || it.k === kind; });
+    var full = q.replace(/\s+/g, ' ');
+    hits.sort(function (a, b) { return ((full && b.n.indexOf(full) >= 0) - (full && a.n.indexOf(full) >= 0)) || hkScore(b) - hkScore(a); });
+    var top = hits.slice(0, 5);
+    return { title: 'เดินป่า · ธรรมชาติ (OpenStreetMap)', text: (words.length && hits.length < items.length ? 'พบ ' + fmtN(hits.length) + ' แห่งที่ตรงกับคำถาม ' : 'ตัวอย่างจากทั่วไทย ') + 'กดชื่อเพื่อดูความสูง เส้นทาง อากาศ 4 วัน และเดือนที่ฝนน้อย',
+      html: '<div class="hk-chat">' + top.map(function (it) { return '<button type="button" class="pt-title" data-hk-go="' + esc(it.id) + '">' + HK_K[it.k].i + ' ' + esc(it.n) + ' <span>' + esc(hkFacts(it) || HK_K[it.k].t) + ' · จ.' + esc(it.p) + '</span></button>'; }).join('') + '</div>' +
+        '<button type="button" class="btn-ghost sv-open" data-hk-go="">เปิดหน้าเดินป่า' + ICO.arrow + '</button>' };
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-hk-go]');
+    if (!b) return;
+    e.preventDefault();
+    var id = b.getAttribute('data-hk-go');
+    setPage('hike');
+    if (id) hkOpen(id);
+  });
+
   /* ---------- เริ่ม ---------- */
   renderMeta();
   setAskHint();
@@ -8268,7 +8676,7 @@
   // เปิดเว็บครั้งแรก (ไม่มีลิงก์เฉพาะ) เห็นลูกโลกเต็มใบก่อน ซูมเข้าเองได้ หรือกดชื่อพื้นที่ด้านบนเพื่อบินไป
   var intro = start.page === 'chat' && !location.hash && !IN_ARTIFACT;
   if (intro) { state.globe = true; $('btnGlobe').setAttribute('aria-pressed', 'true'); $('globeText').textContent = 'แผนที่แบน'; }
-  setPage(start.page, { fromHash: true, intro: intro });
+  setPage(start.page, { fromHash: true, intro: intro, hk: start.hk });
   renderBaseChips();
   connectRuntime();
   renderDataChips();
