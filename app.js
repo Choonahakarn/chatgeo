@@ -8278,7 +8278,7 @@
   var HK_SORTS = [['top', 'แนะนำ'], ['ele', 'สูงที่สุด'], ['km', 'ยาวที่สุด'], ['near', 'ใกล้ฉัน'], ['name', 'ชื่อ ก–ฮ']];
   var HK_DIFF = [{ t: 'ง่าย', c: '#2FA36B' }, { t: 'ปานกลาง', c: '#D99A1E' }, { t: 'ยาก', c: '#E5484D' }, { t: 'ยากมาก', c: '#7C3AED' }];
   var HK_SAC = { hiking: 0, mountain_hiking: 1, demanding_mountain_hiking: 2, alpine_hiking: 3, demanding_alpine_hiking: 3, difficult_alpine_hiking: 3 };
-  var HK = { doc: null, err: false, loading: false, trails: null, trailsP: null, kind: 'all', zone: 'all', q: '', sort: 'top', inView: false, sel: null,
+  var HK = { doc: null, err: false, loading: false, trails: null, trailsP: null, kind: 'all', zone: 'all', q: '', sort: 'top', inView: false, withImg: false, sel: null,
     map: null, ready: false, limit: 80, info: {}, busy: false };
   function hkZoneOf(p) { var pid = PID_BY_NAME[p], f = pid && PROV_FEAT[pid]; return f ? f.properties.zone : ''; }
   function hkLoad() {
@@ -8287,7 +8287,13 @@
     fetch(OUTDOOR_BASE + 'outdoor.json').then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
       if (!j || !Array.isArray(j.items)) throw new Error('bad');
       HK.byId = {};
-      j.items.forEach(function (it) { HK.byId[it.id] = it; it.z = hkZoneOf(it.p); });
+      j.items = j.items.filter(function (it) { return !(it.k === 'trail' && ((it.km != null && it.km < 0.3) || /^\(/.test(it.n))); });
+      j.items.forEach(function (it) {
+        // ชื่อที่รวมไทยกับอังกฤษไว้ด้วยกัน เช่น "ดอยอินทนนท์, Doi Inthanon"
+        var m = /^(.*[\u0E00-\u0E7F].*?),\s*([A-Za-z][^\u0E00-\u0E7F]*)$/.exec(it.n || '');
+        if (m) { it.n = m[1].trim(); if (!it.en) it.en = m[2].trim(); }
+        HK.byId[it.id] = it; it.z = hkZoneOf(it.p);
+      });
       HK.doc = j;
     }).catch(function () { HK.err = true; }).then(function () {
       HK.loading = false;
@@ -8320,7 +8326,7 @@
   }
   function hkDiffChip(d, est) { return d < 0 ? '' : '<span class="hk-diff" style="--c:' + HK_DIFF[d].c + '" title="' + (est ? 'ประเมินจากระยะทางและความชัน ไม่ใช่ระดับทางการ' : '') + '">' + HK_DIFF[d].t + '</span>'; }
   function hkScore(it) {
-    return it.k === 'trail' ? 3 + Math.min(2, (it.km || 0) / 10) : it.k === 'peak' ? 2 + (it.ele || 0) / 1500 : it.k === 'park' ? 1.5 + Math.log10(1 + (it.km2 || 0)) / 2 : it.x && it.x.wikidata ? 1.4 : 1;
+    return (hkQ(it) ? 2 : 0) + (it.img ? (it.imgn ? 0.6 : 1.5) : 0) + (it.k === 'trail' ? 3 + Math.min(2, (it.km || 0) / 10) : it.k === 'peak' ? 2 + (it.ele || 0) / 1500 : it.k === 'park' ? 1.5 + Math.log10(1 + (it.km2 || 0)) / 2 : 1);
   }
   function hkItems(noView) {
     var all = (HK.doc && HK.doc.items) || [], q = cvNorm(HK.q), b = HK.inView && HK.ready && !noView ? HK.map.getBounds() : null;
@@ -8330,6 +8336,7 @@
       if (HK.zone !== 'all' && it.z !== HK.zone) return false;
       if (q && cvNorm([it.n, it.en, it.p, 'จ.' + it.p, HK_K[it.k].t].join('|')).indexOf(q) < 0) return false;
       if (b && !b.contains([it.lon, it.lat])) return false;
+      if (HK.withImg && !it.img) return false;
       return true;
     });
     var near = HK.sort === 'near' && me.lon != null;
@@ -8353,7 +8360,7 @@
   function hkCard(it) {
     var K = HK_K[it.k], d = hkDiff(it, (HK.info[it.id] || {}).gain);
     return '<button type="button" class="hk-card' + (HK.sel === it.id ? ' on' : '') + '" data-hk="' + esc(it.id) + '" style="--c:' + K.c + '">' +
-      '<span class="hk-ico" aria-hidden="true">' + K.i + '</span><span class="hk-main"><b>' + esc(it.n) + '</b>' + (it.en ? '<small>' + esc(it.en) + '</small>' : '') +
+      '<span class="hk-ico" aria-hidden="true"' + (it.img ? ' data-hk-img="' + esc(it.img) + '"' : hkQ(it) ? ' data-hk-q="' + hkQ(it) + '"' : '') + '>' + K.i + '</span><span class="hk-main"><b>' + esc(it.n) + '</b>' + (it.en ? '<small>' + esc(it.en) + '</small>' : '') +
       '<span class="hk-meta">' + esc(K.t) + ' · จ.' + esc(it.p) + (me.lon != null && HK.sort === 'near' ? ' · ' + nf(km(me.lon, me.lat, it.lon, it.lat)) + ' กม.' : '') + '</span>' +
       '<span class="hk-f">' + esc(hkFacts(it)) + (it.k === 'trail' || it.k === 'peak' ? ' ' + hkDiffChip(d, true) : '') + '</span></span></button>';
   }
@@ -8366,6 +8373,7 @@
     }
     $('hkZone').value = HK.zone; $('hkSort').value = HK.sort;
     $('hkInView').setAttribute('aria-pressed', String(HK.inView));
+    if ($('hkWithImg')) { $('hkWithImg').hidden = !(HK.doc && HK.doc.items.some(function (x) { return x.img; })); $('hkWithImg').setAttribute('aria-pressed', String(HK.withImg)); }
     var list = $('hkList');
     if (IN_ARTIFACT) { list.innerHTML = '<p class="cv-empty">หน้าเดินป่าใช้ได้บนเว็บจริง (choonahakarn.github.io/chatgeo)</p>'; return; }
     if (!HK.doc) {
@@ -8382,6 +8390,7 @@
       (items.length > HK.limit ? '<button type="button" class="btn-ghost hk-more" data-hk-more="1">แสดงเพิ่ม (อีก ' + fmtN(items.length - HK.limit) + ')</button>' : '')
       : '<p class="cv-empty">ไม่พบสถานที่ที่ตรงกับตัวกรอง ลองล้างคำค้นหรือเลือกทุกภาค</p>';
     list.scrollTop = y;
+    hkThumbs();
     $('hkFoot').innerHTML = 'ข้อมูลจาก <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL) · อัปเดต ' + esc(HK.doc.updated || '') +
       ' · ข้อมูลอาจไม่ครบหรือไม่เป็นปัจจุบัน ตรวจสอบกับอุทยานก่อนเดินทางเสมอ';
   }
@@ -8504,60 +8513,293 @@
       .map(function (o) { return { o: o, d: km(it.lon, it.lat, o.lon, o.lat) }; }).filter(function (x) { return x.d <= 15; }).sort(function (a, b) { return a.d - b.d; }).slice(0, 6);
   }
   function hkOsmUrl(id) { var t = { n: 'node', w: 'way', r: 'relation' }[id[0]]; return t ? 'https://www.openstreetmap.org/' + t + '/' + id.slice(1) : ''; }
-  function hkWx(it) {
+  // ---------- รูปและเรื่องราวจากวิกิมีเดีย (ใช้ได้ตามสัญญาอนุญาตของแต่ละรูป ใส่ชื่อผู้ถ่ายทุกรูป) ----------
+  var HK_WD = {}, HK_WDP = {};
+  var WM_API = 'https://commons.wikimedia.org/w/api.php?format=json&origin=*&';
+  function hkWdBatch(ids) {
+    var wait = ids.map(function (q) { return HK_WDP[q]; }).filter(Boolean);
+    ids = ids.filter(function (q, i, a) { return /^Q\d+$/.test(q) && !HK_WD[q] && !HK_WDP[q] && a.indexOf(q) === i; });
+    if (ids.length > 50) return Promise.all([hkWdBatch(ids.slice(0, 50)), hkWdBatch(ids.slice(50))].concat(wait));
+    if (!ids.length) return Promise.all(wait);
+    var p = fetch('https://www.wikidata.org/w/api.php?action=wbgetentities&props=claims|sitelinks|descriptions&languages=th|en&sitefilter=thwiki|enwiki&format=json&origin=*&ids=' + ids.join('|'))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+        ids.forEach(function (q) {
+          var e = j.entities && j.entities[q], C = (e && e.claims) || {}, v = function (pid) { var c = C[pid] && C[pid][0] && C[pid][0].mainsnak.datavalue; return c && c.value; };
+          var ele = v('P2044'), sl = (e && e.sitelinks) || {}, ds = (e && e.descriptions) || {};
+          HK_WD[q] = { img: v('P18') || null, cc: v('P373') || null, ele: ele && ele.amount ? Math.round(+ele.amount) : null, web: v('P856') || null,
+            wp: sl.thwiki ? 'th:' + sl.thwiki.title : sl.enwiki ? 'en:' + sl.enwiki.title : null, desc: (ds.th || ds.en || {}).value || '' };
+        });
+      }).catch(function () { ids.forEach(function (q) { HK_WD[q] = HK_WD[q] || {}; }); })
+      .then(function () { ids.forEach(function (q) { delete HK_WDP[q]; }); });
+    ids.forEach(function (q) { HK_WDP[q] = p; });
+    return Promise.all([p].concat(wait));
+  }
+  function hkQ(it) { var q = it.x && it.x.wikidata; return q && /^Q\d+$/.test(q) ? q : null; }
+  function hkThumbUrl(file, w) { return 'https://commons.wikimedia.org/wiki/Special:FilePath/' + encodeURIComponent(String(file).replace(/^File:/, '')) + '?width=' + (w || 160); }
+  // รูปย่อในรายการ: ถามวิกิสนเทศทีเดียวสำหรับรายการที่เห็นอยู่
+  // รูปย่อในรายการ: รูปหลักจากวิกิสนเทศก่อน (ถามทีเดียวทั้งหน้า) ถ้าไม่มี ค่อยหารูปที่ถ่ายใกล้จุดนั้นบน Commons เฉพาะการ์ดที่เลื่อนมาเห็น
+  var HK_GEO = {}, HK_GEOQ = [], HK_GEON = 0, HK_IO = null;
+  function hkThumbs() {
+    var els = Array.prototype.slice.call(document.querySelectorAll('#hkList .hk-ico')), need = [];
+    if (HK_IO) HK_IO.disconnect();
+    HK_IO = window.IntersectionObserver ? new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { HK_IO.unobserve(e.target); hkGeoThumb(e.target); } });
+    }, { rootMargin: '150px 0px' }) : null;
+    var watch = function (el) { if (!el.querySelector('img') && HK_IO) HK_IO.observe(el); };
+    els.forEach(function (el) {
+      var q = el.getAttribute('data-hk-q'), f = el.getAttribute('data-hk-img');
+      if (f) hkPaintImg(el, hkThumbUrl(f, 120)); // รูปที่งานรายเดือนหาไว้ให้แล้ว
+      else if (!q) watch(el);
+      else if (!HK_WD[q]) need.push(q);
+      else if (!hkPaintThumb(el)) watch(el);
+    });
+    if (need.length) hkWdBatch(need).then(function () {
+      document.querySelectorAll('#hkList [data-hk-q]').forEach(function (el) { if (!hkPaintThumb(el)) watch(el); });
+    });
+  }
+  function hkPaintImg(el, src) {
+    if (!src || el.querySelector('img')) return;
+    var im = new Image(); im.alt = ''; im.loading = 'lazy'; im.decoding = 'async'; im.referrerPolicy = 'no-referrer';
+    im.onload = function () { el.classList.add('has-img'); };
+    im.onerror = function () { im.remove(); };
+    im.src = src;
+    el.appendChild(im);
+  }
+  function hkPaintThumb(el) {
+    var W = HK_WD[el.getAttribute('data-hk-q')];
+    if (!W || !W.img) return false;
+    hkPaintImg(el, hkThumbUrl(W.img, 120));
+    return true;
+  }
+  function hkCardIt(el) { var c = el.closest('[data-hk]'); return c && HK.byId && HK.byId[c.getAttribute('data-hk')]; }
+  function hkGeoThumb(el) {
+    var it = hkCardIt(el);
+    if (!it) return;
+    if (it.id in HK_GEO) { hkPaintImg(el, HK_GEO[it.id] && HK_GEO[it.id].src); return; }
+    HK_GEOQ.push(el);
+    hkGeoPump();
+  }
+  function hkGeoPump() {
+    while (HK_GEON < 3 && HK_GEOQ.length) {
+      var el = HK_GEOQ.shift(), it = el.isConnected && hkCardIt(el);
+      if (!it) continue;
+      if (it.id in HK_GEO) { hkPaintImg(el, HK_GEO[it.id] && HK_GEO[it.id].src); continue; }
+      HK_GEON++;
+      (function (it) {
+        HK_GEO[it.id] = null;
+        wmPhotos(hkGeoQuery(it, 20), 160).then(function (arr) { HK_GEO[it.id] = hkGeoPick(it, arr, (hkQ(it) && HK_WD[hkQ(it)]) || {})[0] || null; }, function () { /* ข้าม */ })
+          .then(function () {
+            HK_GEON--;
+            if (HK_GEO[it.id]) document.querySelectorAll('#hkList [data-hk="' + it.id + '"] .hk-ico').forEach(function (x) { hkPaintImg(x, HK_GEO[it.id].src); });
+            hkGeoPump();
+          });
+      })(it);
+    }
+  }
+  function hkGeoQuery(it, n) { return 'generator=geosearch&ggsnamespace=6&ggslimit=' + n + '&ggsradius=' + (it.k === 'park' ? 4000 : it.k === 'trail' ? 2000 : 1200) + '&ggscoord=' + it.lat + '|' + it.lon; }
+  // รูปที่ถ่ายใกล้จุด: เอารูปที่ชื่อไฟล์ตรงกับชื่อสถานที่ก่อน แล้วค่อยรูปทิวทัศน์ ตัดรูปสัตว์/พืช (ชื่อวิทยาศาสตร์) และภาพจากอวกาศ
+  // ชื่อต้องตรงทั้งวลี (เช่น "khao hin daeng") หรือมีคำเด่นยาว 5 ตัวขึ้นไป (เช่น "inthanon") คำสั้นทั่วไปอย่าง khao/haad จับผิดที่บ่อย
+  var HK_SPACE = /^File:ISS\d|from space|of earth|astronaut|satellite image|sentinel-?2|landsat/i;
+  function hkNorm(t) { return String(t || '').toLowerCase().replace(/^file:/, '').replace(/[-_.,()]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function hkGeoPick(it, arr, W) {
+    arr = arr.filter(function (p) { return !HK_BINOMIAL.test(p.title) && !HK_BINOMIAL2.test(p.title) && !HK_SPACE.test(p.title); });
+    var names = [it.en, W.wp && W.wp.slice(0, 2) === 'en' ? W.wp.slice(3) : null].filter(Boolean), phrases = [], words = [];
+    names.forEach(function (nm) {
+      var ws = hkNorm(nm).split(' ').filter(function (w) { return w && !HK_GENERIC.test(w); });
+      if (ws.join(' ').length >= 6 && ws.length >= 2) phrases.push(ws.join(' '));
+      ws.forEach(function (w) { if (w.length >= 5 && !HK_SHORTNAME.test(w) && !HK_ROMAN.test(w)) words.push(w); });
+    });
+    var th = String(it.n || '').replace(/^(อุทยานแห่งชาติ|วนอุทยาน|น้ำตก|จุดชมวิว|ลานกางเต็นท์|เส้นทางศึกษาธรรมชาติ|เส้นทางเดินป่า)/, '').trim();
+    if (/[\u0E00-\u0E7F]/.test(th) && th.length >= 3) phrases.push(th);
+    var named = arr.filter(function (p) { var t = hkNorm(p.title); return phrases.some(function (x) { return t.indexOf(x) >= 0; }) || words.some(function (x) { return (' ' + t + ' ').indexOf(' ' + x) >= 0; }); });
+    return named.concat(arr.filter(function (p) { return named.indexOf(p) < 0 && HK_SCENE.test(p.title); }).map(function (p) { return Object.assign({}, p, { near: true }); }));
+  }
+
+  var HK_BINOMIAL = /^File:(?!(Doi|Phu|Khao|Nam|Namtok|Wat|Pha|Huai|Mae|Ban|Ko|Koh|Tham|Kew|Kio|Mon|Pang|Sop|Chiang|Phra|Lan|Ang|Kaeng|Thung|Laem|Hat|Ao|View|Summit|Sunset|Sunrise|Mount|Mountain|Lake|The|Top|Forest|Waterfall|Camp|Road|Trail|River|Cave|Temple|Nature|Scenic|Morning|Evening|Sea|Fog|Mist|Cloud|Clouds)\b)[A-Z][a-z]+ (?!(view|views|from|and|the|trail|falls?|waterfall|park|forest|top|peak|summit|camp|area|road|point|national|mountains?|river|lake|cave|temple|sunset|sunrise|landscape|scenery|sea|fog|mist|clouds?)\b)[a-z]{3,}( [a-z]+)?\b/; // รูปสัตว์และพืช (ชื่อวิทยาศาสตร์ เช่น Aethopyga nipalensis) ไม่ใช่ภาพสถานที่
+  var HK_BINOMIAL2 = /^File:[A-Z][a-z]{4,}-[a-z]{4,}-/; // ชื่อวิทยาศาสตร์แบบมีขีด เช่น Malacocincla-abbotti-...
+  var HK_SHORTNAME = /^(namtok|thung|kaeng|chiang|phang|nakhon|ratchasima|province|district|daeng|yai|noi|luang|thong)$/; // คำที่อยู่ในชื่อหลายที่ ใช้เดี่ยวๆ ไม่ได้
+  var HK_ROMAN = /^(khao|doi|phu|haad|hat|tham|wang|huai|mae|nong|ban|koh|ko|pak|nam|pha|wat)$/; // คำนำหน้าชื่อไทย ใช้ในวลีได้ แต่ใช้เดี่ยวๆ ไม่ได้
+  var HK_GENERIC = /^(the|of|and|to|thailand|chiang|province|district|village|temple|river|road|waterfalls?|national|park|forest|nature|trail|view(point)?|point|mountain|peak|summit|camp(ing|site)?|ground|wildlife|sanctuary|reserve|island|อุทยานแห่งชาติ|อุทยาน|น้ำตก|จุดชมวิว|เส้นทาง|ศึกษาธรรมชาติ)$/i; // คำทั่วไป ใช้จับชื่อไม่ได้
+  var HK_SCENE = /view|vista|sunset|sunrise|summit|peak|mountain|doi|phu|khao|falls?|waterfall|nam ?tok|national park|trail|camp|lake|cliff|forest|valley|ดอย|ภู|เขา|น้ำตก|อุทยาน|ผา|จุดชมวิว/i;
+  function wmPhotos(q, w) {
+    return fetch(WM_API + 'action=query&prop=imageinfo&iiprop=url|extmetadata|mime&iiurlwidth=' + (w || 960) + '&iiextmetadatafilter=Artist|LicenseShortName|Credit&' + q)
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+        var pages = (j.query && j.query.pages) || {};
+        return Object.keys(pages).map(function (k) { return pages[k]; }).filter(function (p) { return p.imageinfo && p.imageinfo[0] && /^image\/(jpeg|png|webp)/.test(p.imageinfo[0].mime || '') && !/map|logo|flag|seal|diagram|chart/i.test(p.title); })
+          .sort(function (a, b) { return (a.index || 0) - (b.index || 0); }).map(function (p) {
+            var ii = p.imageinfo[0], md = ii.extmetadata || {}, txt = function (x) { var d = document.createElement('div'); d.innerHTML = (md[x] && md[x].value) || ''; return (d.textContent || '').replace(/\s+/g, ' ').trim(); };
+            return { title: p.title, src: ii.thumburl || ii.url, page: ii.descriptionurl || 'https://commons.wikimedia.org/wiki/' + encodeURIComponent(p.title), by: txt('Artist').slice(0, 60) || 'ไม่ระบุชื่อ', lic: txt('LicenseShortName') || 'ดูสัญญาอนุญาต' };
+          });
+      });
+  }
+  function hkMedia(it) {
     var I = HK.info[it.id];
+    if (I.mediaP) return I.mediaP;
+    var q = hkQ(it);
+    I.mediaP = (q ? hkWdBatch([q]) : Promise.resolve()).then(function () {
+      var W = (q && HK_WD[q]) || {}, jobs = [];
+      I.wd = W;
+      if (W.img) jobs.push(wmPhotos('titles=' + encodeURIComponent('File:' + W.img)).catch(function () { return []; }));
+      if (it.img && it.img !== W.img) jobs.push(wmPhotos('titles=' + encodeURIComponent('File:' + it.img)).then(function (arr) { return it.imgn ? arr.map(function (p) { return Object.assign({}, p, { near: true }); }) : arr; }).catch(function () { return []; }));
+      if (it.cat && it.cat !== W.cc) jobs.push(wmPhotos('generator=categorymembers&gcmtype=file&gcmlimit=10&gcmtitle=' + encodeURIComponent('Category:' + it.cat)).catch(function () { return []; }));
+      if (W.cc) jobs.push(wmPhotos('generator=categorymembers&gcmtype=file&gcmlimit=14&gcmtitle=' + encodeURIComponent('Category:' + W.cc)).catch(function () { return []; }));
+      jobs.push(wmPhotos(hkGeoQuery(it, 30)).then(function (arr) {
+        return hkGeoPick(it, arr, W);
+      }).catch(function () { return []; }));
+      // เรื่องราวจากวิกิพีเดีย: ภาษาไทยก่อน ถ้าไม่มีลิงก์จากวิกิสนเทศ ลองหาชื่อตรงกันในวิกิพีเดียไทย
+      var wpO = it.x && it.x.wikipedia && /^[a-z]{2}:./.test(it.x.wikipedia) ? it.x.wikipedia : null; // ลิงก์วิกิพีเดียที่ใส่ไว้ใน OSM
+      var wpP = W.wp || wpO ? Promise.resolve(W.wp || wpO) : fetch('https://th.wikipedia.org/w/api.php?action=query&list=search&srlimit=3&format=json&origin=*&srsearch=' + encodeURIComponent(it.n))
+        .then(function (r) { return r.json(); }).then(function (j) {
+          var hit = ((j.query && j.query.search) || []).filter(function (s) { return s.title === it.n || s.title === it.n.replace(/^(อุทยานแห่งชาติ|วนอุทยาน)/, ''); })[0];
+          return hit ? 'th:' + hit.title : null;
+        }).catch(function () { return null; });
+      jobs.push(wpP.then(function (wp) {
+        if (!wp) return null;
+        var lang = wp.slice(0, 2), title = wp.slice(3);
+        return fetch('https://' + lang + '.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title.replace(/ /g, '_'))).then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
+          if (!s || !s.extract || s.type === 'disambiguation') return null;
+          I.story = { text: s.extract, lang: lang, url: (s.content_urls && s.content_urls.desktop && s.content_urls.desktop.page) || 'https://' + lang + '.wikipedia.org/wiki/' + encodeURIComponent(title), title: s.title };
+          return null;
+        });
+      }).catch(function () { return null; }));
+      return Promise.all(jobs);
+    }).then(function (res) {
+      var seen = {}, out = [];
+      res.forEach(function (arr) { (arr || []).forEach(function (p) { if (p && !seen[p.title]) { seen[p.title] = 1; out.push(p); } }); });
+      I.photos = out.filter(function (p) { return !p.near; }).concat(out.filter(function (p) { return p.near; })).slice(0, 8); // รูปที่ระบุชื่อสถานที่ก่อน รูปบริเวณใกล้เคียงทีหลัง
+      if (I.wd && I.wd.ele && !it.ele && it.k === 'peak') I.ele = I.wd.ele;
+    }).catch(function () { I.photos = I.photos || []; });
+    return I.mediaP;
+  }
+  function hkGallery(I, it) {
+    var ph = I.photos;
+    if (!ph) return '<div class="hk-gal hk-gal-skel" aria-hidden="true"></div>';
+    if (!ph.length) return '<div class="hk-gal hk-gal-none" style="--c:' + HK_K[it.k].c + '"><span aria-hidden="true">' + HK_K[it.k].i + '</span><small>ยังไม่มีภาพที่ใช้ซ้ำได้ของที่นี่บนวิกิมีเดียคอมมอนส์ ถ่ายรูปแล้วอัปโหลดแบ่งปันได้ที่ commons.wikimedia.org</small></div>';
+    return '<div class="hk-gal" data-key="' + esc(it.id + ':' + ph.map(function (p) { return p.title; }).join('|').length + ':' + ph.length) + '" role="region" aria-label="ภาพตัวอย่าง ' + ph.length + ' รูป"><div class="hk-gal-track" id="hkGal" tabindex="0">' + ph.map(function (p, i) {
+      return '<figure class="hk-slide"><img src="' + esc(p.src) + '" alt="' + esc(it.n + ' ภาพที่ ' + (i + 1)) + '" loading="' + (i ? 'lazy' : 'eager') + '" referrerpolicy="no-referrer">' +
+        '<figcaption>' + (p.near ? 'ถ่ายบริเวณใกล้เคียง · ' : '') + 'ภาพ: ' + esc(p.by) + ' · ' + esc(p.lic) + ' · <a href="' + esc(p.page) + '" target="_blank" rel="noopener">ดูรูป</a></figcaption></figure>';
+    }).join('') + '</div>' + (ph.length > 1 ? '<button type="button" class="hk-gal-b prev" data-hk-gal="-1" aria-label="รูปก่อนหน้า">‹</button><button type="button" class="hk-gal-b next" data-hk-gal="1" aria-label="รูปถัดไป">›</button>' +
+      '<div class="hk-dots">' + ph.map(function (p, i) { return '<i' + (i ? '' : ' class="on"') + '></i>'; }).join('') + '</div>' : '') + '</div>';
+  }
+  // ช่วงที่เหมาะ / ช่วงน้ำตกน้ำมาก จากฝนรายเดือนเฉลี่ย
+  function hkBestText(it, C) {
+    if (!C) return '';
+    if (it.k === 'fall') {
+      var idx = C.rain.map(function (v, i) { return [v, i]; }).sort(function (a, b) { return b[0] - a[0]; }).slice(0, 3).map(function (x) { return x[1]; }).sort(function (a, b) { return a - b; });
+      return 'น้ำมาก ' + idx.map(function (i) { return TH_MON_S[i]; }).join(' ') + ' (ทางลื่น ระวังน้ำป่า)';
+    }
+    var dr = dryRangeText(C.dry);
+    return dr ? dr + ' (ฝนน้อย)' : 'ฝนตกเกือบทั้งปี เลือกวันที่พยากรณ์ฝนต่ำ';
+  }
+  // เช็กลิสต์อุปกรณ์ (คำแนะนำทั่วไป ปรับตามชนิดสถานที่ ความสูง และระยะทาง) เก็บเครื่องหมายไว้ในเครื่อง
+  function hkGear(it, I) {
+    var top = it.ele || I.ele || (I.prof && I.prof.max) || 0, longT = it.k === 'trail' && ((it.km || 0) > 8 || (I.prof && I.prof.gain > 600)), night = it.k === 'camp' || it.k === 'park' || (it.k === 'trail' && (it.km || 0) > 14);
+    var g = [['พื้นฐานทุกทริป', ['รองเท้าเดินป่าหรือรองเท้าผ้าใบพื้นเกาะดี', 'น้ำดื่มอย่างน้อย 1.5 ลิตรต่อคน', 'เสื้อกันฝนหรือปอนโช', 'ของว่างพลังงานสูง', 'ชุดปฐมพยาบาลและยาประจำตัว', 'หมวก ครีมกันแดด และยากันยุง', 'ถุงขยะ นำขยะของตัวเองลงมา', 'แบตเตอรี่สำรอง และโหลดแผนที่ไว้ในเครื่อง', 'บัตรประชาชนและเงินสด (ค่าเข้าอุทยาน)']]];
+    if (night) g.push(['ค้างคืน', ['เต็นท์ (หรือจองเต็นท์ของอุทยานล่วงหน้า)', 'ถุงนอนและแผ่นรองนอน', 'ไฟฉายคาดหัวและถ่านสำรอง', 'เสื้อผ้าชุดเปลี่ยน ใส่ถุงกันน้ำ']]);
+    if (top >= 1200) g.push(['ที่สูงเกิน 1,200 ม.', ['เสื้อกันหนาวหรือแจ็กเก็ต (ยอดดอยหน้าหนาวอาจหนาวจัด)', 'หมวกไหมพรมและถุงมือ', 'ถุงเท้าสำรอง']]);
+    if (longT) g.push(['เส้นทางไกลหรือชัน', ['ไม้เท้าเดินป่า', 'น้ำเพิ่ม หรือเม็ดฟอก/ขวดกรองน้ำ', 'แจ้งแผนการเดินและเวลากลับให้คนที่บ้านรู้']]);
+    if (it.k === 'fall' || it.k === 'trail' || it.k === 'park') g.push(['ช่วงฝนและริมน้ำ', ['รองเท้ารัดส้นกันลื่น', 'ถุงกันน้ำใส่โทรศัพท์', 'ถุงกันทาก (ป่าชื้นช่วงฝน)']]);
+    return g;
+  }
+  function hkGearHtml(it, I) {
+    var key = 'cg-hk-gear-' + it.id, done = {};
+    try { done = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { /* ข้าม */ }
+    var g = hkGear(it, I), n = 0, m = 0;
+    var h = g.map(function (sec) {
+      return '<div class="hk-gg"><div class="hk-ggh">' + esc(sec[0]) + '</div>' + sec[1].map(function (t) {
+        n++; var on = !!done[t]; if (on) m++;
+        return '<label class="hk-gi"><input type="checkbox" data-hk-gear="' + esc(t) + '"' + (on ? ' checked' : '') + '><span>' + esc(t) + '</span></label>';
+      }).join('') + '</div>';
+    }).join('');
+    return '<div class="hk-gear-h"><b>เตรียมแล้ว <span id="hkGearN">' + m + '</span>/' + n + '</b><button type="button" class="cv-sec-a" data-hk-gear-copy="1">คัดลอกรายการ</button><button type="button" class="cv-sec-a" data-hk-gear-clear="1">ล้างเครื่องหมาย</button></div>' + h +
+      '<p class="hk-note">เป็นคำแนะนำทั่วไปจากชนิดสถานที่ ความสูง และระยะทาง ตรวจกฎของพื้นที่และสภาพอากาศก่อนเดินทางอีกครั้ง</p>';
+  }
+  // ความสูงเทียบ: ที่นี่ · ดอยอินทนนท์ (สูงสุดในไทย) · ระดับน้ำทะเล
+  function hkAltSvg(top) {
+    var W = 340, H = 92, max = Math.max(2600, top), x = function (v) { return 110 + (W - 180) * Math.min(v, max) / max; };
+    var rows = [['ที่นี่', top, 'var(--accent)'], ['ดอยอินทนนท์', 2565, '#94A3B8']];
+    return '<svg class="hk-alt" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="ความสูง ' + Math.round(top) + ' ม. เทียบดอยอินทนนท์ 2,565 ม.">' + rows.map(function (r, i) {
+      var y = 14 + i * 32;
+      return '<text class="tw-dl" x="0" y="' + (y + 13) + '">' + r[0] + '</text><rect x="110" y="' + y + '" width="' + Math.max(2, x(r[1]) - 110).toFixed(1) + '" height="18" rx="4" fill="' + r[2] + '"/>' +
+        '<text class="tw-dl" x="' + (x(r[1]) + 5).toFixed(1) + '" y="' + (y + 13) + '">' + fmtN(Math.round(r[1])) + ' ม.</text>';
+    }).join('') + '<text class="tw-ml" x="110" y="' + (H - 4) + '">ระดับน้ำทะเล 0 ม.</text></svg>';
+  }
+  function hkReliability(it, I) {
+    var W = I.wd || {}, refs = [];
+    refs.push('<a href="' + esc(hkOsmUrl(it.id)) + '" target="_blank" rel="noopener">OpenStreetMap</a> (ข้อมูล ' + esc((HK.doc && HK.doc.updated || '').slice(0, 10)) + ')');
+    if (hkQ(it)) refs.push('<a href="https://www.wikidata.org/wiki/' + esc(hkQ(it)) + '" target="_blank" rel="noopener">วิกิสนเทศ ' + esc(hkQ(it)) + '</a>');
+    if (I.story) refs.push('<a href="' + esc(I.story.url) + '" target="_blank" rel="noopener">วิกิพีเดีย' + (I.story.lang === 'en' ? ' (อังกฤษ)' : '') + '</a>');
+    if (I.photos && I.photos.length) refs.push('ภาพจาก Wikimedia Commons (' + I.photos.length + ' รูป)');
+    refs.push('อากาศ Open-Meteo · ภูมิอากาศ NASA POWER · ความสูง Terrain Tiles');
+    var lvl = I.story || hkQ(it) ? ['มีแหล่งอ้างอิงประกอบ', 'มีข้อมูลในวิกิสนเทศหรือวิกิพีเดียเพิ่มจากแผนที่ OpenStreetMap แต่ยังไม่ใช่ข้อมูลจากหน่วยงาน', 2]
+      : ['ข้อมูลจากแผนที่อาสาสมัคร', 'มีเฉพาะชื่อและตำแหน่งจาก OpenStreetMap ยังไม่มีแหล่งอ้างอิงอื่น ควรตรวจสอบก่อนเดินทาง', 1];
+    return '<div class="hk-rel"><span class="hk-bars" aria-hidden="true">' + [1, 2, 3].map(function (k) { return '<i' + (k <= lvl[2] ? ' class="on"' : '') + '></i>'; }).join('') + '</span><b>' + lvl[0] + '</b></div><p class="hk-note">' + lvl[1] + '</p>' +
+      '<ul class="hk-refs">' + refs.map(function (r) { return '<li>' + r + '</li>'; }).join('') + '</ul>';
+  }
+  function hkWx7(it, I) {
     if (I.wxP) return I.wxP;
-    I.wxP = fetch('https://api.open-meteo.com/v1/forecast?latitude=' + it.lat.toFixed(3) + '&longitude=' + it.lon.toFixed(3) +
-      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FBangkok&forecast_days=4')
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) { I.wx = j.daily; }).catch(function () { I.wxErr = true; I.wxP = null; });
+    var ele = it.ele || I.ele || (I.prof && I.prof.max);
+    I.wxP = fetch('https://api.open-meteo.com/v1/forecast?latitude=' + it.lat.toFixed(3) + '&longitude=' + it.lon.toFixed(3) + (ele ? '&elevation=' + Math.round(ele) : '') +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Asia%2FBangkok&forecast_days=7')
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) { I.wx = j.daily; I.wxEle = ele || null; I.wxAt = Date.now(); })
+      .catch(function () { I.wxErr = true; I.wxP = null; });
     return I.wxP;
   }
+  function hkWxHtml(I) {
+    var W = I.wx;
+    if (!W) return I.wxErr ? '<p class="hk-note">โหลดพยากรณ์อากาศไม่ได้ตอนนี้</p>' : '<div class="hk-skel s"></div>';
+    var p = W.precipitation_probability_max || [], tmin = W.temperature_2m_min || [], wind = W.wind_speed_10m_max || [];
+    var pi = p.indexOf(Math.max.apply(null, p.filter(function (x) { return x != null; })));
+    var lo = Math.min.apply(null, tmin), hi = Math.max.apply(null, wind.filter(function (x) { return x != null; }));
+    var where = I.wxEle ? 'ที่ความสูง ' + fmtN(Math.round(I.wxEle)) + ' ม.' : '';
+    return '<div class="hk-wxs"><div><span>ฝนมากสุด</span><b>' + (p[pi] != null ? p[pi] + '%' : '–') + '</b><small>' + (pi === 0 ? 'วันนี้' : pi > 0 ? dowOf(W.time[pi]) : '') + '</small></div>' +
+      '<div><span>กลางคืนต่ำสุด</span><b>' + Math.round(lo) + '°C</b><small>' + esc(where || 'ที่จุดนี้') + '</small></div><div><span>ลมแรงสุด</span><b>' + (isFinite(hi) ? Math.round(hi) + ' กม./ชม.' : '–') + '</b><small>7 วัน</small></div></div>' +
+      '<div class="hk-wx7" role="table" aria-label="พยากรณ์รายวัน"><div class="hk-wxh" role="row"><span>วัน</span><span>สภาพอากาศ</span><span>โอกาสฝน</span><span>สูง / ต่ำ</span></div>' + W.time.map(function (t, i) {
+        var pr = p[i];
+        return '<div role="row" class="' + (pr >= 70 ? 'wet' : '') + (i >= 4 ? ' far' : '') + '"><b>' + (i === 0 ? 'วันนี้' : i === 1 ? 'พรุ่งนี้' : dowOf(t) + ' ' + (+t.slice(8))) + '</b><span class="hk-wc">' + esc(wmoText(W.weather_code[i])) + '</span>' +
+          '<span class="hk-rp"><i><u style="width:' + (pr || 0) + '%"></u></i>' + (pr == null ? '–' : pr + '%') + '</span><span class="hk-t">' + Math.round(W.temperature_2m_max[i]) + '° / ' + Math.round(tmin[i]) + '°</span></div>';
+      }).join('') + '</div><p class="hk-note">พยากรณ์ Open-Meteo ' + (where ? 'อุณหภูมิปรับตามความสูง' + where + ' ' : '') + '· วันที่ 5–7 (สีจาง) เป็นแนวโน้มคร่าวๆ · ฝนบนภูเขาอาจคลาดเคลื่อน ตรวจประกาศอุทยานก่อนเดินทาง</p>';
+  }
   function hkDetailHtml(it) {
-    var K = HK_K[it.k], I = HK.info[it.id] || {}, P = I.prof, f = it.k === 'trail' && hkFeature(it);
-    var d = hkDiff(it, P ? P.gain : null), facts = [];
-    if (it.k === 'park') facts.push(['ประเภท', HK_PT[it.t] || 'พื้นที่คุ้มครอง'], ['พื้นที่', it.km2 ? fmtN(Math.round(it.km2)) + ' ตร.กม.' : '–']);
-    if (it.ele) facts.push(['ความสูง (OSM)', fmtN(it.ele) + ' ม.']);
-    else if (I.ele != null && it.k !== 'trail') facts.push(['ความสูงโดยประมาณ', fmtN(Math.round(I.ele)) + ' ม.']);
+    var K = HK_K[it.k], I = HK.info[it.id] || {}, P = I.prof, f = it.k === 'trail' && hkFeature(it), W = I.wd || {};
+    var d = hkDiff(it, P ? P.gain : null), top = it.ele || I.ele || (P && P.max) || 0;
+    var h = '<div class="hk-dh"><button type="button" class="btn-ghost hk-back" data-hk-back="1">‹ กลับรายการ</button>' +
+      '<button type="button" class="btn-ghost" data-hk-share="1" title="คัดลอกลิงก์">แชร์</button></div>';
+    h += '<div class="hk-kick" style="--c:' + K.c + '">' + K.i + ' ' + esc(K.t) + ' · จ.' + esc(it.p) + (hkQ(it) ? ' <span class="hk-ref-chip">มีแหล่งอ้างอิง</span>' : '') + '</div>' +
+      '<h2 class="hk-title">' + esc(it.n) + '</h2>' + (it.en || W.desc ? '<div class="hk-en">' + esc([it.en, W.desc].filter(Boolean).join(' · ')) + '</div>' : '');
+    h += hkGallery(I, it);
+    // ข้อมูลสำคัญ
+    var facts = [];
+    if (d >= 0) facts.push(['ความยาก', hkDiffChip(d, true) + (it.sac ? '' : ' <small>ประเมินจากระยะและความชัน</small>')]);
+    if (it.k === 'trail') facts.push(['ระยะทาง', it.km ? (it.km < 10 ? it.km.toFixed(1) : Math.round(it.km)) + ' กม. <small>ตามเส้นใน OSM</small>' : '–'], ['เวลาเดิน', it.km ? hkHours(it.km, P ? P.gain : 0) : '–']);
+    if (top) facts.push([it.k === 'peak' ? 'ความสูง' : 'จุดสูงสุด', fmtN(Math.round(top)) + ' ม.' + (it.ele ? '' : ' <small>จากแผนที่ความสูง</small>')]);
+    if (it.k === 'park') facts.push(['ประเภท', esc(HK_PT[it.t] || 'พื้นที่คุ้มครอง')], ['พื้นที่', it.km2 ? fmtN(Math.round(it.km2)) + ' ตร.กม. <small>≈ ' + fmtN(Math.round(it.km2 * 625)) + ' ไร่</small>' : '–']);
+    facts.push([it.k === 'fall' ? 'ช่วงที่น้ำเยอะ' : 'ช่วงที่เหมาะ', I.clim ? esc(hkBestText(it, I.clim)) : I.climErr ? '–' : 'กำลังคำนวณ…']);
+    if (top >= 600 && it.k !== 'park') facts.push(['อากาศบนยอด', 'เย็นกว่าพื้นราบราว ' + Math.round(top * 0.0065) + '°C <small>ทุก 100 ม. เย็นลงราว 0.65°C</small>']);
+    h += '<div class="hk-facts">' + facts.map(function (x) { return '<div><span>' + esc(x[0]) + '</span><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
+    if (I.story) h += '<section class="hk-sec"><h3>เรื่องราวของที่นี่</h3><p class="hk-story">' + esc(I.story.text) + '</p><p class="hk-note">จาก <a href="' + esc(I.story.url) + '" target="_blank" rel="noopener">วิกิพีเดีย' + (I.story.lang === 'en' ? 'ภาษาอังกฤษ' : '') + ': ' + esc(I.story.title) + '</a> (CC BY-SA)</p></section>';
     if (it.k === 'trail') {
-      facts.push(['ระยะทาง', it.km ? (it.km < 10 ? it.km.toFixed(1) : Math.round(it.km)) + ' กม.' : '–']);
-      facts.push(['ขึ้นสะสม', P ? fmtN(Math.round(P.gain)) + ' ม.' : I.profErr ? '–' : 'กำลังคำนวณ…']);
-      facts.push(['จุดสูงสุด', P ? fmtN(Math.round(P.max)) + ' ม.' : '–']);
-      facts.push(['เวลาเดินโดยประมาณ', it.km ? hkHours(it.km, P ? P.gain : 0) : '–']);
-    }
-    if (d >= 0) facts.push(['ความยาก', hkDiffChip(d, true) + (it.sac ? '' : ' <small>ประเมินเอง</small>')]);
-    var h = '<div class="hk-dh"><button type="button" class="btn-ghost hk-back" data-hk-back="1">' + '‹ กลับรายการ</button>' +
-      '<button type="button" class="btn-ghost" data-hk-share="1" title="คัดลอกลิงก์">แชร์</button></div>' +
-      '<div class="hk-kick" style="--c:' + K.c + '">' + K.i + ' ' + esc(K.t) + ' · จ.' + esc(it.p) + '</div><h2 class="hk-title">' + esc(it.n) + '</h2>' + (it.en ? '<div class="hk-en">' + esc(it.en) + '</div>' : '') +
-      '<div class="hk-facts">' + facts.map(function (x) { return '<div><span>' + esc(x[0]) + '</span><b>' + (/</.test(x[1]) ? x[1] : esc(x[1])) + '</b></div>'; }).join('') + '</div>';
-    if (it.k === 'trail') {
-      h += '<section class="hk-sec"><h3>ความสูงตามเส้นทาง</h3>' + (P ? hkProfileSvg(P) + '<p class="hk-note">จากแผนที่ความสูงความละเอียดราว 30 ม. ขึ้นสะสม ' + fmtN(Math.round(P.gain)) + ' ม. ลงสะสม ' + fmtN(Math.round(P.loss)) + ' ม. (ตามทิศที่เส้นถูกวาดไว้ใน OSM)</p>'
+      h += '<section class="hk-sec"><h3>ระยะทางและความชัน</h3>' + (P ? hkProfileSvg(P) + '<p class="hk-note">ขึ้นสะสม ' + fmtN(Math.round(P.gain)) + ' ม. · ลงสะสม ' + fmtN(Math.round(P.loss)) + ' ม. · จากแผนที่ความสูงความละเอียดราว 30 ม. (ตามทิศที่เส้นถูกวาดไว้ใน OSM)</p>'
         : I.profErr ? '<p class="hk-note">คำนวณความสูงไม่ได้ ' + (f ? '(เส้นทางยาวเกินหรือโหลดแผนที่ความสูงไม่ได้)' : '(ไม่มีเส้นทางในไฟล์)') + '</p>' : '<div class="hk-skel s"></div>') + '</section>';
     }
-    h += '<section class="hk-sec"><h3>อากาศ 4 วันข้างหน้า</h3>';
-    if (I.wx) {
-      h += '<div class="hk-wx">' + I.wx.time.map(function (t, i) {
-        var p = I.wx.precipitation_probability_max[i];
-        return '<div class="' + (p >= 70 ? 'wet' : '') + '"><b>' + (i === 0 ? 'วันนี้' : dowOf(t)) + '</b><span>' + esc(wmoText(I.wx.weather_code[i])) + '</span><span>' + Math.round(I.wx.temperature_2m_min[i]) + '–' + Math.round(I.wx.temperature_2m_max[i]) + '°</span><span>ฝน ' + (p == null ? '–' : p + '%') + '</span></div>';
-      }).join('') + '</div><p class="hk-note">พยากรณ์ Open-Meteo ณ พิกัดนี้ · โอกาสฝนสูงสุดของวัน</p>';
-    } else h += I.wxErr ? '<p class="hk-note">โหลดพยากรณ์อากาศไม่ได้ตอนนี้</p>' : '<div class="hk-skel s"></div>';
-    h += '</section><section class="hk-sec"><h3>ช่วงไหนฝนน้อย (ค่าเฉลี่ยหลายปี)</h3>';
-    if (I.clim) {
-      var dr = dryRangeText(I.clim.dry);
-      h += climChartSvg(I.clim) + '<p class="hk-note">' + (dr ? '<b>ฝนน้อยช่วง ' + esc(dr) + '</b> (แท่งสีต่างคือเดือนที่ฝนน้อยกว่า ' + DRY_MM + ' มม.) ' : '') + 'ฝนรวมราว ' + fmtN(Math.round(I.clim.rainAnn)) + ' มม./ปี · NASA POWER ' + esc(I.clim.years || '') +
-        ' · ช่วงหน้าแล้งทางภาคเหนืออาจมีหมอกควัน ตรวจค่าฝุ่นก่อนไป</p>';
-    } else h += I.climErr ? '<p class="hk-note">โหลดข้อมูลภูมิอากาศไม่ได้ตอนนี้</p>' : '<div class="hk-skel s"></div>';
+    if (top >= 200) h += '<section class="hk-sec"><h3>สูงแค่ไหน</h3>' + hkAltSvg(top) + '</section>';
+    h += '<section class="hk-sec"><h3>พยากรณ์อากาศ 7 วัน</h3>' + hkWxHtml(I) + '</section>';
+    h += '<section class="hk-sec"><h3>ฝนรายเดือน (ค่าเฉลี่ยหลายปี)</h3>';
+    if (I.clim) h += climChartSvg(I.clim) + '<p class="hk-note">แท่งสีต่างคือเดือนที่ฝนน้อยกว่า ' + DRY_MM + ' มม. · ฝนรวมราว ' + fmtN(Math.round(I.clim.rainAnn)) + ' มม./ปี · NASA POWER ' + esc(I.clim.years || '') + ' · ช่วงหน้าแล้งทางภาคเหนืออาจมีหมอกควัน ตรวจค่าฝุ่นก่อนไป</p>';
+    else h += I.climErr ? '<p class="hk-note">โหลดข้อมูลภูมิอากาศไม่ได้ตอนนี้</p>' : '<div class="hk-skel s"></div>';
     h += '</section>';
+    h += '<section class="hk-sec"><h3>การเดินทาง</h3><div class="hk-links">' +
+      '<a class="btn-ghost" href="https://www.google.com/maps/dir/?api=1&destination=' + it.lat + ',' + it.lon + '" target="_blank" rel="noopener">นำทางด้วย Google Maps' + ICO.ext + '</a>' +
+      ((it.x && it.x.website) || W.web ? '<a class="btn-ghost" href="' + esc(/^https?:/.test((it.x && it.x.website) || W.web) ? ((it.x && it.x.website) || W.web) : 'https://' + ((it.x && it.x.website) || W.web)) + '" target="_blank" rel="noopener">เว็บไซต์ทางการ' + ICO.ext + '</a>' : '') +
+      '<button type="button" class="btn-ghost" data-hk-site="1">ตรวจทำเล/น้ำท่วมจุดนี้</button></div>' +
+      '<p class="hk-note">พิกัด ' + it.lat.toFixed(5) + ', ' + it.lon.toFixed(5) + ' จาก OpenStreetMap ตรวจว่าปลายทางถูกต้องก่อนออกเดินทาง</p></section>';
     var nb = hkNearby(it);
     if (nb.length) h += '<section class="hk-sec"><h3>ใกล้เคียงในรัศมี 15 กม.</h3><div class="hk-nb">' + nb.map(function (x) {
       return '<button type="button" data-hk="' + esc(x.o.id) + '"><span aria-hidden="true">' + HK_K[x.o.k].i + '</span><b>' + esc(x.o.n) + '</b><small>' + nf(x.d) + ' กม.</small></button>';
     }).join('') + '</div></section>';
-    var x = it.x || {}, links = [];
-    links.push('<a class="btn-ghost" href="https://www.google.com/maps/dir/?api=1&destination=' + it.lat + ',' + it.lon + '" target="_blank" rel="noopener">นำทางไปที่นี่' + ICO.ext + '</a>');
-    if (x.website) links.push('<a class="btn-ghost" href="' + esc(/^https?:/.test(x.website) ? x.website : 'https://' + x.website) + '" target="_blank" rel="noopener">เว็บไซต์' + ICO.ext + '</a>');
-    if (hkOsmUrl(it.id)) links.push('<a class="btn-ghost" href="' + hkOsmUrl(it.id) + '" target="_blank" rel="noopener">ดูใน OpenStreetMap' + ICO.ext + '</a>');
-    links.push('<button type="button" class="btn-ghost" data-hk-site="1">ตรวจทำเล/น้ำท่วมจุดนี้</button>');
-    h += '<div class="hk-links">' + links.join('') + '</div>' +
-      '<p class="hk-warn">ข้อมูลจาก OpenStreetMap ซึ่งอาสาสมัครช่วยกันวาด อาจไม่ครบหรือไม่เป็นปัจจุบัน ความยากและเวลาเดินเป็นการประเมินจากระยะและความชันเท่านั้น อุทยานหลายแห่งปิดเส้นทางบางช่วงในฤดูฝน และบางเส้นต้องจองหรือมีเจ้าหน้าที่นำทาง ตรวจสอบกับอุทยานหรือหน่วยงานในพื้นที่ก่อนเดินทางเสมอ</p>';
+    h += '<section class="hk-sec"><h3>เช็กลิสต์อุปกรณ์</h3>' + hkGearHtml(it, I) + '</section>';
+    h += '<section class="hk-sec"><h3>แหล่งข้อมูลและความน่าเชื่อถือ</h3>' + hkReliability(it, I) + '</section>';
+    h += '<p class="hk-warn">ความยากและเวลาเดินเป็นการประเมินจากระยะและความชันเท่านั้น อุทยานหลายแห่งปิดเส้นทางบางช่วงในฤดูฝน และบางเส้นต้องจองหรือมีเจ้าหน้าที่นำทาง ตรวจสอบกับอุทยานหรือหน่วยงานในพื้นที่ก่อนเดินทางเสมอ</p>';
     return h;
   }
   function hkRenderDetail() {
@@ -8565,7 +8807,25 @@
     if (!box) return;
     if (!it) { box.hidden = true; $('hkListView').hidden = false; return; }
     $('hkListView').hidden = true; box.hidden = false;
+    var oldG = box.querySelector('.hk-gal[data-key]'), st = box.scrollTop, wst = window.scrollY;
     box.innerHTML = hkDetailHtml(it);
+    var newG = box.querySelector('.hk-gal[data-key]');
+    if (oldG && newG && oldG.getAttribute('data-key') === newG.getAttribute('data-key')) newG.replaceWith(oldG); // ไม่โหลดรูปซ้ำ และไม่เด้งกลับรูปแรก
+    box.scrollTop = st;
+    if (window.scrollY !== wst) window.scrollTo(0, wst);
+  }
+  function hkGalDots() {
+    var tr = $('hkGal');
+    if (!tr) return;
+    var i = Math.round(tr.scrollLeft / Math.max(1, tr.clientWidth));
+    tr.parentNode.querySelectorAll('.hk-dots i').forEach(function (d, k) { d.classList.toggle('on', k === i); });
+  }
+  function hkGearSave(id, fn) {
+    var key = 'cg-hk-gear-' + id, o = {};
+    try { o = JSON.parse(localStorage.getItem(key) || '{}') || {}; } catch (e) { /* ข้าม */ }
+    fn(o);
+    try { if (Object.keys(o).length) localStorage.setItem(key, JSON.stringify(o)); else localStorage.removeItem(key); } catch (e) { /* ข้าม */ }
+    return o;
   }
   function hkOpen(id, fromHash) {
     if (!HK.doc) { HK.pending = id; return; }
@@ -8585,7 +8845,8 @@
       }
     });
     if (it.k !== 'trail' && I.ele == null && !it.ele) elevationAt(it.lon, it.lat).then(function (o) { I.ele = o.ele; redraw(); }, function () { /* ข้าม */ });
-    if (!I.wx) hkWx(it).then(redraw);
+    if (!I.wx) hkWx7(it, I).then(redraw);
+    if (!I.photos) hkMedia(it).then(function () { redraw(); if (I.wd && I.wd.ele && !it.ele && !I.wx) { I.wxP = null; hkWx7(it, I).then(redraw); } });
     if (!I.clim && !I.climErr) climAt(it.lon, it.lat).then(function (C) { I.clim = C; redraw(); }, function () { I.climErr = true; redraw(); });
     if (HK.ready) document.querySelectorAll('.hk-card.on').forEach(function (c) { c.classList.remove('on'); });
   }
@@ -8604,9 +8865,29 @@
   }
   if ($('pageHike')) {
     $('pageHike').addEventListener('click', function (e) {
-      var t = e.target.closest('[data-hk],[data-hk-k],[data-hk-more],[data-hk-back],[data-hk-retry],[data-hk-share],[data-hk-site],#hkInView');
+      var t = e.target.closest('[data-hk],[data-hk-k],[data-hk-more],[data-hk-back],[data-hk-retry],[data-hk-share],[data-hk-site],[data-hk-gal],[data-hk-gear-copy],[data-hk-gear-clear],#hkInView,#hkWithImg');
       if (!t) return;
+      if (t.hasAttribute('data-hk-gal')) {
+        var tr = $('hkGal');
+        if (tr) {
+          var n = tr.children.length, cur = Math.round(tr.scrollLeft / Math.max(1, tr.clientWidth)), nx = (cur + (+t.getAttribute('data-hk-gal')) + n) % n;
+          tr.scrollTo({ left: nx * tr.clientWidth, behavior: reduceMotion ? 'auto' : 'smooth' });
+        }
+        return;
+      }
+      if (t.hasAttribute('data-hk-gear-copy')) {
+        var g0 = HK.byId[HK.sel];
+        if (!g0) return;
+        var done0 = hkGearSave(g0.id, function () {}), txt = 'เช็กลิสต์เดินป่า: ' + g0.n + '\n' + hkGear(g0, HK.info[g0.id] || {}).map(function (sec) {
+          return '\n' + sec[0] + '\n' + sec[1].map(function (x) { return (done0[x] ? '[x] ' : '[ ] ') + x; }).join('\n');
+        }).join('\n');
+        if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { toast('คัดลอกเช็กลิสต์แล้ว วางในแชทหรือโน้ตได้เลย'); }, function () { toast('คัดลอกไม่ได้ในเบราว์เซอร์นี้'); });
+        else toast('คัดลอกไม่ได้ในเบราว์เซอร์นี้');
+        return;
+      }
+      if (t.hasAttribute('data-hk-gear-clear')) { if (HK.sel) { hkGearSave(HK.sel, function (o) { Object.keys(o).forEach(function (k) { delete o[k]; }); }); hkRenderDetail(); } return; }
       if (t.id === 'hkInView') { HK.inView = !HK.inView; HK.limit = 80; renderHike(); return; }
+      if (t.id === 'hkWithImg') { HK.withImg = !HK.withImg; HK.limit = 80; renderHike(); hkMapData(); return; }
       if (t.hasAttribute('data-hk')) { hkOpen(t.getAttribute('data-hk')); return; }
       if (t.hasAttribute('data-hk-k')) { HK.kind = t.getAttribute('data-hk-k'); HK.limit = 80; renderHike(); hkMapData(); return; }
       if (t.hasAttribute('data-hk-more')) { HK.limit += 120; renderHike(); return; }
@@ -8618,6 +8899,21 @@
         return;
       }
       if (t.hasAttribute('data-hk-site')) { var it = HK.byId[HK.sel]; if (it) { setPage('chat'); setTimeout(function () { openSite(it.lon, it.lat); }, 200); } }
+    });
+    $('pageHike').addEventListener('change', function (e) {
+      var c = e.target.closest && e.target.closest('input[data-hk-gear]');
+      if (!c || !HK.sel) return;
+      var name = c.getAttribute('data-hk-gear');
+      hkGearSave(HK.sel, function (x) { if (c.checked) x[name] = 1; else delete x[name]; });
+      if ($('hkGearN')) $('hkGearN').textContent = $('hkDetail').querySelectorAll('input[data-hk-gear]:checked').length;
+    });
+    var hkGT = 0;
+    $('pageHike').addEventListener('scroll', function (e) { if (e.target.id === 'hkGal') { clearTimeout(hkGT); hkGT = setTimeout(hkGalDots, 60); } }, true);
+    $('pageHike').addEventListener('keydown', function (e) {
+      if (e.target.id !== 'hkGal' || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+      e.preventDefault();
+      var b = e.target.parentNode.querySelector('[data-hk-gal="' + (e.key === 'ArrowLeft' ? -1 : 1) + '"]');
+      if (b) b.click();
     });
     var hkQT = 0;
     $('hkQ').addEventListener('input', function () { clearTimeout(hkQT); hkQT = setTimeout(function () { HK.q = $('hkQ').value.trim(); HK.limit = 80; renderHike(); hkMapData(); }, 200); });
@@ -8648,7 +8944,7 @@
     var full = q.replace(/\s+/g, ' ');
     hits.sort(function (a, b) { return ((full && b.n.indexOf(full) >= 0) - (full && a.n.indexOf(full) >= 0)) || hkScore(b) - hkScore(a); });
     var top = hits.slice(0, 5);
-    return { title: 'เดินป่า · ธรรมชาติ (OpenStreetMap)', text: (words.length && hits.length < items.length ? 'พบ ' + fmtN(hits.length) + ' แห่งที่ตรงกับคำถาม ' : 'ตัวอย่างจากทั่วไทย ') + 'กดชื่อเพื่อดูความสูง เส้นทาง อากาศ 4 วัน และเดือนที่ฝนน้อย',
+    return { title: 'เดินป่า · ธรรมชาติ (OpenStreetMap)', text: (words.length && hits.length < items.length ? 'พบ ' + fmtN(hits.length) + ' แห่งที่ตรงกับคำถาม ' : 'ตัวอย่างจากทั่วไทย ') + 'กดชื่อเพื่อดูภาพ เรื่องราว ความสูง เส้นทาง อากาศ 7 วัน เดือนที่ฝนน้อย และเช็กลิสต์อุปกรณ์',
       html: '<div class="hk-chat">' + top.map(function (it) { return '<button type="button" class="pt-title" data-hk-go="' + esc(it.id) + '">' + HK_K[it.k].i + ' ' + esc(it.n) + ' <span>' + esc(hkFacts(it) || HK_K[it.k].t) + ' · จ.' + esc(it.p) + '</span></button>'; }).join('') + '</div>' +
         '<button type="button" class="btn-ghost sv-open" data-hk-go="">เปิดหน้าเดินป่า' + ICO.arrow + '</button>' };
   }

@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610110138">
+<link rel="stylesheet" href="style.css?v=202610120045">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -346,7 +346,7 @@
       <div class="hk-listv" id="hkListView">
         <div class="hk-top">
           <h1>เดินป่า · ธรรมชาติ <span class="cv-tag">ทดลอง</span></h1>
-          <p class="hk-sub">ยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap พร้อมความสูง อากาศ และเดือนที่ฝนน้อย</p>
+          <p class="hk-sub">ยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap พร้อมภาพตัวอย่าง ความสูง อากาศ 7 วัน และเช็กลิสต์อุปกรณ์</p>
           <label class="cv-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
             <input id="hkQ" type="search" placeholder="ค้นชื่อ ดอย น้ำตก อุทยาน หรือจังหวัด" autocomplete="off" spellcheck="false" aria-label="ค้นหาสถานที่เดินป่า">
@@ -354,6 +354,7 @@
           <div class="hk-kinds" id="hkKinds" role="group" aria-label="ประเภท"></div>
           <div class="hk-row"><select id="hkZone" class="hk-sel" aria-label="ภาค"></select><select id="hkSort" class="hk-sel" aria-label="เรียงตาม"></select></div>
           <button type="button" class="fp-row fp-switch hk-inview" id="hkInView" aria-pressed="false"><span>เฉพาะที่อยู่ในกรอบแผนที่</span><span class="sw" aria-hidden="true"><i></i></span></button>
+          <button type="button" class="fp-row fp-switch hk-inview" id="hkWithImg" aria-pressed="false" hidden><span>เฉพาะที่มีรูปตัวอย่าง</span><span class="sw" aria-hidden="true"><i></i></span></button>
           <div class="hk-n" id="hkN" aria-live="polite"></div>
         </div>
         <div class="hk-list" id="hkList"></div>
@@ -598,7 +599,7 @@
 
         <section id="h-hike">
           <h3>หน้าเดินป่า</h3>
-          <p>รวมยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap (ลิงก์ <kbd>#hike</kbd>) กรองตามประเภท ภาค หรือค้นชื่อ กดรายการเพื่อดูความสูง กราฟขึ้นลงของเส้นทาง เวลาเดินโดยประมาณ อากาศ 4 วัน และเดือนที่ฝนน้อย ความยากและเวลาเป็นการประเมินคร่าวๆ ตรวจสอบกับอุทยานก่อนไปเสมอ</p>
+          <p>รวมยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap (ลิงก์ <kbd>#hike</kbd>) กรองตามประเภท ภาค หรือค้นชื่อ กดรายการเพื่อดูภาพตัวอย่างจาก Wikimedia Commons (มีชื่อผู้ถ่ายและสัญญาอนุญาตทุกรูป) เรื่องราวจากวิกิพีเดีย ความสูง กราฟขึ้นลงของเส้นทาง เวลาเดินโดยประมาณ พยากรณ์อากาศ 7 วันที่ปรับตามความสูงของยอด เดือนที่ฝนน้อย เช็กลิสต์อุปกรณ์ (ติ๊กแล้วจำไว้ในเครื่อง) และระดับความน่าเชื่อถือของข้อมูล ความยากและเวลาเป็นการประเมินคร่าวๆ ตรวจสอบกับอุทยานก่อนไปเสมอ</p>
         </section>
 
         <section id="h-props">
@@ -667,9 +668,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610110138"></script>
-<script src="data/countries.js?v=202610110138"></script>
-<script src="data/th-regions.js?v=202610110138"></script>
-<script src="app.js?v=202610110138"></script>
+<script src="data/data.js?v=202610120045"></script>
+<script src="data/countries.js?v=202610120045"></script>
+<script src="data/th-regions.js?v=202610120045"></script>
+<script src="app.js?v=202610120045"></script>
 </body>
 </html>

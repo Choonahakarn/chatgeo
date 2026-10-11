@@ -1618,3 +1618,65 @@ body.ops .exit3d { display: none; }
   .nav a { padding: 0 5px; font-size: 13px; }
   .top-actions .icon-btn { min-width: 31px; padding: 0 4px; }
 }
+/* ---------- หน้าเดินป่า: รูป เรื่องราว อากาศ 7 วัน เช็กลิสต์ ---------- */
+.hk-ico { position: relative; overflow: hidden; }
+.hk-ico img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .25s; }
+.hk-ico.has-img img { opacity: 1; }
+.hk-card .hk-ico { width: 52px; height: 52px; font-size: 22px; }
+.hk-ico.has-img { background: var(--chip); }
+.hk-ref-chip { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 999px; border: 1px solid color-mix(in srgb, #2E9E6A 50%, var(--line)); color: #2E9E6A; font-size: 10.5px; font-weight: 700; vertical-align: 1px; }
+.hk-gal { position: relative; margin: 12px 0 4px; aspect-ratio: 16 / 10; border-radius: 14px; overflow: hidden; background: var(--chip); }
+.hk-gal-track { display: flex; width: 100%; height: 100%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.hk-gal-track::-webkit-scrollbar { display: none; }
+.hk-gal-track:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hk-slide { position: relative; flex: 0 0 100%; height: 100%; margin: 0; scroll-snap-align: start; }
+.hk-slide img { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--chip); }
+.hk-slide figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 12px 8px; background: linear-gradient(transparent, rgba(0,0,0,.62)); color: #fff; font-size: 11px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hk-slide figcaption a { color: #fff; text-decoration: underline; }
+.hk-gal-b { position: absolute; top: 50%; z-index: 2; width: 34px; height: 34px; margin-top: -17px; border: 0; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; font-size: 22px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0 0 3px; }
+.hk-gal-b:hover { background: rgba(0,0,0,.65); }
+.hk-gal-b.prev { left: 8px; } .hk-gal-b.next { right: 8px; }
+.hk-dots { position: absolute; top: 10px; left: 0; right: 0; z-index: 2; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+.hk-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.5); box-shadow: 0 0 2px rgba(0,0,0,.4); }
+.hk-dots i.on { background: #fff; width: 16px; border-radius: 3px; }
+.hk-gal-skel { background: linear-gradient(90deg, var(--chip), var(--line), var(--chip)); background-size: 200% 100%; animation: hk-sk 1.3s infinite linear; }
+.hk-gal-none { aspect-ratio: auto; display: flex; align-items: center; gap: 12px; padding: 14px; background: color-mix(in srgb, var(--c) 9%, var(--panel)); border: 1px dashed color-mix(in srgb, var(--c) 40%, var(--line)); }
+.hk-gal-none span { font-size: 30px; }
+.hk-gal-none small { font-size: 12px; line-height: 1.55; color: var(--muted); }
+.hk-story { margin: 0; font-size: 14px; line-height: 1.75; color: var(--ink2); }
+.hk-alt { display: block; width: 100%; max-width: 420px; height: auto; }
+.hk-wxs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.hk-wxs > div { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 10px; background: var(--chip); }
+.hk-wxs span { font-size: 11.5px; color: var(--muted); }
+.hk-wxs b { font-size: 16px; font-weight: 700; }
+.hk-wxs small { font-size: 11px; color: var(--muted); }
+.hk-wx7 { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.hk-wx7 > div { display: grid; grid-template-columns: 62px minmax(0, 1fr) 84px 62px; align-items: center; gap: 8px; padding: 7px 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.hk-wx7 > div:first-child { border-top: 0; }
+.hk-wx7 > .hk-wxh { padding: 5px 10px; background: var(--chip); font-size: 11px; color: var(--muted); }
+.hk-wx7 > div b { font-size: 12.5px; white-space: nowrap; }
+.hk-wx7 > div.wet { background: color-mix(in srgb, #2F80ED 8%, var(--panel)); }
+.hk-wx7 > div.far { opacity: .55; }
+.hk-rp { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.hk-rp i { flex: 0 0 34px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.hk-rp u { display: block; height: 100%; background: #2F80ED; }
+.hk-t { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hk-wc { color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hk-gear-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.hk-gear-h b { margin-right: auto; font-size: 13.5px; }
+.hk-gg { margin: 8px 0 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.hk-ggh { padding: 7px 12px; background: var(--chip); font-size: 12px; font-weight: 700; color: var(--ink2); }
+.hk-gi { display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.45; cursor: pointer; }
+.hk-gi input { flex: 0 0 auto; width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--accent); }
+.hk-gi input:checked + span { color: var(--muted); text-decoration: line-through; }
+.hk-rel { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.hk-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.hk-bars i { width: 5px; border-radius: 1px; background: var(--line2); }
+.hk-bars i:nth-child(1) { height: 6px; } .hk-bars i:nth-child(2) { height: 10px; } .hk-bars i:nth-child(3) { height: 14px; }
+.hk-bars i.on { background: #2E9E6A; }
+.hk-refs { margin: 8px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.hk-refs a { color: var(--ink2); }
+@media (max-width: 760px) {
+  .hk-gal { aspect-ratio: 4 / 3; }
+}
+@media (prefers-reduced-motion: reduce) { .hk-gal-skel { animation: none; } .hk-ico img { transition: none; } }

@@ -11,6 +11,8 @@
   trail  เส้นทางเดินป่า (route=hiking/foot และทางเดินที่ชื่อเป็นเส้นทางศึกษาธรรมชาติ/เดินป่า)
 ระบุจังหวัดจาก data/th-regions.js · ตัดจุดนอกประเทศไทยทิ้ง
 
+เติมรูปตัวอย่าง (ชื่อไฟล์ Wikimedia Commons) จากแท็ก OSM, วิกิสนเทศ P18 และรูปที่ถ่ายใกล้จุด (--no-photos เพื่อข้าม)
+
 เขียน
   OUT/outdoor.json    จุดทั้งหมด (ไฟล์เล็ก หน้าเว็บโหลดเมื่อเปิดชั้นข้อมูล)
   OUT/trails.geojson  เส้นทาง (หน้าเว็บโหลดเมื่อซูมเข้า)
@@ -31,7 +33,19 @@ from datetime import datetime, timedelta, timezone
 BKK = timezone(timedelta(hours=7))
 PARK_RE = re.compile(r'อุทยาน|วนอุทยาน|เขตรักษาพันธุ์|เขตห้ามล่า|สวนพฤกษศาสตร์|National Park|Forest Park|Wildlife Sanctuary|Non-Hunting', re.I)
 TRAIL_NAME_RE = re.compile(r'เส้นทางศึกษาธรรมชาติ|เส้นทางเดินป่า|เส้นทางเดินศึกษา|nature trail|hiking trail|trail', re.I)
-KEEP_TAGS = ('website', 'url', 'contact:website', 'opening_hours', 'fee', 'access', 'operator', 'wikidata', 'wikipedia', 'description', 'phone')
+KEEP_TAGS = ('website', 'url', 'contact:website', 'opening_hours', 'fee', 'access', 'operator', 'wikidata', 'wikipedia', 'description', 'phone', 'wikimedia_commons', 'image')
+UA = 'ChatGeo-outdoor/1.0 (+https://choonahakarn.github.io/chatgeo/; https://github.com/Choonahakarn/chatgeo)'
+WM = 'https://commons.wikimedia.org/w/api.php?format=json&'
+IMG_EXT = re.compile(r'\.(jpe?g|png|webp)$', re.I)
+# ตัดรูปที่ไม่ใช่ภาพสถานที่: ชื่อวิทยาศาสตร์ของสัตว์/พืช (Aethopyga nipalensis ...), ภาพจากอวกาศ, แผนที่ โลโก้
+BINOMIAL = re.compile(r'^File:(?!(Doi|Phu|Khao|Nam|Namtok|Wat|Pha|Huai|Mae|Ban|Ko|Koh|Tham|Kew|Kio|Mon|Pang|Sop|Chiang|Phra|Lan|Ang|Kaeng|Thung|Laem|Hat|Ao|View|Summit|Sunset|Sunrise|Mount|Mountain|Lake|The|Top|Forest|Waterfall|Camp|Road|Trail|River|Cave|Temple|Nature|Scenic|Morning|Evening|Sea|Fog|Mist|Cloud|Clouds)\b)[A-Z][a-z]+ (?!(view|views|from|and|the|trail|falls?|waterfall|park|forest|top|peak|summit|camp|area|road|point|national|mountains?|river|lake|cave|temple|sunset|sunrise|landscape|scenery|sea|fog|mist|clouds?)\b)[a-z]{3,}( [a-z]+)?\b')
+BINOMIAL2 = re.compile(r'^File:[A-Z][a-z]{4,}-[a-z]{4,}-')
+NOT_PLACE = re.compile(r'^File:ISS\d|from space|of earth|astronaut|satellite image|sentinel-?2|landsat|\bmap\b|logo|flag|seal|diagram|chart|locator', re.I)
+SCENE = re.compile(r'view|vista|sunset|sunrise|summit|peak|mountain|doi|phu|khao|falls?|waterfall|nam ?tok|national park|trail|camp|lake|cliff|forest|valley|ดอย|ภู|เขา|น้ำตก|อุทยาน|ผา|จุดชมวิว', re.I)
+ROMAN = {'khao', 'doi', 'phu', 'haad', 'hat', 'tham', 'wang', 'huai', 'mae', 'nong', 'ban', 'koh', 'ko', 'pak', 'nam', 'pha', 'wat'}
+SHORTNAME = {'namtok', 'thung', 'kaeng', 'chiang', 'phang', 'nakhon', 'ratchasima', 'province', 'district', 'daeng', 'yai', 'noi', 'luang', 'thong'}
+GENERIC = re.compile(r'^(the|of|and|to|thailand|chiang|province|district|village|temple|river|road|waterfalls?|national|park|forest|nature|trail|view(point)?|point|mountain|peak|summit|camp(ing|site)?|ground|wildlife|sanctuary|reserve|island)$', re.I)
+TH_PREFIX = re.compile(r'^(อุทยานแห่งชาติ|วนอุทยาน|น้ำตก|จุดชมวิว|ลานกางเต็นท์|เส้นทางศึกษาธรรมชาติ|เส้นทางเดินป่า)')
 
 
 def num(s):
@@ -128,7 +142,122 @@ def extra_tags(tags):
     return out
 
 
-def run(pbf, th_path, out_dir, bbox=None):
+def wm_json(url, tries=3):
+    """ขอ JSON จากวิกิมีเดียแบบสุภาพ (ใส่ User-Agent, รอเมื่อโดนจำกัด)"""
+    import urllib.error
+    import urllib.request
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': UA})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503) or e.code >= 500:
+                time.sleep(5 * (i + 1))
+                continue
+            return None
+        except Exception:  # noqa: BLE001
+            time.sleep(3 * (i + 1))
+    return None
+
+
+def file_name(v):
+    """ชื่อไฟล์ Commons จากแท็ก wikimedia_commons / image ของ OSM (ไม่รับรูปจากเว็บอื่น เพราะไม่รู้สัญญาอนุญาต)"""
+    from urllib.parse import unquote
+    v = (v or '').strip()
+    m = re.search(r'(?:commons\.wikimedia\.org/wiki/|^)File:([^?#|;]+)', v)
+    if m:
+        return unquote(m.group(1)).replace('_', ' ').strip()
+    m = re.search(r'upload\.wikimedia\.org/wikipedia/commons/(?:thumb/)?[0-9a-f]/[0-9a-f]{2}/([^/?#]+)', v)
+    if m:
+        return unquote(m.group(1)).replace('_', ' ').strip()
+    return None
+
+
+def norm(t):
+    return re.sub(r'\s+', ' ', re.sub(r'[-_.,()]+', ' ', re.sub(r'^file:', '', str(t or '').lower()))).strip()
+
+
+def pick_near(rec, titles):
+    """เลือกรูปที่ถ่ายใกล้จุด: ชื่อไฟล์ตรงกับชื่อสถานที่ก่อน (named) แล้วค่อยรูปทิวทัศน์ (near) แบบเดียวกับหน้าเว็บ"""
+    titles = [t for t in titles if IMG_EXT.search(t) and not BINOMIAL.search(t) and not BINOMIAL2.search(t) and not NOT_PLACE.search(t)]
+    phrases, words = [], []
+    for nm in [rec.get('en')] + ([rec['n']] if re.search(r'[A-Za-z]', rec.get('n') or '') else []):
+        if not nm:
+            continue
+        ws = [w for w in norm(nm).split(' ') if w and not GENERIC.match(w)]
+        if len(ws) >= 2 and len(' '.join(ws)) >= 6:
+            phrases.append(' '.join(ws))
+        words += [w for w in ws if len(w) >= 5 and w not in SHORTNAME and w not in ROMAN]
+    th = TH_PREFIX.sub('', rec.get('n') or '').strip()
+    if re.search(r'[\u0E00-\u0E7F]', th) and len(th) >= 3:
+        phrases.append(th)
+    for t in titles:
+        n = norm(t)
+        if any(x in n for x in phrases) or any((' ' + x) in (' ' + n + ' ') for x in words):
+            return t, False
+    for t in titles:
+        if SCENE.search(t):
+            return t, True
+    return None, False
+
+
+def add_photos(items, budget=1500):
+    """เติมรูปตัวอย่างให้แต่ละจุด (เก็บแค่ชื่อไฟล์ Commons หน้าเว็บโหลดรูปจากวิกิมีเดียเอง)
+    1) แท็ก wikimedia_commons / image ใน OSM  2) รูปหลัก P18 ในวิกิสนเทศ  3) รูปที่ถ่ายใกล้จุดบน Commons
+    img = ชื่อไฟล์ · imgn = 1 ถ้าเป็นรูปบริเวณใกล้เคียง (ไม่ได้ระบุชื่อสถานที่) · cat = หมวดรูปจาก OSM"""
+    t0, n_tag, n_wd, n_geo, calls = time.time(), 0, 0, 0, 0
+    for r in items:
+        x = r.get('x') or {}
+        wc, im = x.pop('wikimedia_commons', None), x.pop('image', None)
+        if not x and 'x' in r:
+            del r['x']
+        if wc and wc.startswith('Category:'):
+            r['cat'] = wc[9:].strip()[:120]
+        f = file_name(wc) or file_name(im)
+        if f and IMG_EXT.search(f):
+            r['img'] = f
+            n_tag += 1
+    qs = sorted({(r.get('x') or {}).get('wikidata') for r in items if not r.get('img') and re.match(r'^Q\d+$', (r.get('x') or {}).get('wikidata') or '')})
+    p18 = {}
+    for i in range(0, len(qs), 50):
+        j = wm_json('https://www.wikidata.org/w/api.php?action=wbgetentities&props=claims&format=json&ids=' + '|'.join(qs[i:i + 50]))
+        calls += 1
+        for q, e in ((j or {}).get('entities') or {}).items():
+            c = ((e.get('claims') or {}).get('P18') or [{}])[0].get('mainsnak', {}).get('datavalue', {}).get('value')
+            if c:
+                p18[q] = c
+        time.sleep(0.2)
+    for r in items:
+        q = (r.get('x') or {}).get('wikidata')
+        if not r.get('img') and q in p18:
+            r['img'] = p18[q]
+            n_wd += 1
+    # รูปใกล้จุด: เรียงจุดสำคัญก่อน เผื่อหมดเวลา
+    pri = {'park': 0, 'peak': 1, 'fall': 2, 'view': 3, 'trail': 4, 'camp': 5}
+    todo = sorted([r for r in items if not r.get('img') and r['k'] in pri and (r.get('n') or r.get('en'))],
+                  key=lambda r: (pri[r['k']], -(r.get('ele') or 0), -(r.get('km2') or 0)))
+    left = 0
+    for idx, r in enumerate(todo):
+        if time.time() - t0 > budget:
+            left = len(todo) - idx
+            break
+        rad = 4000 if r['k'] == 'park' else 2000 if r['k'] == 'trail' else 1200
+        j = wm_json(WM + 'action=query&list=geosearch&gsnamespace=6&gslimit=25&gsradius=%d&gscoord=%s|%s' % (rad, r['lat'], r['lon']))
+        calls += 1
+        hits = [g.get('title') or '' for g in ((j or {}).get('query') or {}).get('geosearch') or []]
+        t, near = pick_near(r, hits)
+        if t:
+            r['img'] = t[5:] if t.startswith('File:') else t
+            if near:
+                r['imgn'] = 1
+            n_geo += 1
+        time.sleep(0.1)
+    print('รูปตัวอย่าง: แท็ก OSM %d · วิกิสนเทศ %d · ถ่ายใกล้จุด %d · รวม %d จาก %d จุด · เรียก API %d ครั้ง · %.0f วินาที%s' % (
+        n_tag, n_wd, n_geo, n_tag + n_wd + n_geo, len(items), calls, time.time() - t0, (' · หมดเวลา เหลือ %d จุดไว้รอบหน้า' % left) if left else ''), flush=True)
+
+
+def run(pbf, th_path, out_dir, bbox=None, photos=True, photo_budget=1500):
     import osmium
     from shapely import wkb
     from shapely.geometry import LineString, MultiLineString
@@ -265,6 +394,15 @@ def run(pbf, th_path, out_dir, bbox=None):
         out.append({k: p[k] for k in ('id', 'k', 'n', 'en', 'lat', 'lon', 'p', 'km', 'sac') if k in p})
     counts['trail'] = len(feats)
 
+    if photos:
+        try:
+            add_photos(out, photo_budget)
+        except Exception as e:  # noqa: BLE001  รูปเป็นของเสริม พังก็ยังเขียนข้อมูลหลักได้
+            print('เติมรูปไม่สำเร็จ: %s' % e, flush=True)
+    else:
+        for r in out:
+            for k in ('wikimedia_commons', 'image'):
+                (r.get('x') or {}).pop(k, None)
     order = {'park': 0, 'peak': 1, 'trail': 2, 'fall': 3, 'view': 4, 'camp': 5, 'head': 6}
     out.sort(key=lambda r: (order.get(r['k'], 9), -(r.get('ele') or 0), -(r.get('km2') or 0), r['n']))
     stamp = datetime.now(BKK).strftime('%Y-%m-%dT%H:%M')
@@ -284,10 +422,12 @@ def main():
     ap.add_argument('--pbf', required=True, help='ไฟล์ OSM (.osm.pbf หรือ .osm)')
     ap.add_argument('--th', default='data/th-regions.js')
     ap.add_argument('--out', required=True)
+    ap.add_argument('--no-photos', action='store_true', help='ไม่ต้องเติมรูปตัวอย่างจากวิกิมีเดีย')
+    ap.add_argument('--photo-budget', type=int, default=1500, help='เวลาสูงสุด (วินาที) สำหรับหารูปใกล้จุด')
     a = ap.parse_args()
     if not os.path.exists(a.pbf):
         sys.exit('ไม่พบไฟล์ ' + a.pbf)
-    run(a.pbf, a.th, a.out, bbox=(97.0, 5.3, 106.0, 20.7))
+    run(a.pbf, a.th, a.out, bbox=(97.0, 5.3, 106.0, 20.7), photos=not a.no_photos, photo_budget=a.photo_budget)
 
 
 if __name__ == '__main__':
