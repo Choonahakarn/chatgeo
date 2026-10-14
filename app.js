@@ -112,7 +112,9 @@
   }
   function baseStyle(theme) {
     if (usingFallback) return fallbackStyle(theme);
-    return baseStyleFor(baseById(opsBaseId() || BASE.id), theme);
+    var id = opsBaseId() || BASE.id;
+    if (id === 'auto' && state.globe && !styleOverride) return OFM + 'liberty'; // ดูเป็นลูกโลก: ใช้สีสว่างแบบ GeoLibre (ทะเลฟ้า แผ่นดินสีพาสเทล)
+    return baseStyleFor(baseById(id), theme);
   }
   // Hybrid: ภาพดาวเทียม + ถนนและชื่อสถานที่จากสไตล์ liberty (ตัดพื้น น้ำ อาคารออก)
   function ensureHybrid() {
@@ -454,6 +456,7 @@
       addOverlays(v);
       applyBasemapLabels(v);
       applyProjection(v);
+      spaceMain(v);
       refreshView(v);
       refreshLive(v);
     });
@@ -774,6 +777,8 @@
     var h = decodeURIComponent((location.hash || '').slice(1));
     if (h === 'ops') return { page: 'chat', place: state.place || HOME, ops: true };
     if (h === 'props') return { page: 'props', place: state.place || HOME };
+    var plm = /^planet=([a-z]+)$/.exec(h);
+    if (plm) return { page: 'chat', place: state.place || HOME, planet: plm[1] };
     var hm = /^hike(?:=([nwr]\d+))?$/.exec(h);
     if (hm) return { page: 'hike', place: state.place || HOME, hk: hm[1] || '' };
     var cm = /^cctv(?:=([\w:-]+))?$/.exec(h);
@@ -832,6 +837,7 @@
     if (r.page !== state.page) setPage(r.page, { fromHash: true });
     if (r.site && !IN_ARTIFACT) openSite(r.site.lon, r.site.lat, { tab: r.tab });
     if (r.ops) enterOps();
+    if (r.planet) { if (!PL.open || PL.id !== r.planet) openPlanet(r.planet, true); } else if (PL.open) closePlanet(true);
     if (r.page === 'hike' && state.page === 'hike') { if (r.hk && r.hk !== HK.sel) hkOpen(r.hk, true); else if (!r.hk && HK.sel) hkClose(); }
   }
   window.addEventListener('popstate', onRoute);
@@ -1085,7 +1091,7 @@
   });
   // คลิกในเมนูแล้วรายการถูกวาดใหม่ จึงกันไม่ให้คลิกนั้นไปปิดเมนู
   // ยกเว้นปุ่มที่ทำงานผ่านตัวดักระดับหน้า (เปิดหน้ากล้อง ดาวเทียมทั้งหมด ฯลฯ) ต้องให้คลิกผ่านขึ้นไปได้
-  var POP_PASS = '[data-cv-open],[data-cc-wall],[data-cc-cam],[data-cc-site],[data-sat-all],[data-site-open],[data-site-layer],[data-world-fly],[data-terrain3d]';
+  var POP_PASS = '[data-pl-go], [data-cv-open],[data-cc-wall],[data-cc-cam],[data-cc-site],[data-sat-all],[data-site-open],[data-site-layer],[data-world-fly],[data-terrain3d]';
   $('filterPop').addEventListener('click', function (e) { if (!e.target.closest(POP_PASS)) e.stopPropagation(); });
   if ($('filterClose')) $('filterClose').addEventListener('click', function () { setFilterOpen(false); $('btnFilter').focus(); });
   document.addEventListener('click', function (e) {
@@ -1378,6 +1384,7 @@
     if (m.key === 'near') return nearAnswer(m);
     if (m.key === 'site') return siteAnswer(m);
     if (m.key === 'hk') return hkAnswer(m);
+    if (m.key === 'pl') return plAnswer(m);
     if (m.key === 'pp') return { title: 'ค้นทรัพย์ · ตรวจทำเลทีละหลายแปลง', text: (PP.list.length ? 'ในรายการของคุณมี ' + PP.list.length + ' ทรัพย์ ตรวจทำเลแล้ว ' + PP.list.filter(function (p) { return p.chk; }).length + ' รายการ ' : '') +
       'วางรายการทรัพย์ที่สนใจ (พิกัดหรือลิงก์ Google Maps ราคา ขนาด วันขาย) หรือไฟล์ CSV ที่หน้า "ทรัพย์" ระบบจะตรวจความเสี่ยงน้ำท่วมทีละแปลง แล้วกรองและเรียงตามราคา ราคาต่อตารางวา หรือความเสี่ยงได้ ' +
       'ChatGeo ไม่ได้เก็บประกาศขายทอดตลาดเอง ค้นทรัพย์ได้ที่เว็บกรมบังคับคดีแล้วคัดลอกพิกัดมาวาง',
@@ -1734,6 +1741,12 @@
     if (!IN_ARTIFACT && PP_RE.test(text) && !parseCoords(text)) {
       if (state.page !== 'chat') setPage('chat');
       state.messages.push({ role: 'user', text: text }, { role: 'bot', key: 'pp' });
+      renderMsgs();
+      return;
+    }
+    if (!IN_ARTIFACT && PL_RE.test(text) && !parseCoords(text) && !/ท่วม|ข่าว|ฝน|น้ำขึ้น|จันทรุปราคา|สุริยุปราคา/.test(text)) {
+      if (state.page !== 'chat') setPage('chat');
+      state.messages.push({ role: 'user', text: text }, { role: 'bot', key: 'pl', q: text });
       renderMsgs();
       return;
     }
@@ -2248,7 +2261,10 @@
           '<span class="base-th base-' + b.id + '" aria-hidden="true">' + (th ? '<img alt="" src="' + th + '">' : '') + '</span>' +
           '<span class="base-t">' + esc(b.t) + '</span><small>' + esc(b.sub) + '</small></button>';
       }).join('') + '</div></div>';
-    }).join('');
+    }).join('') + '<div class="base-g"><div class="base-gh">ดาวดวงอื่น · เปิดเป็นลูกโลก</div><div class="base-grid">' + PLANETS.map(function (p) {
+      return '<button type="button" class="base-opt" data-pl-go="' + p.id + '" title="' + esc(p.th + ' · ' + p.en + ' (เปิดเป็นลูกโลก)') + '"><span class="base-th base-pl" aria-hidden="true"><i class="pl-dot" ' + plDot(p) + '></i></span>' +
+        '<span class="base-t">' + esc(p.th) + '</span><small>' + esc(p.en) + '</small></button>';
+    }).join('') + '</div></div>';
   }
   if ($('baseChips')) $('baseChips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-base]');
@@ -2270,8 +2286,10 @@
     state.globe = !state.globe;
     $('btnGlobe').setAttribute('aria-pressed', String(state.globe));
     $('globeText').textContent = state.globe ? 'แผนที่แบน' : 'ลูกโลก';
-    eachView(applyProjection);
+    if (BASE.id === 'auto' && !(OPS && OPS.on) && !usingFallback && !styleOverride) reloadBase(); // ลูกโลกกับแผนที่แบนใช้สีแผนที่คนละแบบ
+    else eachView(applyProjection);
     eachView(function (x) { if (x.kind === 'chat' && x.map.getSource('cg-water')) updateSats(x); });
+    if (views.chat) spaceMain(views.chat);
     var v = views[state.page];
     if (v && state.place === 'world') flyToPlace(v, byId.world);
   });
@@ -7561,6 +7579,7 @@
   function opsWorldView(v) { return { center: [100.5, 14], zoom: v.el.clientWidth < 700 ? 1.15 : 2.1 }; }
   function enterOps() {
     if (OPS.on || IN_ARTIFACT) return;
+    if (PL.open) closePlanet();
     if (state.page !== 'chat') setPage('chat');
     OPS.on = true;
     OPS.baseFail = false;
@@ -8957,6 +8976,332 @@
     if (id) hkOpen(id);
   });
 
+  /* ---------- อวกาศรอบลูกโลก (แรงบันดาลใจ GeoLibre แต่เขียนเอง): พื้นอวกาศ ดาวระยิบเลื่อนตามมุมมอง ดาวหาง แสงเรืองรอบขอบโลก ---------- */
+  // วาดบนผืนผ้าใบ 2 มิติที่อยู่ "หลัง" แผนที่ (นอกลูกโลกแผนที่โปร่งใส) หาขอบลูกโลกบนจอจากเมทริกซ์ฉายของ MapLibre ทุกเฟรม
+  var SPACE_BG = '#0C1526', SPACE_BG2 = 'rgba(24,42,72,0.85)';
+  // สีแสงเรือง [r, g, b, ความแรง] โลกวัดจากภาพจริง: ขอบ #96B1DE แล้วจางจนกลืนกับอวกาศที่ราว 1.3 เท่าของรัศมี
+  var SPACE_HALO = { earth: [150, 178, 222, 1], mars: [232, 150, 112, 0.42], venus: [240, 204, 140, 0.6], titan: [232, 174, 96, 0.66] };
+  var HALO_STOPS = [[0.9, 1], [1, 0.95], [1.028, 0.55], [1.07, 0.36], [1.13, 0.2], [1.22, 0.1], [1.3, 0.04], [1.36, 0]];
+  function spaceStarTile(n, rMin, rMax, aMin, aMax, seed) {
+    var c = document.createElement('canvas'); c.width = c.height = 512;
+    var g = c.getContext('2d'), s = seed;
+    function rnd() { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }
+    for (var i = 0; i < n; i++) {
+      var x = rnd() * 512, y = rnd() * 512, r = rMin + Math.pow(rnd(), 2.4) * (rMax - rMin), a = aMin + rnd() * (aMax - aMin), tint = rnd();
+      var col = tint < 0.12 ? '255,228,204' : tint < 0.34 ? '204,218,255' : '255,255,255';
+      for (var ox = -512; ox <= 512; ox += 512) for (var oy = -512; oy <= 512; oy += 512) {
+        var px = x + ox, py = y + oy;
+        if (px < -8 || py < -8 || px > 520 || py > 520) continue;
+        if (r > 1.15) { var gr = g.createRadialGradient(px, py, 0, px, py, r * 3.2); gr.addColorStop(0, 'rgba(' + col + ',' + (a * 0.45) + ')'); gr.addColorStop(1, 'rgba(' + col + ',0)'); g.fillStyle = gr; g.beginPath(); g.arc(px, py, r * 3.2, 0, 7); g.fill(); }
+        g.fillStyle = 'rgba(' + col + ',' + a + ')'; g.beginPath(); g.arc(px, py, r, 0, 7); g.fill();
+      }
+    }
+    return c;
+  }
+  function v3cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+  function v3norm(a) { var l = Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
+  function spaceFx(map, host) {
+    var fx = { map: map, body: 'earth', on: false, M: null, tr: 1, comets: [], nextComet: 0, last: 0, raf: 0, full: false };
+    var cv = fx.cv = document.createElement('canvas');
+    cv.className = 'cg-space'; cv.setAttribute('aria-hidden', 'true'); cv.hidden = true;
+    host.parentNode.insertBefore(cv, host); // อยู่หลังแผนที่ แผนที่วาดทับ
+    var g = fx.ctx = cv.getContext('2d');
+    var pFar = g.createPattern(spaceStarTile(240, 0.35, 1.05, 0.22, 0.78, 7), 'repeat'), pNear = g.createPattern(spaceStarTile(42, 0.8, 1.9, 0.55, 1, 911), 'repeat');
+    // ชั้นเปล่าในแผนที่ ไว้รับเมทริกซ์ฉายของเฟรมล่าสุด (ไม่วาดอะไร)
+    fx.probe = { id: 'cg-space-probe', type: 'custom', renderingMode: '3d', onAdd: function () {},
+      render: function (gl, args) { var pd = args && args.defaultProjectionData; fx.M = pd && pd.mainMatrix ? Array.prototype.slice.call(pd.mainMatrix) : null; fx.tr = pd && pd.projectionTransition != null ? pd.projectionTransition : 1; } };
+    fx.attach = function () { if (map.getStyle() && !map.getLayer('cg-space-probe')) { try { map.addLayer(fx.probe); } catch (e) { /* สไตล์ยังโหลดไม่เสร็จ */ } } };
+    // ขอบลูกโลกบนจอ: วงกลมที่เส้นจากกล้องสัมผัสผิวทรงกลม (ทรงกลมรัศมี 1) ฉายลงจอแล้วได้วงรี
+    function limb(W, H) {
+      var M = fx.M;
+      if (!M || fx.tr < 0.98) return null;
+      var c = shellCam(M), d2 = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+      if (d2 <= 1.0005) return null;
+      var d = Math.sqrt(d2), n = [c[0] / d, c[1] / d, c[2] / d], q = 1 / d, rho = Math.sqrt(1 - 1 / d2);
+      var u = v3norm(v3cross(Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], n)), w = v3cross(n, u), pts = [], sx = 0, sy = 0, k;
+      for (k = 0; k < 40; k++) {
+        var t = k / 40 * 2 * Math.PI, ct = Math.cos(t), st = Math.sin(t);
+        var x = n[0] * q + rho * (ct * u[0] + st * w[0]), y = n[1] * q + rho * (ct * u[1] + st * w[1]), z = n[2] * q + rho * (ct * u[2] + st * w[2]);
+        var cx = M[0] * x + M[4] * y + M[8] * z + M[12], cy = M[1] * x + M[5] * y + M[9] * z + M[13], cw = M[3] * x + M[7] * y + M[11] * z + M[15];
+        if (cw <= 0) return null;
+        var px = (cx / cw + 1) / 2 * W, py = (1 - cy / cw) / 2 * H;
+        pts.push(px, py); sx += px; sy += py;
+      }
+      var mx = sx / 40, my = sy / 40, rx = 0, ry = 0;
+      for (k = 0; k < pts.length; k += 2) { rx = Math.max(rx, Math.abs(pts[k] - mx)); ry = Math.max(ry, Math.abs(pts[k + 1] - my)); }
+      return rx > 2 && ry > 2 ? { x: mx, y: my, rx: rx, ry: ry } : null;
+    }
+    function covers(L, W, H) {
+      if (!L) return false;
+      return [[0, 0], [W, 0], [0, H], [W, H]].every(function (p) { var a = (p[0] - L.x) / L.rx, b = (p[1] - L.y) / L.ry; return a * a + b * b < 0.97; });
+    }
+    function stars(p, ox, oy, a, W, H) {
+      ox = ((ox % 512) + 512) % 512; oy = ((oy % 512) + 512) % 512;
+      g.save(); g.globalAlpha = a; g.translate(ox - 512, oy - 512); g.fillStyle = p; g.fillRect(0, 0, W + 1024, H + 1024); g.restore();
+    }
+    function comets(now, W, H) {
+      if (!fx.nextComet) fx.nextComet = now + 2200 + Math.random() * 4000;
+      if (now > fx.nextComet && fx.comets.length < 2) {
+        var right = Math.random() < 0.5, ang = (right ? 0.32 : Math.PI - 0.32) + (Math.random() - 0.5) * 0.5;
+        fx.comets.push({ x: right ? Math.random() * W * 0.55 : W * 0.45 + Math.random() * W * 0.55, y: Math.random() * H * 0.4, dx: Math.cos(ang), dy: Math.sin(ang),
+          sp: 360 + Math.random() * 340, len: 90 + Math.random() * 130, t0: now, dur: 1100 + Math.random() * 900 });
+        fx.nextComet = now + 6500 + Math.random() * 9000;
+      }
+      fx.comets = fx.comets.filter(function (k) { return now - k.t0 < k.dur; });
+      fx.comets.forEach(function (k) {
+        var t = (now - k.t0) / 1000, p = (now - k.t0) / k.dur, f = p < 0.15 ? p / 0.15 : p > 0.7 ? (1 - p) / 0.3 : 1;
+        var hx = k.x + k.dx * k.sp * t, hy = k.y + k.dy * k.sp * t, tx = hx - k.dx * k.len, ty = hy - k.dy * k.len;
+        var gr = g.createLinearGradient(hx, hy, tx, ty);
+        gr.addColorStop(0, 'rgba(255,255,255,' + (0.9 * f) + ')'); gr.addColorStop(0.25, 'rgba(196,214,255,' + (0.42 * f) + ')'); gr.addColorStop(1, 'rgba(160,190,255,0)');
+        g.strokeStyle = gr; g.lineWidth = 1.6; g.lineCap = 'round'; g.beginPath(); g.moveTo(hx, hy); g.lineTo(tx, ty); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,' + (0.95 * f) + ')'; g.beginPath(); g.arc(hx, hy, 1.5, 0, 7); g.fill();
+      });
+    }
+    function halo(L, h) {
+      var R = L.rx, outer = R * 1.36;
+      g.save(); g.translate(L.x, L.y); g.scale(1, L.ry / L.rx); g.globalCompositeOperation = 'screen';
+      var gr = g.createRadialGradient(0, 0, 0, 0, 0, outer), rgb = h[0] + ',' + h[1] + ',' + h[2];
+      gr.addColorStop(0, 'rgba(' + rgb + ',' + h[3] + ')');
+      HALO_STOPS.forEach(function (s) { gr.addColorStop(Math.min(1, s[0] / 1.36), 'rgba(' + rgb + ',' + (s[1] * h[3]).toFixed(3) + ')'); });
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, outer, 0, 7); g.fill(); g.restore();
+    }
+    fx.draw = function (now) {
+      if (!fx.on) return;
+      now = now || performance.now();
+      fx.last = now;
+      var W = cv.clientWidth, H = cv.clientHeight;
+      if (!W || !H) return;
+      if (!fx.raf && !reduceMotion && !document.hidden) fx.raf = requestAnimationFrame(loop);
+      var dpr = Math.min(2, window.devicePixelRatio || 1), bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+      if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+      var L = limb(W, H);
+      fx.L = L;
+      fx.full = covers(L, W, H) || (!L && map.getZoom() > 6);
+      if (fx.full) return; // ลูกโลกเต็มจอ มองไม่เห็นอวกาศ ไม่ต้องวาด
+      g.setTransform(dpr, 0, 0, dpr, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+      g.fillStyle = SPACE_BG; g.fillRect(0, 0, W, H);
+      if (L) { var R = Math.max(L.rx, L.ry), vg = g.createRadialGradient(L.x, L.y, R * 0.95, L.x, L.y, R * 0.95 + Math.max(W, H) * 0.9); vg.addColorStop(0, SPACE_BG2); vg.addColorStop(1, 'rgba(12,21,38,0)'); g.fillStyle = vg; g.fillRect(0, 0, W, H); }
+      var c = map.getCenter();
+      stars(pFar, -c.lng * 0.8, c.lat * 0.8, 1, W, H);
+      stars(pNear, -c.lng * 1.7, c.lat * 1.7, reduceMotion ? 1 : 0.8 + 0.2 * Math.sin(now / 850), W, H);
+      if (!reduceMotion) comets(now, W, H);
+      var h = SPACE_HALO[fx.body];
+      if (L && h) halo(L, h);
+    };
+    function loop(now) {
+      fx.raf = 0;
+      if (!fx.on || document.hidden || !cv.clientWidth) return; // ซ่อนอยู่ (หน้าอื่น) หยุดไว้ก่อน แผนที่วาดใหม่เมื่อไหร่ค่อยเริ่มต่อ
+      if (!fx.full && now - fx.last > 40) fx.draw(now);
+      fx.raf = requestAnimationFrame(loop);
+    }
+    fx.set = function (on, body) {
+      if (body) fx.body = body;
+      on = !!on;
+      if (on !== fx.on) { fx.on = on; cv.hidden = !on; }
+      if (on) {
+        fx.attach(); map.triggerRepaint(); fx.draw();
+        if (!reduceMotion && !fx.raf) fx.raf = requestAnimationFrame(loop);
+      } else if (fx.raf) { cancelAnimationFrame(fx.raf); fx.raf = 0; }
+    };
+    map.on('render', function () { if (fx.on) fx.draw(); });
+    document.addEventListener('visibilitychange', function () { if (fx.on && !document.hidden && !reduceMotion && !fx.raf) fx.raf = requestAnimationFrame(loop); });
+    return fx;
+  }
+  var SPACE = { main: null };
+  window.cgSpace = function () { return { main: SPACE.main && { on: SPACE.main.on, L: SPACE.main.L, full: SPACE.main.full, hidden: SPACE.main.cv.hidden, body: SPACE.main.body }, pl: { open: PL.open, id: PL.id, fx: PL.fx && { on: PL.fx.on, L: PL.fx.L, body: PL.fx.body } } }; };
+  function spaceMain(v) {
+    if (!v || v.kind !== 'chat' || IN_ARTIFACT) return;
+    if (!SPACE.main) SPACE.main = spaceFx(v.map, v.el);
+    SPACE.main.set(!!state.globe, 'earth');
+  }
+
+  /* ---------- ดาวดวงอื่นแบบลูกโลก: ดวงจันทร์ ดาวอังคาร (OpenPlanetaryMap) และดาวอื่นจาก USGS Astrogeology ---------- */
+  var OPM_T = 'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/';
+  var OPM_ATTR = 'แผนที่: <a href="https://www.openplanetary.org/opm" target="_blank" rel="noopener">OpenPlanetaryMap</a> · ข้อมูล NASA/USGS';
+  var USGS_ATTR = 'ภาพ: <a href="https://astrogeology.usgs.gov/" target="_blank" rel="noopener">USGS Astrogeology</a> · NASA/JPL';
+  // r = รัศมี (กม.) · g = แรงโน้มถ่วงเทียบโลก · dot = สีวาดดวงเล็ก (สว่าง กลาง เงา)
+  var PLANETS = [
+    { id: 'moon', th: 'ดวงจันทร์', en: 'Moon', kind: 'ดาวบริวารของโลก', r: 1737.4, g: 0.165, day: '27.3 วัน', yr: 'รอบโลก 27.3 วัน', tiles: [OPM_T + 'opm-moon-basemap-v0-1/all/{z}/{x}/{y}.png'], max: 6, attr: OPM_ATTR,
+      fact: 'หันด้านเดียวเข้าหาโลกเสมอ ห่างโลกเฉลี่ย 384,400 กม. มีมนุษย์เคยไปเดินบนดวงจันทร์ 12 คน (โครงการอะพอลโล)', dot: ['#ECECE6', '#A8A8A2', '#464643'] },
+    { id: 'mercury', th: 'ดาวพุธ', en: 'Mercury', kind: 'ดาวเคราะห์', r: 2439.7, g: 0.38, day: '58.6 วัน', yr: '88 วัน', usgs: 'mercury/mercury_simp_cyl/MESSENGER', src: 'MESSENGER',
+      fact: 'อยู่ใกล้ดวงอาทิตย์ที่สุด กลางวันร้อนราว 430°C แต่กลางคืนเย็นจัดถึงราว −180°C', dot: ['#DCD3C8', '#998E83', '#3B3530'] },
+    { id: 'venus', th: 'ดาวศุกร์', en: 'Venus', kind: 'ดาวเคราะห์', r: 6051.8, g: 0.9, day: '243 วัน (หมุนถอยหลัง)', yr: '225 วัน', usgs: 'venus/venus_simp_cyl/MAGELLAN_color', src: 'เรดาร์ยาน Magellan (ใส่สีส้มให้ดูง่าย)',
+      fact: 'ร้อนที่สุดในระบบสุริยะ ราว 465°C เมฆหนาจนมองไม่เห็นพื้น ภาพพื้นผิวจึงได้จากเรดาร์', dot: ['#FFDCA6', '#E09A3C', '#6B3A12'] },
+    { id: 'mars', th: 'ดาวอังคาร', en: 'Mars', kind: 'ดาวเคราะห์', r: 3389.5, g: 0.38, day: '24 ชม. 37 นาที', yr: '687 วัน', tiles: [OPM_T + 'opm-mars-basemap-v0-2/all/{z}/{x}/{y}.png'], max: 7, attr: OPM_ATTR,
+      fact: 'มีภูเขาไฟโอลิมปัสสูงราว 22 กม. สูงที่สุดในระบบสุริยะ และหุบเขามาริเนอริสยาวกว่า 4,000 กม.', dot: ['#F4A57C', '#C1532D', '#4D1B10'] },
+    { id: 'io', th: 'ไอโอ', en: 'Io', kind: 'ดวงจันทร์ของดาวพฤหัสบดี', r: 1821.6, g: 0.18, day: '1.8 วัน', yr: 'รอบดาวพฤหัสฯ 1.8 วัน', usgs: 'jupiter/io_simp_cyl/SSI_VGR_color', src: 'Galileo · Voyager',
+      fact: 'มีภูเขาไฟคุกรุ่นมากที่สุดในระบบสุริยะ กว่า 400 ลูก', dot: ['#FFF3A8', '#D9B545', '#6D5A1B'] },
+    { id: 'europa', th: 'ยูโรปา', en: 'Europa', kind: 'ดวงจันทร์ของดาวพฤหัสบดี', r: 1560.8, g: 0.13, day: '3.6 วัน', yr: 'รอบดาวพฤหัสฯ 3.6 วัน', usgs: 'jupiter/europa_simp_cyl/GALILEO_VOYAGER', src: 'Galileo · Voyager',
+      fact: 'ผิวเป็นน้ำแข็ง ใต้ลงไปน่าจะมีมหาสมุทรน้ำเค็ม เป็นที่ที่นักวิทยาศาสตร์อยากไปหาสิ่งมีชีวิต', dot: ['#F5ECDC', '#C8B190', '#5E4E3A'] },
+    { id: 'ganymede', th: 'แกนีมีด', en: 'Ganymede', kind: 'ดวงจันทร์ของดาวพฤหัสบดี', r: 2634.1, g: 0.15, day: '7.2 วัน', yr: 'รอบดาวพฤหัสฯ 7.2 วัน', usgs: 'jupiter/ganymede_simp_cyl/GALILEO_VOYAGER', src: 'Galileo · Voyager',
+      fact: 'ดวงจันทร์ที่ใหญ่ที่สุดในระบบสุริยะ ใหญ่กว่าดาวพุธ และมีสนามแม่เหล็กของตัวเอง', dot: ['#DAD2C8', '#8F857A', '#3E3832'] },
+    { id: 'callisto', th: 'คัลลิสโต', en: 'Callisto', kind: 'ดวงจันทร์ของดาวพฤหัสบดี', r: 2410.3, g: 0.13, day: '16.7 วัน', yr: 'รอบดาวพฤหัสฯ 16.7 วัน', usgs: 'jupiter/callisto_simp_cyl/GALILEO_VOYAGER', src: 'Galileo · Voyager',
+      fact: 'ผิวเต็มไปด้วยหลุมอุกกาบาต เป็นพื้นผิวที่เก่าแก่ที่สุดแห่งหนึ่งในระบบสุริยะ', dot: ['#BAAD9A', '#6F6352', '#2D271F'] },
+    { id: 'titan', th: 'ไททัน', en: 'Titan', kind: 'ดวงจันทร์ของดาวเสาร์', r: 2574.7, g: 0.14, day: '15.9 วัน', yr: 'รอบดาวเสาร์ 15.9 วัน', usgs: 'saturn/titan_simp_cyl/CASSINI', src: 'Cassini',
+      fact: 'บรรยากาศหนากว่าโลก มีทะเลสาบมีเทนเหลว ยาน Huygens ลงจอดเมื่อปี 2005', dot: ['#F8D08A', '#D39A3F', '#6A4317'] },
+    { id: 'enceladus', th: 'เอนเซลาดัส', en: 'Enceladus', kind: 'ดวงจันทร์ของดาวเสาร์', r: 252.1, g: 0.012, day: '1.4 วัน', yr: 'รอบดาวเสาร์ 1.4 วัน', usgs: 'saturn/enceladus_simp_cyl/CASSINI', src: 'Cassini',
+      fact: 'พ่นไอน้ำและเกล็ดน้ำแข็งออกมาจากรอยแยกที่ขั้วใต้', dot: ['#FFFFFF', '#D8E6F0', '#7D90A0'] },
+    { id: 'pluto', th: 'ดาวพลูโต', en: 'Pluto', kind: 'ดาวเคราะห์แคระ', r: 1188.3, g: 0.063, day: '6.4 วัน', yr: '248 ปี', usgs: 'pluto/pluto_simp_cyl/NEWHORIZONS_PLUTO_MOSAIC', src: 'New Horizons',
+      fact: 'ยาน New Horizons บินผ่านเมื่อปี 2015 เห็นที่ราบน้ำแข็งรูปหัวใจ บางส่วนของแผนที่ยังว่าง เพราะยานถ่ายได้ไม่รอบดวง', dot: ['#F3DDC3', '#C49A74', '#5A3D2A'] },
+    { id: 'charon', th: 'แครอน', en: 'Charon', kind: 'ดวงจันทร์ของดาวพลูโต', r: 606, g: 0.029, day: '6.4 วัน', yr: 'รอบพลูโต 6.4 วัน', usgs: 'pluto/charon_simp_cyl/NEWHORIZONS_CHARON_MOSAIC', src: 'New Horizons',
+      fact: 'ใหญ่เกือบครึ่งหนึ่งของพลูโต ทั้งสองหันหน้าเข้าหากันตลอดเวลา', dot: ['#D8D3CE', '#8E8780', '#3B3733'] }
+  ];
+  PLANETS.forEach(function (p) {
+    if (p.usgs) { p.tiles = ['usgs://' + p.usgs + '/{z}/{x}/{y}']; p.max = 6; p.attr = USGS_ATTR + ' (' + p.src + ')'; }
+  });
+  var PL_BY = {}; PLANETS.forEach(function (p) { PL_BY[p.id] = p; });
+  function plDot(p) { return 'style="--a:' + p.dot[0] + ';--b:' + p.dot[1] + ';--c:' + p.dot[2] + '"'; }
+  // แผนที่ USGS เป็นแบบละติจูด-ลองจิจูดตรงๆ (EPSG:4326) แปลงเป็นแผ่นแผนที่เว็บเมอร์เคเตอร์ในเบราว์เซอร์ทีละแผ่น
+  function plMercLat(t) { return Math.atan(Math.sinh(Math.PI * (1 - 2 * t))) * 180 / Math.PI; }
+  function usgsTile(params, ac) {
+    var m = /^usgs:\/\/([^/]+)\/([^/]+)\/([^/]+)\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+    if (!m) return Promise.reject(new Error('bad usgs url'));
+    var z = +m[4], x = +m[5], y = +m[6], n = Math.pow(2, z), lonW = x / n * 360 - 180, lonE = (x + 1) / n * 360 - 180, latN = plMercLat(y / n), latS = plMercLat((y + 1) / n), H = z < 2 ? 512 : 256;
+    var url = 'https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/' + m[1] + '/' + m[2] + '.map&SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=' + m[3] +
+      '&STYLES=&SRS=EPSG:4326&BBOX=' + lonW.toFixed(6) + ',' + latS.toFixed(6) + ',' + lonE.toFixed(6) + ',' + latN.toFixed(6) + '&WIDTH=256&HEIGHT=' + H + '&FORMAT=image/jpeg';
+    return fetch(url, { signal: ac && ac.signal }).then(function (r) {
+      if (!r.ok || !/^image\//.test(r.headers.get('content-type') || '')) throw new Error('USGS ' + r.status);
+      return r.blob();
+    }).then(function (b) { return createImageBitmap(b); }).then(function (bmp) {
+      var c = document.createElement('canvas'); c.width = c.height = 256;
+      var g = c.getContext('2d');
+      for (var row = 0; row < 256; row++) {
+        var lat = plMercLat((y + (row + 0.5) / 256) / n), sy = (latN - lat) / (latN - latS) * H;
+        g.drawImage(bmp, 0, Math.max(0, Math.min(H - 1, sy - 0.5)), 256, 1, 0, row, 256, 1);
+      }
+      if (bmp.close) bmp.close();
+      return new Promise(function (res, rej) { c.toBlob(function (bl) { if (!bl) { rej(new Error('encode')); return; } bl.arrayBuffer().then(function (ab) { res({ data: ab }); }, rej); }, 'image/jpeg', 0.86); });
+    });
+  }
+  var PL = { map: null, fx: null, id: null, open: false, raf: 0, idleAt: 0, prevHash: '', wt: 60 };
+  try { var plw = +localStorage.getItem('cg-pl-wt'); if (plw > 0 && plw < 400) PL.wt = plw; } catch (e) { /* ข้าม */ }
+  function plStyle(p) {
+    return { version: 8, name: 'ChatGeo ' + p.id, projection: { type: 'globe' },
+      sources: { p: { type: 'raster', tiles: p.tiles, tileSize: 256, maxzoom: p.max, attribution: p.attr } },
+      layers: [{ id: 'bg', type: 'background', paint: { 'background-color': p.dot[2] } }, { id: 'p', type: 'raster', source: 'p', paint: { 'raster-fade-duration': 250 } }] }; // พื้นสีเงาของดาว ขั้วดาวที่แผนที่ไปไม่ถึงจะไม่เป็นรูดำ
+  }
+  function plFitZoom() { var el = $('planetMap'), w = el.clientWidth || 800, h = (el.clientHeight || 600) - (w < 640 ? 150 : 110); return Math.max(-0.6, Math.min(2.4, Math.log2(0.84 * Math.max(180, Math.min(w, h)) * Math.PI / 512))); }
+  function plCard(p) {
+    var kg = Math.round(PL.wt * p.g * 10) / 10;
+    return '<div class="pl-h"><i class="pl-dot" ' + plDot(p) + '></i><div><b>' + esc(p.th) + '</b><small>' + esc(p.en + ' · ' + p.kind) + '</small></div>' +
+      '<button type="button" class="pl-fold" data-pl-fold="1" aria-label="ย่อหรือขยายข้อมูลดาว">ข้อมูล</button></div>' +
+      '<div class="pl-body"><div class="pl-facts"><div><span>รัศมี</span><b>' + fmtN(Math.round(p.r)) + ' กม.</b><small>' + (p.r / 6371 < 0.1 ? (p.r / 6371 * 100).toFixed(1) : Math.round(p.r / 6371 * 100)) + '% ของโลก</small></div>' +
+      '<div><span>แรงโน้มถ่วง</span><b>' + (p.g < 0.1 ? p.g.toFixed(3) : p.g.toFixed(2)) + ' เท่าของโลก</b></div><div><span>หมุนรอบตัวเอง</span><b>' + esc(p.day) + '</b></div><div><span>โคจรครบรอบ</span><b>' + esc(p.yr) + '</b></div></div>' +
+      '<p class="pl-fact">' + esc(p.fact) + '</p>' +
+      '<label class="pl-wt">ถ้าคุณหนัก <input type="number" min="1" max="400" inputmode="decimal" value="' + PL.wt + '" data-pl-wt="1" aria-label="น้ำหนักบนโลก (กิโลกรัม)"> กก. บน' + esc(p.th) + 'จะชั่งได้ราว <b id="plKg">' + fmtN(kg) + '</b> กก.</label>' +
+      '<p class="pl-src">' + p.attr + ' · ขยายได้ราวซูม ' + p.max + '</p></div>';
+  }
+  function plChips() {
+    return '<button type="button" class="pl-chip" data-pl="earth" title="กลับไปดูโลก"><i class="pl-dot" style="--a:#BFE3FF;--b:#3B82F6;--c:#0B2D6B"></i>โลก</button>' +
+      PLANETS.map(function (p) { return '<button type="button" class="pl-chip" data-pl="' + p.id + '" aria-pressed="' + (PL.id === p.id) + '" title="' + esc(p.th + ' · ' + p.en) + '"><i class="pl-dot" ' + plDot(p) + '></i>' + esc(p.th) + '</button>'; }).join('');
+  }
+  function plScale() {
+    var el = $('plScale'), p = PL_BY[PL.id];
+    if (!el || !PL.map || !p) return;
+    var z = PL.map.getZoom(), lat = PL.map.getCenter().lat, mpp = 40075016.686 * Math.cos(lat * Math.PI / 180) / (512 * Math.pow(2, z)) * (p.r / 6378.137);
+    var maxM = mpp * 96, pow = Math.pow(10, Math.floor(Math.log10(maxM))), nice = [5, 2, 1].map(function (k) { return k * pow; }).filter(function (v) { return v <= maxM; })[0] || pow;
+    el.style.setProperty('--w', Math.round(nice / mpp) + 'px');
+    el.textContent = nice >= 1000 ? fmtN(nice / 1000) + ' กม.' : fmtN(nice) + ' ม.';
+  }
+  function plSpin(now) {
+    PL.raf = 0;
+    if (!PL.open || reduceMotion || !PL.map) return;
+    var m = PL.map, last = PL.spinAt || now; PL.spinAt = now;
+    if ($('plSpin').getAttribute('aria-pressed') === 'true' && now - PL.idleAt > 5000 && m.getZoom() < 3.4 && !m.isMoving() && !document.hidden) {
+      var c = m.getCenter(); m.setCenter([c.lng + Math.min(80, now - last) * 0.004, c.lat]);
+    }
+    PL.raf = requestAnimationFrame(plSpin);
+  }
+  function plEnsureMap(p) {
+    if (PL.map) return;
+    if (!PL.proto) { PL.proto = true; try { maplibregl.addProtocol('usgs', usgsTile); } catch (e) { /* มีแล้ว */ } }
+    var el = $('planetMap');
+    var map = PL.map = new maplibregl.Map({ container: el, style: plStyle(p), center: [0, 12], zoom: plFitZoom(), minZoom: -1, maxZoom: 9, dragRotate: false, pitchWithRotate: false, touchPitch: false,
+      attributionControl: { compact: true }, locale: UI_TH });
+    map.touchZoomRotate.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    PL.fx = spaceFx(map, el);
+    map.on('style.load', function () { PL.fx.attach(); PL.fx.set(PL.open, PL.id); plScale(); });
+    map.on('move', plScale);
+    ['mousedown', 'touchstart', 'wheel', 'dragstart'].forEach(function (ev) { map.on(ev, function () { PL.idleAt = performance.now(); }); });
+  }
+  function openPlanet(id, fromHash) {
+    var p = PL_BY[id];
+    if (!p) { if (id === 'earth') closePlanet(); return; }
+    if (IN_ARTIFACT || !window.maplibregl) { toast('ดูดาวดวงอื่นได้บนเว็บจริง (choonahakarn.github.io/chatgeo)'); return; }
+    if (state.page !== 'chat') setPage('chat');
+    if (OPS && OPS.on) exitOps();
+    var wasOpen = PL.open;
+    PL.open = true; PL.id = id;
+    $('planetView').hidden = false;
+    document.body.classList.add('cg-planet');
+    plEnsureMap(p);
+    if (wasOpen || PL.map.loaded()) { PL.map.setStyle(plStyle(p), { diff: false }); PL.map.jumpTo({ center: [0, 12], zoom: plFitZoom() }); }
+    PL.map.resize();
+    PL.fx.set(true, id);
+    $('plChips').innerHTML = plChips();
+    $('plCard').innerHTML = plCard(p);
+    $('plCard').classList.toggle('fold', window.innerWidth < 640);
+    var chip = $('plChips').querySelector('[aria-pressed="true"]'); if (chip && chip.scrollIntoView) chip.scrollIntoView({ block: 'nearest', inline: 'center' });
+    plScale();
+    PL.idleAt = performance.now() - 3000;
+    if (!PL.raf && !reduceMotion) PL.raf = requestAnimationFrame(plSpin);
+    if (SPACE.main) SPACE.main.set(false);
+    try { history[fromHash || wasOpen ? 'replaceState' : 'pushState'](null, '', location.pathname + location.search + '#planet=' + id); } catch (e) { /* ข้าม */ }
+  }
+  function closePlanet(fromHash) {
+    if (!PL.open) return;
+    PL.open = false;
+    $('planetView').hidden = true;
+    document.body.classList.remove('cg-planet');
+    if (PL.fx) PL.fx.set(false);
+    if (PL.raf) { cancelAnimationFrame(PL.raf); PL.raf = 0; }
+    if (views.chat) spaceMain(views.chat);
+    if (!fromHash) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ข้าม */ } }
+  }
+  if ($('planetView')) {
+    $('planetView').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-pl],[data-pl-back],[data-pl-fold],#plSpin');
+      if (!t) return;
+      if (t.id === 'plSpin') { var on = t.getAttribute('aria-pressed') !== 'true'; t.setAttribute('aria-pressed', String(on)); PL.idleAt = 0; return; }
+      if (t.hasAttribute('data-pl-back')) { closePlanet(); return; }
+      if (t.hasAttribute('data-pl-fold')) { $('plCard').classList.toggle('fold'); return; }
+      var id = t.getAttribute('data-pl');
+      if (id === 'earth') closePlanet(); else if (id !== PL.id) openPlanet(id);
+    });
+    $('planetView').addEventListener('input', function (e) {
+      if (!e.target.hasAttribute('data-pl-wt')) return;
+      var w = parseFloat(e.target.value), p = PL_BY[PL.id];
+      if (!(w > 0 && w < 1000) || !p) return;
+      PL.wt = w; try { localStorage.setItem('cg-pl-wt', String(w)); } catch (x) { /* ข้าม */ }
+      if ($('plKg')) $('plKg').textContent = fmtN(Math.round(w * p.g * 10) / 10);
+    });
+    window.addEventListener('resize', function () { if (PL.open && PL.map) { PL.map.resize(); plScale(); } });
+  }
+  if ($('btnPlanets')) $('btnPlanets').addEventListener('click', function () { openPlanet(PL.id || 'moon'); });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-pl-go]');
+    if (!b) return;
+    e.preventDefault();
+    if (!$('filterPop').hidden) setFilterOpen(false);
+    openPlanet(b.getAttribute('data-pl-go'));
+  });
+  // แชท: ถามเรื่องดาว ดวงจันทร์ ระบบสุริยะ
+  var PL_RE = /ดวงจันทร์|ดาวพุธ|ดาวศุกร์|ดาวอังคาร|ดาวพลูโต|พลูโต|ไอโอ|ยูโรปา|แกนี?มีด|คัลลิสโต|ไททัน|เอนเซลาดัส|แครอน|ดาวเคราะห์|ระบบสุริยะ|ดาวดวงอื่น|\b(the moon|mars|mercury|venus|pluto|titan|europa|ganymede|callisto|enceladus|charon)\b/i;
+  var PL_WORDS = { moon: /ดวงจันทร์|\bthe moon\b|\bmoon\b/i, mercury: /ดาวพุธ|mercury/i, venus: /ดาวศุกร์|venus/i, mars: /ดาวอังคาร|\bmars\b/i, io: /ไอโอ|\bio\b/i, europa: /ยูโรปา|europa/i,
+    ganymede: /แกนี?มีด|ganymede/i, callisto: /คัลลิสโต|callisto/i, titan: /ไททัน|titan/i, enceladus: /เอนเซลาดัส|enceladus/i, pluto: /พลูโต|pluto/i, charon: /แครอน|charon/i };
+  function plAnswer(m) {
+    var q = String(m.q || ''), hits = PLANETS.filter(function (p) { return PL_WORDS[p.id].test(q); });
+    if (hits.length === 1) {
+      var p = hits[0];
+      return { title: p.th + ' · ' + p.en, text: p.kind + ' รัศมี ' + fmtN(Math.round(p.r)) + ' กม. แรงโน้มถ่วง ' + (p.g < 0.1 ? p.g.toFixed(3) : p.g.toFixed(2)) + ' เท่าของโลก หมุนรอบตัวเอง ' + p.day + ' · ' + p.fact,
+        html: '<button type="button" class="btn-ghost sv-open" data-pl-go="' + p.id + '">ดู' + esc(p.th) + 'แบบลูกโลก' + ICO.arrow + '</button>' };
+    }
+    var list = hits.length ? hits : PLANETS;
+    return { title: 'สำรวจดาวดวงอื่นแบบลูกโลก', text: 'หมุนดูพื้นผิวจริงจากภาพของยานอวกาศ เลือกดวงที่อยากดูได้เลย',
+      html: '<div class="pl-ask">' + list.map(function (p) { return '<button type="button" class="pl-chip" data-pl-go="' + p.id + '"><i class="pl-dot" ' + plDot(p) + '></i>' + esc(p.th) + '</button>'; }).join('') + '</div>' };
+  }
+
   /* ---------- เริ่ม ---------- */
   renderMeta();
   setAskHint();
@@ -8988,6 +9333,7 @@
   if (location.hash === '#help') setTimeout(openHelp, 300);
   if (start.site && !IN_ARTIFACT) setTimeout(function () { openSite(start.site.lon, start.site.lat, { tab: start.tab }); }, 300);
   if (start.ops && !IN_ARTIFACT) setTimeout(enterOps, 400);
+  if (start.planet && !IN_ARTIFACT) setTimeout(function () { openPlanet(start.planet, true); }, 400);
   setInterval(function () {
     if (document.hidden) return;
     if (state.data.radar) loadRadar(); // เรดาร์ใหม่ทุก 10 นาที

@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610120045">
+<link rel="stylesheet" href="style.css?v=202610141507">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -103,6 +103,10 @@
         <button type="button" class="rail-btn site-btn" id="btnSite" aria-pressed="false" aria-label="ตรวจทำเล: เลือกจุดบนแผนที่ ดูน้ำท่วมย้อนหลัง แบบจำลองน้ำท่วม ความสูง ผังเมือง และดินสำหรับเพาะปลูก" title="ตรวจทำเล (หรือคลิกขวาที่จุดใดก็ได้บนแผนที่)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h6"/><circle cx="16.5" cy="16" r="3"/><path d="M18.7 18.2 21 20.5"/></svg>
           <span class="rl">ตรวจทำเล</span>
+        </button>
+        <button type="button" class="rail-btn pl-btn" id="btnPlanets" aria-label="ดาวดวงอื่น: ดวงจันทร์ ดาวอังคาร ดาวศุกร์ และอื่นๆ แบบลูกโลก" title="ดาวดวงอื่นแบบลูกโลก">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="5.5"/><path d="M4.2 15.6c-2 1.6-2.7 3-2 3.8 1.2 1.4 7-1 12.6-5.6S23.2 5.9 22 4.6c-.7-.8-2.3-.4-4.3.8"/></svg>
+          <span class="rl">ดาวอื่น</span>
         </button>
       </nav>
       <div class="filter-pop drawer" id="filterPop" role="dialog" aria-labelledby="drTitle" hidden>
@@ -191,6 +195,17 @@
           <a class="btn-ghost" id="pinLink" href="#" target="_blank" rel="noopener"></a>
           <button type="button" class="btn-primary" id="pinAsk">ถาม ChatGeo เรื่องนี้</button>
         </div>
+      </div>
+      <!-- ดาวดวงอื่นแบบลูกโลก (ลิงก์ #planet=mars) -->
+      <div class="planet-view" id="planetView" hidden>
+        <div class="pl-map" id="planetMap" aria-label="ลูกโลกของดาวที่เลือก"></div>
+        <div class="pl-top">
+          <button type="button" class="pl-back" data-pl-back="1"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>กลับโลก</button>
+          <div class="pl-chips" id="plChips" role="group" aria-label="เลือกดาว"></div>
+          <button type="button" class="pl-spin" id="plSpin" aria-pressed="true" title="ให้ลูกโลกหมุนเองช้าๆ เมื่อไม่ได้แตะ">หมุนเอง</button>
+        </div>
+        <section class="pl-card" id="plCard" aria-live="polite"></section>
+        <div class="pl-scale" id="plScale" aria-label="มาตราส่วนบนดาวนี้"></div>
       </div>
     </section>
   </main>
@@ -597,6 +612,11 @@
           <p>ภาพจากต้นทางเป็นภาพนิ่ง ไม่ใช่วิดีโอ กดภาพเพื่อดูกล้องเดียว จะขอภาพใหม่ทุก 20 วินาที พร้อมบอกว่าภาพล่าสุดเมื่อกี่วินาทีก่อน</p>
         </section>
 
+        <section id="h-planet">
+          <h3>อวกาศ และดาวดวงอื่น</h3>
+          <p>เมื่อดูแผนที่เป็นลูกโลก จะเห็นอวกาศ ดาวระยิบที่เลื่อนตามมุมมอง ดาวหางผ่านเป็นระยะ และแสงเรืองรอบขอบโลก (วาดเองในเบราว์เซอร์ ไม่ใช้ภาพจากที่อื่น) ปุ่ม <b>ดาวอื่น</b> ในแถบขวาของแผนที่ หรือหมวด "ดาวดวงอื่น" ในแผนที่ฐาน เปิดดวงจันทร์ ดาวพุธ ดาวศุกร์ ดาวอังคาร ดวงจันทร์ของดาวพฤหัสบดีและดาวเสาร์ ดาวพลูโตและแครอนเป็นลูกโลกหมุนได้ (ลิงก์ เช่น <kbd>#planet=mars</kbd>) พร้อมข้อมูลขนาด แรงโน้มถ่วง และน้ำหนักของคุณบนดาวนั้น ภาพดวงจันทร์และดาวอังคารจาก OpenPlanetaryMap ดวงอื่นจาก USGS Astrogeology (ภาพจากยาน MESSENGER, Magellan, Galileo, Voyager, Cassini, New Horizons) บางดวงยังมีส่วนที่ไม่มีภาพเพราะยานถ่ายได้ไม่รอบดวง</p>
+        </section>
+
         <section id="h-hike">
           <h3>หน้าเดินป่า</h3>
           <p>รวมยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap (ลิงก์ <kbd>#hike</kbd>) กรองตามประเภท ภาค หรือค้นชื่อ กดรายการเพื่อดูภาพตัวอย่างจาก Wikimedia Commons (มีชื่อผู้ถ่ายและสัญญาอนุญาตทุกรูป) เรื่องราวจากวิกิพีเดีย ความสูง กราฟขึ้นลงของเส้นทาง เวลาเดินโดยประมาณ พยากรณ์อากาศ 7 วันที่ปรับตามความสูงของยอด เดือนที่ฝนน้อย เช็กลิสต์อุปกรณ์ (ติ๊กแล้วจำไว้ในเครื่อง) และระดับความน่าเชื่อถือของข้อมูล ความยากและเวลาเป็นการประเมินคร่าวๆ ตรวจสอบกับอุทยานก่อนไปเสมอ</p>
@@ -668,9 +688,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610120045"></script>
-<script src="data/countries.js?v=202610120045"></script>
-<script src="data/th-regions.js?v=202610120045"></script>
-<script src="app.js?v=202610120045"></script>
+<script src="data/data.js?v=202610141507"></script>
+<script src="data/countries.js?v=202610141507"></script>
+<script src="data/th-regions.js?v=202610141507"></script>
+<script src="app.js?v=202610141507"></script>
 </body>
 </html>

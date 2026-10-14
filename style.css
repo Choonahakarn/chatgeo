@@ -1680,3 +1680,53 @@ body.ops .exit3d { display: none; }
   .hk-gal { aspect-ratio: 4 / 3; }
 }
 @media (prefers-reduced-motion: reduce) { .hk-gal-skel { animation: none; } .hk-ico img { transition: none; } }
+/* ---------- อวกาศรอบลูกโลก + ดาวดวงอื่น ---------- */
+.cg-space { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.pl-dot { flex: 0 0 auto; display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 34% 30%, var(--a) 0, var(--b) 52%, var(--c) 100%); box-shadow: inset -2px -2px 4px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.08); }
+.base-th.base-pl { display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #182A48, #0A1222 75%); }
+.base-th.base-pl .pl-dot { width: 54%; height: auto; aspect-ratio: 1; box-shadow: inset -4px -5px 9px rgba(0,0,0,.45), 0 0 14px rgba(150,178,222,.25); }
+.planet-view { position: absolute; inset: 0; z-index: 12; background: #0C1526; color: #E8EEFA; overflow: hidden; }
+.pl-map { position: absolute; inset: 0; }
+.pl-top { position: absolute; left: 10px; right: 10px; top: 10px; z-index: 2; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.pl-top > * { pointer-events: auto; }
+.pl-back, .pl-spin { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; height: 36px; padding: 0 12px 0 9px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px;
+  background: rgba(12,20,38,.78); color: #E8EEFA; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.pl-spin { padding: 0 12px; font-weight: 500; color: #B9C6DE; }
+.pl-spin[aria-pressed="true"] { color: #E8EEFA; border-color: rgba(150,178,222,.5); background: rgba(40,64,110,.6); }
+.pl-back:hover, .pl-spin:hover { background: rgba(30,46,80,.9); }
+.pl-chips { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); }
+.pl-chips::-webkit-scrollbar { display: none; }
+.pl-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 11px 0 7px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px;
+  background: rgba(12,20,38,.7); color: #D8E2F4; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.pl-chip:hover { background: rgba(30,46,80,.9); }
+.pl-chip[aria-pressed="true"] { border-color: #96B1DE; background: rgba(60,90,150,.55); color: #fff; font-weight: 600; }
+.pl-chip:focus-visible, .pl-back:focus-visible, .pl-spin:focus-visible { outline: 2px solid #96B1DE; outline-offset: 2px; }
+.pl-card { position: absolute; left: 12px; bottom: 12px; z-index: 2; width: min(330px, calc(100% - 24px)); max-height: calc(100% - 74px); overflow-y: auto; padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,.12); border-radius: 16px; background: rgba(10,17,33,.8); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.pl-h { display: flex; align-items: center; gap: 10px; }
+.pl-h .pl-dot { width: 34px; height: 34px; }
+.pl-h b { display: block; font-size: 18px; line-height: 1.25; }
+.pl-h small { display: block; font-size: 12px; color: #A9B6CE; }
+.pl-fold { margin-left: auto; height: 28px; padding: 0 10px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: transparent; color: #C9D4EA; font: inherit; font-size: 12px; cursor: pointer; }
+.pl-card.fold .pl-body { display: none; }
+.pl-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 12px 0 8px; }
+.pl-facts span { display: block; font-size: 11.5px; color: #93A2BD; }
+.pl-facts b { display: block; font-size: 14px; font-weight: 600; }
+.pl-facts small { font-size: 11px; color: #93A2BD; }
+.pl-fact { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: #D5DEEF; }
+.pl-wt { display: block; margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.06); font-size: 12.5px; line-height: 1.7; color: #C9D4EA; }
+.pl-wt input { width: 56px; height: 26px; margin: 0 2px; padding: 0 6px; border: 1px solid rgba(255,255,255,.2); border-radius: 7px; background: rgba(0,0,0,.25); color: #fff; font: inherit; font-size: 13px; text-align: right; }
+.pl-wt b { color: #FFE08A; font-size: 14px; }
+.pl-src { margin: 0; font-size: 11px; line-height: 1.5; color: #8D9BB6; }
+.pl-src a { color: #C9D4EA; }
+.pl-scale { position: absolute; right: 14px; top: 58px; z-index: 2; min-width: var(--w, 60px); padding: 0 4px 2px; border: 1.5px solid rgba(232,238,250,.85); border-top: 0; font-size: 11px; color: #E8EEFA; text-align: center; text-shadow: 0 1px 2px #000; pointer-events: none; }
+.pl-scale:empty { display: none; }
+.pl-ask { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.pl-ask .pl-chip { background: var(--chip); color: var(--ink); border-color: var(--line); -webkit-backdrop-filter: none; backdrop-filter: none; }
+@media (max-width: 640px) {
+  .pl-top { flex-wrap: wrap; }
+  .pl-chips { order: 3; flex-basis: 100%; }
+  .pl-spin { margin-left: auto; }
+  .pl-card { left: 8px; right: 8px; bottom: 8px; width: auto; max-height: calc(100% - 112px); padding: 10px 12px; }
+  .pl-scale { top: 100px; right: 12px; }
+}
