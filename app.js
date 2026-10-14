@@ -35,8 +35,11 @@
   var styleOverride = params.get('style'); // เช่น ?style=liberty
 
   // ข้อมูลสาธารณะ
-  var SAT_URL = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg';
-  var SAT_ATTR = '<a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless 2016</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016)';
+  // ภาพดาวเทียมปี 2025 (ใหม่สุดของ EOX) สัญญา CC BY-NC-SA 4.0 ใช้ฟรีเฉพาะที่ไม่หารายได้
+  // ถ้า ChatGeo มีโฆษณาหรือขายบริการ ต้องซื้อสิทธิ์จาก EOX (cloudless.eox.at) หรือกลับไปใช้ปี 2016 (CC BY 4.0): s2cloudless_3857
+  var SAT_YEAR = 2025;
+  var SAT_URL = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-' + SAT_YEAR + '_3857/default/g/{z}/{y}/{x}.jpg';
+  var SAT_ATTR = 'ภาพดาวเทียม <a href="https://cloudless.eox.at" target="_blank" rel="noopener">EOxCloudless ' + SAT_YEAR + '</a> by EOX IT Services GmbH (Contains modified Copernicus Sentinel data ' + SAT_YEAR + ') · CC BY-NC-SA 4.0';
   var TW_API = 'https://api-v3.thaiwater.net/api/v1/thaiwater30/public/';
   var TW_ATTR = 'ข้อมูลน้ำและฝน: <a href="https://www.thaiwater.net" target="_blank" rel="noopener">ThaiWater (สสน.)</a>';
   var FC_ATTR = 'พยากรณ์: <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0)';
@@ -63,6 +66,7 @@
     try {
       var j = JSON.parse(localStorage.getItem('cg-data3') || 'null');
       if (j) Object.keys(d).forEach(function (k) { if (typeof j[k] === 'boolean') d[k] = j[k]; });
+      d.sat = false; // ภาพดาวเทียมเลือกที่ "แผนที่ฐาน" ที่เดียวแล้ว (ชั้นนี้ใช้เฉพาะในห้องควบคุมและมุมมองดิน 3 มิติ)
     } catch (e) { /* ไม่มี storage */ }
     return d;
   }
@@ -89,11 +93,11 @@
     { id: 'osmgray', g: 'osm', t: 'Gray', sub: 'ขาวดำ', raster: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], max: 19, attr: OSM_ATTR, paint: { 'raster-saturation': -1, 'raster-contrast': 0.06 } },
     { id: 'topo', g: 'osm', t: 'ภูมิประเทศ', sub: 'OpenTopoMap', raster: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], max: 17,
       attr: 'แผนที่ © <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> (CC-BY-SA) · ข้อมูล ' + OSM_ATTR + ', SRTM' },
-    { id: 'sat', g: 'img', t: 'ดาวเทียม', sub: 'Sentinel-2', raster: [SAT_URL], max: 14, attr: SAT_ATTR },
-    { id: 'hybrid', g: 'img', t: 'Hybrid', sub: 'ดาวเทียม + ถนน', hybrid: true },
-    { id: 'bluemarble', g: 'img', t: 'โลกจริง', sub: 'Blue Marble', raster: [GIBS_B + 'BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg'], max: 8, bg: '#000',
+    { id: 'sat', g: 'img', t: 'ดาวเทียม', sub: 'Sentinel-2 · ปี ' + SAT_YEAR, raster: [SAT_URL], max: 14, attr: SAT_ATTR },
+    { id: 'hybrid', g: 'img', t: 'Hybrid', sub: 'ดาวเทียม ' + SAT_YEAR + ' + ถนน', hybrid: true },
+    { id: 'bluemarble', g: 'img', t: 'โลกจริง', sub: 'Blue Marble · 2004', raster: [GIBS_B + 'BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg'], max: 8, bg: '#000',
       attr: 'ภาพโลก: <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">NASA GIBS</a> (Blue Marble)', th: [101, 13, 3.4] },
-    { id: 'night', g: 'img', t: 'กลางคืน', sub: 'Black Marble', raster: [GIBS_B + 'VIIRS_Black_Marble/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png'], max: 8, bg: '#000',
+    { id: 'night', g: 'img', t: 'กลางคืน', sub: 'Black Marble · 2016', raster: [GIBS_B + 'VIIRS_Black_Marble/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png'], max: 8, bg: '#000',
       attr: 'แสงไฟกลางคืน: <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">NASA GIBS</a> (VIIRS Black Marble)', th: [101, 13.5, 4.6] }
   ];
   var BASE_GROUPS = [['ofm', 'OpenFreeMap'], ['osm', 'OpenStreetMap'], ['img', 'ภาพโลก · ดาวเทียม']];
@@ -457,6 +461,7 @@
       applyBasemapLabels(v);
       applyProjection(v);
       spaceMain(v);
+      if (v.kind === 'chat') { cityEnsure(v); cityBtn(v); }
       refreshView(v);
       refreshLive(v);
     });
@@ -490,7 +495,8 @@
     });
 
     if (kind === 'chat') {
-      map.on('zoomend', function () { refreshView(v); });
+      map.on('zoomend', function () { refreshView(v); cityBtn(v); });
+      map.on('moveend', function () { if (CITY.on && CITY.water > 0) cityWater(v); });
       map.on('click', 'cg-pins-halo', function (e) {
         if (SITE.pick || PARCEL.on) return;
         if (e.features && e.features.length) selectPin(e.features[0].properties.id);
@@ -2211,7 +2217,7 @@
     renderBaseChips();
   }
   // ภาพตัวอย่างแผนที่ฐาน: วาดแผนที่จริงย่อส่วนนอกจอทีละแบบ แล้วเก็บเป็นรูปในเครื่อง (ครั้งแรกครั้งเดียว)
-  var BTH = { busy: false, key: 'cg-bth1' };
+  var BTH = { busy: false, key: 'cg-bth2' }; // เปลี่ยนชื่อเมื่อภาพแผนที่ฐานเปลี่ยน (ภาพดาวเทียมปีใหม่) ให้วาดภาพตัวอย่างใหม่
   function readThumbs() { try { var o = JSON.parse(localStorage.getItem(BTH.key) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
   function writeThumbs(o) { try { localStorage.setItem(BTH.key, JSON.stringify(o)); } catch (e) { /* เต็ม ข้าม */ } }
   function thumbFor(id, cache) { return id === 'auto' ? cache[state.theme === 'dark' ? 'dark' : 'positron'] : cache[id]; }
@@ -4236,9 +4242,12 @@
     if (map.getLayer('cg-hill')) map.setLayoutProperty('cg-hill', 'visibility', on ? 'visible' : 'none');
     if (!on && v.terrain3d) setTerrain3d(v, false);
   }
+  var TW_SAT_AUTO = false;
   function setTerrain3d(v, on) {
     var map = v.map;
     v.terrain3d = !!on;
+    if (on && CITY.on && v.kind === 'chat') { CITY.on = false; map.dragRotate.disable(); map.touchPitch.disable(); cityWater(v); cityPanel(); cityBtn(v); }
+    if (!on && TW_SAT_AUTO) { TW_SAT_AUTO = false; state.data.sat = false; eachView(refreshLive); } // ภาพดาวเทียมที่เปิดให้เองตอนดูดิน 3 มิติ ปิดคืน
     if (v.kind === 'chat' && $('btnTerrain3d')) $('btnTerrain3d').setAttribute('aria-pressed', String(!!on));
     if (v.kind === 'chat' && $('btnExit3d')) $('btnExit3d').hidden = !on; // ปุ่มออกจาก 3 มิติ (ไม่มีปุ่ม 3 มิติบนแถบแล้ว เพราะซ้ำกับลูกโลกในความรู้สึกผู้ใช้)
     try {
@@ -6018,7 +6027,7 @@
   function twin3d(S) {
     var v = views.chat;
     if (!v) return;
-    if (!state.data.sat) { state.data.sat = true; saveData(); eachView(refreshLive); renderDataChips(); }
+    if (!state.data.sat) { state.data.sat = true; TW_SAT_AUTO = true; eachView(refreshLive); }
     setTerrain3d(v, true);
     v.map.easeTo({ center: [S.lon, S.lat], zoom: Math.max(14, Math.min(15.5, v.map.getZoom())), pitch: 64, bearing: -25, padding: sitePadding(), duration: reduceMotion ? 0 : 1200 });
     toast('ภาพดาวเทียมบนแผนที่ความสูง (ขยายความสูง 1.6 เท่า) ลากด้วยคลิกขวาหรือสองนิ้วเพื่อหมุนมุมมอง');
@@ -6776,20 +6785,125 @@
     ring.push([180, pole], [-180, pole], ring[0]);
     return { type: 'Feature', properties: { h: hDeg }, geometry: { type: 'Polygon', coordinates: [ring] } };
   }
+  // ---------- กลางวัน/กลางคืนแบบ Google Earth: เงากลางคืนไล่นุ่ม แสงเย็นตามเส้นแบ่ง และแสงไฟเมืองจริง (NASA Black Marble) ----------
+  // วาดด้วย WebGL ในชั้น custom (ใช้ projectTile ของ MapLibre จึงได้ทั้งลูกโลกและแผนที่แบน) เบราว์เซอร์ที่ไม่มี WebGL2 ใช้แบบเงาหลายชั้นเดิม
+  var NIGHT = { on: false, sun: [0, 0, 1], img: null, loading: false, failed: false, gl: true };
+  var NIGHT_IMG = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=VIIRS_Black_Marble&STYLES=&SRS=EPSG:4326&BBOX=-180,-90,180,90&WIDTH=2048&HEIGHT=1024&FORMAT=image/jpeg';
+  function nightLightsLoad() {
+    if (NIGHT.img || NIGHT.loading || NIGHT.failed) return;
+    NIGHT.loading = true;
+    var im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = function () { NIGHT.img = im; NIGHT.loading = false; eachView(function (v) { v.map.triggerRepaint(); }); };
+    im.onerror = function () { NIGHT.failed = true; NIGHT.loading = false; };
+    im.src = NIGHT_IMG;
+  }
+  var NG_FS = '#version 300 es\nprecision highp float;\nin vec2 v_m;\nuniform vec3 u_sun;\nuniform sampler2D u_lights;\nuniform float u_has;\nuniform float u_dim;\nout vec4 o;\n' +
+    'void main(){float PI_=3.14159265;float lon=fract(v_m.x)*2.0*PI_-PI_;float lat=atan(sinh(PI_*(1.0-2.0*v_m.y)));' +
+    'vec3 n=vec3(sin(lon)*cos(lat),sin(lat),cos(lon)*cos(lat));float d=dot(n,u_sun);' +
+    'float night=smoothstep(0.035,-0.17,d);float dusk=exp(-pow((d+0.025)/0.065,2.0));' +
+    'vec3 L=texture(u_lights,vec2(lon/(2.0*PI_)+0.5,0.5-lat/PI_)).rgb;float lum=max(L.r,max(L.g,L.b));float city=smoothstep(0.1,0.8,lum)*u_has;' +
+    'vec3 lc=mix(vec3(1.0,0.74,0.38),vec3(1.0,0.95,0.84),smoothstep(0.5,1.0,lum));' +
+    'float a=night*u_dim+dusk*0.07;vec3 rgb=vec3(0.02,0.055,0.15)*night*u_dim+vec3(0.98,0.48,0.20)*dusk*0.11+lc*city*night*1.15;' +
+    'o=vec4(rgb,clamp(a,0.0,1.0));}';
+  function nightProgram(gl, sd) {
+    var vsrc = '#version 300 es\n' + sd.vertexShaderPrelude + '\n' + sd.define + '\nin vec2 a_pos;\nuniform float u_off;\nout vec2 v_m;\nvoid main(){v_m=a_pos+vec2(u_off,0.0);gl_Position=projectTile(a_pos+vec2(u_off,0.0));}';
+    function sh(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn('night shader', gl.getShaderInfoLog(s)); return null; } return s; }
+    var vs = sh(gl.VERTEX_SHADER, vsrc), fs = sh(gl.FRAGMENT_SHADER, NG_FS);
+    if (!vs || !fs) return null;
+    var p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return null;
+    var u = function (n) { return gl.getUniformLocation(p, n); };
+    return { p: p, aPos: gl.getAttribLocation(p, 'a_pos'), uOff: u('u_off'), uSun: u('u_sun'), uLights: u('u_lights'), uHas: u('u_has'), uDim: u('u_dim'),
+      uPM: u('u_projection_matrix'), uFB: u('u_projection_fallback_matrix'), uTM: u('u_projection_tile_mercator_coords'), uCP: u('u_projection_clipping_plane'), uTR: u('u_projection_transition') };
+  }
+  function nightLayer() {
+    var N = 96;
+    return { id: 'cg-night-gl', type: 'custom', renderingMode: '2d',
+      onAdd: function (map, gl) {
+        this.map = map; this.progs = {}; this.tex = null;
+        this.ok = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+        if (!this.ok) return;
+        // ตาข่ายสี่เหลี่ยมคลุมทั้งโลกในพิกัดเมอร์เคเตอร์ 0..1 (ละเอียดพอให้โค้งตามลูกโลก)
+        var pos = new Float32Array((N + 1) * (N + 1) * 2), idx = new Uint16Array(N * N * 6), k = 0, i, j;
+        for (j = 0; j <= N; j++) for (i = 0; i <= N; i++) { pos[k++] = i / N; pos[k++] = j / N; }
+        k = 0;
+        for (j = 0; j < N; j++) for (i = 0; i < N; i++) { var a = j * (N + 1) + i, b = a + 1, c = a + N + 1, d = c + 1; idx[k++] = a; idx[k++] = c; idx[k++] = b; idx[k++] = b; idx[k++] = c; idx[k++] = d; }
+        this.vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.vb); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+        this.ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+        this.n = idx.length;
+      },
+      onRemove: function (map, gl) {
+        if (this.vb) gl.deleteBuffer(this.vb); if (this.ib) gl.deleteBuffer(this.ib); if (this.tex) gl.deleteTexture(this.tex);
+        Object.keys(this.progs || {}).forEach(function (k) { if (this.progs[k]) gl.deleteProgram(this.progs[k].p); }, this);
+      },
+      render: function (gl, args) {
+        if (!this.ok || !NIGHT.on || !args || !args.shaderData || !args.defaultProjectionData) return;
+        var sd = args.shaderData, pd = args.defaultProjectionData;
+        if (!(sd.variantName in this.progs)) this.progs[sd.variantName] = nightProgram(gl, sd);
+        var P = this.progs[sd.variantName];
+        if (!P) { if (NIGHT.gl) { NIGHT.gl = false; setTimeout(function () { eachView(function (x) { if (x.kind === 'chat') updateDayNight(x); }); }, 0); } return; }
+        if (!this.tex) {
+          this.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+          this.texReady = false;
+        }
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        if (NIGHT.img && !this.texReady) {
+          try {
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, NIGHT.img);
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            this.texReady = true;
+          } catch (e) { NIGHT.failed = true; NIGHT.img = null; }
+        }
+        gl.useProgram(P.p);
+        gl.uniformMatrix4fv(P.uPM, false, pd.mainMatrix);
+        if (P.uFB) gl.uniformMatrix4fv(P.uFB, false, pd.fallbackMatrix || pd.mainMatrix);
+        if (P.uTM) gl.uniform4f(P.uTM, pd.tileMercatorCoords[0], pd.tileMercatorCoords[1], pd.tileMercatorCoords[2], pd.tileMercatorCoords[3]);
+        if (P.uCP) gl.uniform4f(P.uCP, pd.clippingPlane[0], pd.clippingPlane[1], pd.clippingPlane[2], pd.clippingPlane[3]);
+        if (P.uTR) gl.uniform1f(P.uTR, pd.projectionTransition);
+        gl.uniform3f(P.uSun, NIGHT.sun[0], NIGHT.sun[1], NIGHT.sun[2]);
+        gl.uniform1i(P.uLights, 0);
+        var z = this.map.getZoom();
+        gl.uniform1f(P.uHas, this.texReady ? Math.max(0, Math.min(1, (8 - z) / 3)) : 0); // ซูมลึกแล้วภาพไฟเมืองหยาบ ค่อยๆ จางออก
+        gl.uniform1f(P.uDim, state.theme === 'dark' ? 0.56 : 0.64);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vb); gl.enableVertexAttribArray(P.aPos); gl.vertexAttribPointer(P.aPos, 2, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ib);
+        gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        var globe = this.map.getProjection && (this.map.getProjection() || {}).type === 'globe';
+        (globe ? [0] : [-1, 0, 1]).forEach(function (off) { gl.uniform1f(P.uOff, off); gl.drawElements(gl.TRIANGLES, this.n, gl.UNSIGNED_SHORT, 0); }, this);
+        gl.disableVertexAttribArray(P.aPos);
+      } };
+  }
   function updateDayNight(v) {
-    var map = v.map, on = worldOn('daynight');
+    var map = v.map, on = worldOn('daynight'), useGL = NIGHT.gl && typeof WebGL2RenderingContext !== 'undefined';
     if (on) {
-      var d = new Date(), s = sunPos(d);
-      setGeo(map, 'cg-night', { type: 'FeatureCollection', features: [nightPoly(d, 0), nightPoly(d, -12)] });
+      var d = new Date(), s = sunPos(d), lr = s.lon * Math.PI / 180;
+      NIGHT.on = true; NIGHT.sun = [Math.sin(lr) * Math.cos(s.dec), Math.sin(s.dec), Math.cos(lr) * Math.cos(s.dec)];
       setGeo(map, 'cg-sun', { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [s.lon, s.dec * 180 / Math.PI] } }] });
-      if (!map.getLayer('cg-night')) {
-        map.addLayer({ id: 'cg-night', type: 'fill', source: 'cg-night', paint: { 'fill-color': '#020817', 'fill-opacity': 0.22 } }, map.getLayer('cg-thr-fill') ? 'cg-thr-fill' : undefined);
-        map.addLayer({ id: 'cg-sun', type: 'circle', source: 'cg-sun', paint: { 'circle-radius': 9, 'circle-color': '#FFD54A', 'circle-blur': 0.4, 'circle-stroke-color': '#FFF3B0', 'circle-stroke-width': 2 } }, topBelow(map));
+      var before = map.getLayer('cg-thr-fill') ? 'cg-thr-fill' : undefined;
+      if (useGL) {
+        nightLightsLoad();
+        if (!map.getLayer('cg-night-gl')) { try { map.addLayer(nightLayer(), before); } catch (e) { NIGHT.gl = false; useGL = false; } }
+      }
+      if (!useGL) {
+        setGeo(map, 'cg-night', { type: 'FeatureCollection', features: [nightPoly(d, 0), nightPoly(d, -12)] });
+        if (!map.getLayer('cg-night')) map.addLayer({ id: 'cg-night', type: 'fill', source: 'cg-night', paint: { 'fill-color': '#020817', 'fill-opacity': 0.22 } }, before);
+      }
+      if (!map.getLayer('cg-sun')) {
+        map.addLayer({ id: 'cg-sun-glow', type: 'circle', source: 'cg-sun', paint: { 'circle-radius': 26, 'circle-color': '#FFE08A', 'circle-blur': 1, 'circle-opacity': 0.45 } }, topBelow(map));
+        map.addLayer({ id: 'cg-sun', type: 'circle', source: 'cg-sun', paint: { 'circle-radius': 8, 'circle-color': '#FFE27A', 'circle-blur': 0.35, 'circle-stroke-color': '#FFF6C8', 'circle-stroke-width': 1.5 } }, topBelow(map));
       }
       clearInterval(v.dnTimer);
       v.dnTimer = setInterval(function () { if (!document.hidden) updateDayNight(v); }, 60e3);
-    } else clearInterval(v.dnTimer);
-    vis(map, ['cg-night', 'cg-sun'], on);
+      map.triggerRepaint();
+    } else { clearInterval(v.dnTimer); NIGHT.on = false; map.triggerRepaint(); }
+    vis(map, ['cg-night'], on && !useGL);
+    vis(map, ['cg-sun', 'cg-sun-glow'], on);
   }
 
   // ---------- ดาวเทียม ----------
@@ -6896,7 +7010,7 @@
       var k = 0;
       var t0 = v.satTimer;
       clearInterval(t0);
-      v.satTimer = setInterval(function () { if (document.hidden) return; tick(); if (++k % 5 === 0) all(); }, 1000);
+      v.satTimer = setInterval(function () { if (document.hidden) return; tick(); if (++k % 5 === 0 && !v.styleLoading) all(); }, 1000); // ระหว่างเปลี่ยนแผนที่ฐาน ห้ามเพิ่มชั้น
     }
     opsSatPaint(map);
     vis(map, ['cg-sat-all'], !!S.all && !shell);
@@ -7580,6 +7694,7 @@
   function enterOps() {
     if (OPS.on || IN_ARTIFACT) return;
     if (PL.open) closePlanet();
+    if (CITY.on && views.chat) setCity3d(views.chat, false);
     if (state.page !== 'chat') setPage('chat');
     OPS.on = true;
     OPS.baseFail = false;
@@ -7828,13 +7943,12 @@
     { head: 'ที่ดินและภาพพื้นผิว' },
     { id: 'terrain', name: 'ความสูงพื้นดิน', src: 'Terrain Tiles' },
     { id: 'zoning', name: 'ร่างผังเมืองรวม (ทดลอง)', src: 'กรมโยธาฯ · เพชรบุรี สระบุรี' },
-    { id: 'sat', name: 'ภาพดาวเทียม', src: 'Sentinel-2 · EOX' },
     { id: 'props', name: 'ทรัพย์ในรายการของฉัน', src: 'จากหน้า "ทรัพย์"' },
     { head: 'โลกตอนนี้ (ห้องควบคุม)' },
     { id: 'quakes', name: 'แผ่นดินไหวทั่วโลก', src: 'USGS' },
     { id: 'gdacs', name: 'พายุ น้ำท่วม ภูเขาไฟ ทั่วโลก', src: 'GDACS' },
     { id: 'fires', name: 'จุดความร้อน/ไฟป่า', src: 'NASA FIRMS' },
-    { id: 'daynight', name: 'กลางวัน/กลางคืน', src: 'คำนวณจากตำแหน่งดวงอาทิตย์' },
+    { id: 'daynight', name: 'กลางวัน/กลางคืน + ไฟเมือง', src: 'ตำแหน่งดวงอาทิตย์ · NASA Black Marble' },
     { id: 'sats', name: 'ดาวเทียม (ตำแหน่งสด)', src: 'CelesTrak' },
     { id: 'aircraft', name: 'เครื่องบิน', src: 'adsb.lol' },
     { id: 'ships', name: 'เรือ', src: 'AIS' },
@@ -9108,6 +9222,7 @@
     return fx;
   }
   var SPACE = { main: null };
+  window.cgCity = function () { return { on: CITY.on, water: CITY.water, layer: !!(views.chat && views.chat.map.getLayer('cg-bldg-3d')), src: views.chat && views.chat.map.getLayer('cg-bldg-3d') ? views.chat.map.getLayer('cg-bldg-3d').source : null, pitch: views.chat && views.chat.map.getPitch(), night: { on: NIGHT.on, gl: NIGHT.gl, img: !!NIGHT.img, layer: !!(views.chat && views.chat.map.getLayer('cg-night-gl')) } }; };
   window.cgSpace = function () { return { main: SPACE.main && { on: SPACE.main.on, L: SPACE.main.L, full: SPACE.main.full, hidden: SPACE.main.cv.hidden, body: SPACE.main.body }, pl: { open: PL.open, id: PL.id, fx: PL.fx && { on: PL.fx.on, L: PL.fx.L, body: PL.fx.body } } }; };
   function spaceMain(v) {
     if (!v || v.kind !== 'chat' || IN_ARTIFACT) return;
@@ -9247,6 +9362,8 @@
     PL.idleAt = performance.now() - 3000;
     if (!PL.raf && !reduceMotion) PL.raf = requestAnimationFrame(plSpin);
     if (SPACE.main) SPACE.main.set(false);
+    if (CITY.on && views.chat) setCity3d(views.chat, false);
+    if (views.chat) cityBtn(views.chat);
     try { history[fromHash || wasOpen ? 'replaceState' : 'pushState'](null, '', location.pathname + location.search + '#planet=' + id); } catch (e) { /* ข้าม */ }
   }
   function closePlanet(fromHash) {
@@ -9256,7 +9373,7 @@
     document.body.classList.remove('cg-planet');
     if (PL.fx) PL.fx.set(false);
     if (PL.raf) { cancelAnimationFrame(PL.raf); PL.raf = 0; }
-    if (views.chat) spaceMain(views.chat);
+    if (views.chat) { spaceMain(views.chat); cityBtn(views.chat); }
     if (!fromHash) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ข้าม */ } }
   }
   if ($('planetView')) {
@@ -9300,6 +9417,106 @@
     var list = hits.length ? hits : PLANETS;
     return { title: 'สำรวจดาวดวงอื่นแบบลูกโลก', text: 'หมุนดูพื้นผิวจริงจากภาพของยานอวกาศ เลือกดวงที่อยากดูได้เลย',
       html: '<div class="pl-ask">' + list.map(function (p) { return '<button type="button" class="pl-chip" data-pl-go="' + p.id + '"><i class="pl-dot" ' + plDot(p) + '></i>' + esc(p.th) + '</button>'; }).join('') + '</div>' };
+  }
+
+  /* ---------- เมือง 3 มิติ: ตึกขึ้นเป็นแท่งตามความสูงจริงใน OpenStreetMap + จำลองระดับน้ำท่วมกับตึก ---------- */
+  // ใช้ชั้น building ของแผนที่เวกเตอร์ OpenFreeMap (render_height / render_min_height) ถ้าแผนที่ฐานเป็นภาพ (ดาวเทียม ฯลฯ) จะดึงชั้นนี้มาเพิ่มเอง
+  var CITY = { on: false, water: 0, minZ: 14.5 };
+  var OMT_TJ = 'https://tiles.openfreemap.org/planet';
+  function cityBldgSource(map) {
+    if (map.getSource('openmaptiles')) return 'openmaptiles';
+    if (!map.getSource('cg-omt')) { try { map.addSource('cg-omt', { type: 'vector', url: OMT_TJ, attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ' + OSM_ATTR }); } catch (e) { return null; } }
+    return 'cg-omt';
+  }
+  function cityColors() {
+    var b = opsBaseId() || BASE.id, darkMap = b === 'dark' || b === 'fiord' || (b === 'auto' && !state.globe && state.theme === 'dark');
+    return darkMap ? ['#2E3856', '#414C74', '#5A6697', '#8290C4'] : ['#ECE9F5', '#D6D0EC', '#BBB2E1', '#968BCD'];
+  }
+  function cityEnsure(v) {
+    if (!v || v.kind !== 'chat' || usingFallback || IN_ARTIFACT) return;
+    var map = v.map;
+    if (!map.getStyle()) return;
+    var src = cityBldgSource(map);
+    if (!src) return;
+    // ซ่อนตึก 3 มิติเดิมของสไตล์ (เช่น Liberty) ใช้ของเราแทน จะได้สีและการจำลองน้ำเหมือนกันทุกแผนที่
+    (map.getStyle().layers || []).forEach(function (l) { if (l.type === 'fill-extrusion' && l.id.indexOf('cg-') !== 0) { try { map.setLayoutProperty(l.id, 'visibility', 'none'); } catch (e) { /* ข้าม */ } } });
+    var C = cityColors(), before = firstSymbolId(map);
+    var h = ['coalesce', ['get', 'render_height'], 5], b = ['coalesce', ['get', 'render_min_height'], 0];
+    if (!map.getLayer('cg-bldg-3d')) {
+      try {
+        map.addLayer({ id: 'cg-bldg-3d', type: 'fill-extrusion', source: src, 'source-layer': 'building', minzoom: CITY.minZ, filter: ['!=', ['get', 'hide_3d'], true],
+          paint: { 'fill-extrusion-color': ['interpolate', ['linear'], h, 0, C[0], 20, C[1], 60, C[2], 150, C[3]],
+            'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], CITY.minZ, 0, CITY.minZ + 0.8, h],
+            'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], CITY.minZ, 0, CITY.minZ + 0.8, b],
+            'fill-extrusion-opacity': 0.94, 'fill-extrusion-vertical-gradient': true } }, before);
+      } catch (e) { return; }
+    } else map.setPaintProperty('cg-bldg-3d', 'fill-extrusion-color', ['interpolate', ['linear'], h, 0, C[0], 20, C[1], 60, C[2], 150, C[3]]);
+    cityWater(v);
+  }
+  // น้ำ: กล่องโปร่งแสงคลุมจอ สูงเท่าระดับน้ำ ตึกที่เตี้ยกว่าจะจมให้เห็น (สมมุติพื้นราบเท่ากันทั้งจอ)
+  function cityWater(v) {
+    var map = v.map, on = CITY.on && CITY.water > 0;
+    if (!map.getStyle()) return;
+    if (on) {
+      var bb = map.getBounds(), pad = 0.6, w = bb.getWest(), e = bb.getEast(), s = bb.getSouth(), n = bb.getNorth(), dx = (e - w) * pad, dy = (n - s) * pad;
+      var poly = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[w - dx, s - dy], [e + dx, s - dy], [e + dx, n + dy], [w - dx, n + dy], [w - dx, s - dy]]] } };
+      setGeo(map, 'cg-water3d', { type: 'FeatureCollection', features: [poly] });
+      if (!map.getLayer('cg-water3d')) {
+        try { map.addLayer({ id: 'cg-water3d', type: 'fill-extrusion', source: 'cg-water3d', paint: { 'fill-extrusion-color': '#2F7FE0', 'fill-extrusion-opacity': 0.5, 'fill-extrusion-height': CITY.water, 'fill-extrusion-base': 0 } }, firstSymbolId(map)); } catch (x) { return; }
+      } else map.setPaintProperty('cg-water3d', 'fill-extrusion-height', CITY.water);
+    }
+    vis(map, ['cg-water3d'], on);
+  }
+  function cityDepthText(m) {
+    if (m <= 0) return 'ยังไม่จำลองน้ำ เลื่อนแถบเพื่อดูว่าน้ำสูงเท่าไรท่วมถึงไหน';
+    var t = m < 0.3 ? 'ราวข้อเท้า เดินลุยได้แต่ลื่น' : m < 0.6 ? 'ราวเข่า รถเก๋งเริ่มเสี่ยงน้ำเข้าเครื่อง' : m < 1 ? 'ราวเอว ไฟฟ้าชั้นล่างควรตัด' : m < 1.7 ? 'ท่วมหน้าอกถึงศีรษะ อันตรายมาก' : m < 3 ? 'ท่วมมิดชั้นล่าง ต้องขึ้นชั้น 2' : m < 6 ? 'ท่วมถึงชั้น 2 บ้านชั้นเดียวจมทั้งหลัง' : 'ท่วมสูงหลายชั้น';
+    return 'น้ำสูง ' + m.toFixed(1) + ' ม. · ' + t;
+  }
+  function cityPanel() {
+    var el = $('cityPanel');
+    if (!el) return;
+    el.hidden = !CITY.on;
+    if (!CITY.on) return;
+    $('cityWaterV').textContent = cityDepthText(CITY.water);
+    $('cityWater').value = String(CITY.water);
+  }
+  function cityBtn(v) {
+    var b = $('btnCity3d');
+    if (!b || !v || v.kind !== 'chat') return;
+    var show = !usingFallback && !IN_ARTIFACT && !(OPS && OPS.on) && !(typeof PL !== 'undefined' && PL.open) && (CITY.on || v.map.getZoom() >= CITY.minZ - 0.3);
+    b.hidden = !show;
+    b.setAttribute('aria-pressed', String(CITY.on));
+    b.querySelector('.ct-l').textContent = CITY.on ? 'ออกจากเมือง 3 มิติ' : 'ดูตึก 3 มิติ';
+  }
+  function setCity3d(v, on) {
+    if (!v || v.kind !== 'chat') return;
+    var map = v.map;
+    CITY.on = !!on;
+    if (on) {
+      if (v.terrain3d) setTerrain3d(v, false);
+      cityEnsure(v);
+      map.dragRotate.enable(); map.touchPitch.enable(); map.touchZoomRotate.enableRotation();
+      map.easeTo({ pitch: 58, bearing: map.getBearing() || -18, zoom: Math.max(map.getZoom(), 15.6), duration: reduceMotion ? 0 : 1100 });
+    } else {
+      map.dragRotate.disable(); map.touchPitch.disable(); map.touchZoomRotate.disableRotation();
+      map.easeTo({ pitch: 0, bearing: 0, duration: reduceMotion ? 0 : 700 });
+    }
+    cityWater(v); cityPanel(); cityBtn(v);
+  }
+  if ($('btnCity3d')) $('btnCity3d').addEventListener('click', function () { if (views.chat) setCity3d(views.chat, !CITY.on); });
+  if ($('cityPanel')) {
+    $('cityWater').addEventListener('input', function () {
+      CITY.water = Math.round(parseFloat(this.value) * 10) / 10 || 0;
+      $('cityWaterV').textContent = cityDepthText(CITY.water);
+      if (views.chat) cityWater(views.chat);
+    });
+    $('cityPanel').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-city-x],[data-city-site],[data-city-w]');
+      if (!t || !views.chat) return;
+      if (t.hasAttribute('data-city-x')) { setCity3d(views.chat, false); return; }
+      if (t.hasAttribute('data-city-w')) { CITY.water = +t.getAttribute('data-city-w'); cityWater(views.chat); cityPanel(); return; }
+      var c = views.chat.map.getCenter(); openSite(c.lng, c.lat, { tab: 'risk' });
+    });
   }
 
   /* ---------- เริ่ม ---------- */

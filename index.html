@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610141507">
+<link rel="stylesheet" href="style.css?v=202610141617">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -77,6 +77,18 @@
     <section class="mapwrap" aria-label="แผนที่">
       <div id="mapChat" class="map"></div>
       <button type="button" class="exit3d" id="btnExit3d" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>กลับเป็นแผนที่แบน</button>
+      <button type="button" class="city-btn" id="btnCity3d" hidden aria-pressed="false" title="ดูตึกเป็น 3 มิติ และจำลองระดับน้ำท่วมกับตึก">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V8l6-3v16"/><path d="M11 21V10l8 3v8"/><path d="M8 10v.01M8 13v.01M8 16v.01M15 15v.01M15 18v.01"/></svg><span class="ct-l">ดูตึก 3 มิติ</span>
+      </button>
+      <section class="city-panel" id="cityPanel" hidden aria-label="เมือง 3 มิติ">
+        <div class="cp-h"><b>เมือง 3 มิติ</b><button type="button" class="cp-x" data-city-x="1" aria-label="ออกจากเมือง 3 มิติ"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button></div>
+        <p class="cp-hint">คลิกขวาค้างแล้วลาก หรือใช้สองนิ้ว เพื่อหมุนและเอียง · ความสูงตึกจาก OpenStreetMap (ตึกที่ไม่มีข้อมูลใช้ค่าประมาณ)</p>
+        <label class="cp-l" for="cityWater">จำลองระดับน้ำท่วม</label>
+        <input type="range" id="cityWater" min="0" max="8" step="0.1" value="0">
+        <div class="cp-quick"><button type="button" data-city-w="0">ไม่มีน้ำ</button><button type="button" data-city-w="0.5">0.5 ม.</button><button type="button" data-city-w="1">1 ม.</button><button type="button" data-city-w="2">2 ม.</button><button type="button" data-city-w="4">4 ม.</button></div>
+        <p class="cp-v" id="cityWaterV"></p>
+        <p class="cp-note">ภาพประกอบให้เห็นความลึก (สมมุติพื้นราบเท่ากันทั้งจอ) ไม่ใช่การพยากรณ์ <button type="button" class="cp-link" data-city-site="1">ดูความเสี่ยงน้ำท่วมจริงของจุดกลางจอ</button></p>
+      </section>
       <button type="button" class="chat-tab" id="btnChatTab" aria-controls="chatPanel" aria-expanded="true" aria-label="ซ่อนแชท ให้แผนที่เต็มจอ" title="ซ่อนแชท">
         <svg class="ct-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg><span class="ct-t"></span>
       </button>
@@ -614,6 +626,7 @@
 
         <section id="h-planet">
           <h3>อวกาศ และดาวดวงอื่น</h3>
+          <p>ซูมเข้าไปในเมืองจนเห็นตึก จะมีปุ่ม <b>ดูตึก 3 มิติ</b> ด้านบนแผนที่ กดแล้วตึกขึ้นเป็นแท่งตามความสูงใน OpenStreetMap หมุนและเอียงดูได้ (คลิกขวาค้างแล้วลาก หรือสองนิ้ว) และเลื่อนแถบ "จำลองระดับน้ำท่วม" 0–8 เมตร เพื่อดูว่าน้ำสูงขนาดนั้นท่วมถึงชั้นไหนของตึก (เป็นภาพประกอบ ไม่ใช่การพยากรณ์) ชั้นข้อมูล "กลางวัน/กลางคืน" แสดงเงากลางคืนที่ไล่นุ่มตามตำแหน่งดวงอาทิตย์จริง แสงเย็นตามเส้นแบ่งกลางวันกลางคืน และแสงไฟเมืองจาก NASA Black Marble ภาพดาวเทียมเลือกได้ที่ "แผนที่ฐาน" (ภาพปี 2025 จาก EOX ใช้ฟรีสำหรับเว็บที่ไม่หารายได้)</p>
           <p>เมื่อดูแผนที่เป็นลูกโลก จะเห็นอวกาศ ดาวระยิบที่เลื่อนตามมุมมอง ดาวหางผ่านเป็นระยะ และแสงเรืองรอบขอบโลก (วาดเองในเบราว์เซอร์ ไม่ใช้ภาพจากที่อื่น) ปุ่ม <b>ดาวอื่น</b> ในแถบขวาของแผนที่ หรือหมวด "ดาวดวงอื่น" ในแผนที่ฐาน เปิดดวงจันทร์ ดาวพุธ ดาวศุกร์ ดาวอังคาร ดวงจันทร์ของดาวพฤหัสบดีและดาวเสาร์ ดาวพลูโตและแครอนเป็นลูกโลกหมุนได้ (ลิงก์ เช่น <kbd>#planet=mars</kbd>) พร้อมข้อมูลขนาด แรงโน้มถ่วง และน้ำหนักของคุณบนดาวนั้น ภาพดวงจันทร์และดาวอังคารจาก OpenPlanetaryMap ดวงอื่นจาก USGS Astrogeology (ภาพจากยาน MESSENGER, Magellan, Galileo, Voyager, Cassini, New Horizons) บางดวงยังมีส่วนที่ไม่มีภาพเพราะยานถ่ายได้ไม่รอบดวง</p>
         </section>
 
@@ -688,9 +701,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610141507"></script>
-<script src="data/countries.js?v=202610141507"></script>
-<script src="data/th-regions.js?v=202610141507"></script>
-<script src="app.js?v=202610141507"></script>
+<script src="data/data.js?v=202610141617"></script>
+<script src="data/countries.js?v=202610141617"></script>
+<script src="data/th-regions.js?v=202610141617"></script>
+<script src="app.js?v=202610141617"></script>
 </body>
 </html>
