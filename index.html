@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
-<link rel="stylesheet" href="style.css?v=202610141617">
+<link rel="stylesheet" href="style.css?v=202610151147">
 </head>
 <body class="cg-light">
 <!-- PAGE-START -->
@@ -37,6 +37,7 @@
       <a href="#cctv" id="navCctv" data-page="cctv" aria-current="false">กล้อง</a>
       <a href="#props" id="navPp" data-page="props" aria-current="false">ทรัพย์</a>
       <a href="#hike" id="navHike" data-page="hike" aria-current="false">เดินป่า</a>
+      <a href="#city" id="navCity" data-page="city" aria-current="false"><span class="nl">กรุงเทพตอนนี้</span><span class="ns" aria-hidden="true">กทม.</span></a>
     </nav>
     <div class="top-actions">
       <button type="button" id="btnOps" class="icon-btn ops-btn" aria-pressed="false" title="ห้องควบคุม: ลูกโลกเต็มจอ แผ่นดินไหว พายุ ไฟป่า ดาวเทียม เครื่องบิน เรือ ข่าวทั่วโลก">
@@ -394,6 +395,42 @@
     </section>
   </main>
 
+  <!-- หน้า 6: กรุงเทพตอนนี้ (แรงบันดาลใจ Bangkok Twin เขียนใหม่ในสไตล์ ChatGeo): แผนที่เมืองกลางคืน 3 มิติ + ข้อมูลสดจากหน่วยงาน -->
+  <main class="page-city" id="pageCity" hidden>
+    <section class="bk-mapbox" aria-label="แผนที่กรุงเทพสามมิติ">
+      <div id="bkMap" class="bk-map"></div>
+      <canvas id="bkFx" class="bk-fx" hidden aria-hidden="true"></canvas>
+      <div id="bkTip" class="bk-tip" hidden></div>
+    </section>
+    <div class="bk-top">
+      <div class="bk-brand"><b>กรุงเทพตอนนี้</b><span class="cv-tag">ทดลอง</span></div>
+      <div class="bk-chips">
+        <span id="bkStatus" class="bk-chip bk-status" role="status" aria-live="polite"><i class="bk-pulse"></i>กำลังโหลดข้อมูลสด…</span>
+        <button type="button" id="bkWorry" class="bk-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>จุดวัดน่าห่วง <b id="bkWorryN"></b></button>
+        <button type="button" id="bkRiverBtn" class="bk-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 9c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0M3 15c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0"/></svg>แม่น้ำเจ้าพระยา</button>
+      </div>
+      <div class="bk-find">
+        <label class="cv-search bk-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="bkQ" type="search" placeholder="ค้นหาเขต สถานี สถานที่ คลอง…" autocomplete="off" spellcheck="false" aria-label="ค้นหาในกรุงเทพ">
+        </label>
+        <button type="button" id="bkShare" class="bk-ibtn" title="คัดลอกลิงก์มุมนี้" aria-label="แชร์มุมนี้"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg></button>
+        <div id="bkRes" class="bk-res-pop" hidden></div>
+      </div>
+    </div>
+    <div id="bkWorryPop" class="bk-res-pop bk-worry-pop" hidden></div>
+    <article id="bkStory" class="bk-story" aria-live="polite"></article>
+    <button type="button" id="bkStoryOpen" class="bk-chip bk-story-open" hidden>เปิดการ์ดเรื่องเล่า</button>
+    <aside id="bkLegend" class="bk-legend" aria-label="คำอธิบายสีและชั้นข้อมูล"></aside>
+    <aside id="bkSheet" class="bk-sheet" hidden aria-label="ข้อมูลรายเขต"></aside>
+    <div class="bk-bottom">
+      <nav id="bkTabs" class="bk-tabs" aria-label="เรื่องของกรุงเทพ"></nav>
+      <div id="bkCards" class="bk-cards" aria-label="สรุปทั้งเมือง"></div>
+      <p class="bk-note">ไม่ใช่เว็บไซต์ทางการหรือระบบเตือนภัย · ข้อมูลรวบรวมจากหน่วยงานและแหล่งเปิด ตรวจสอบกับหน่วยงานรัฐเสมอ · เหตุฉุกเฉิน กทม. 1555</p>
+    </div>
+    <div id="bkModal" class="bk-modal" hidden role="dialog" aria-modal="true" aria-label="กรุงเทพตอนนี้"><div class="bk-modal-c"></div></div>
+  </main>
+
   <!-- หน้า 4: ทรัพย์ (วางรายการเอง ตรวจทำเลทีละหลายแปลง) -->
   <main class="page-cctv page-pp" id="pagePp" data-size="m" hidden>
     <aside class="cv-side pp-side" aria-label="กรองทรัพย์">
@@ -479,7 +516,7 @@
       </div>
       <div class="cc-body help-body">
         <nav class="help-toc" aria-label="หัวข้อ">
-          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-twin">วิเคราะห์ที่ดิน</a><a href="#h-ops">ห้องควบคุม</a><a href="#h-privacy">ความเป็นส่วนตัว</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-cctv">หน้ากล้อง</a><a href="#h-hike">หน้าเดินป่า</a><a href="#h-props">หน้าทรัพย์</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
+          <a href="#h-start">เริ่มต้น</a><a href="#h-map">แผนที่</a><a href="#h-layers">ชั้นข้อมูล</a><a href="#h-site">ตรวจทำเล</a><a href="#h-twin">วิเคราะห์ที่ดิน</a><a href="#h-ops">ห้องควบคุม</a><a href="#h-privacy">ความเป็นส่วนตัว</a><a href="#h-chat">ถามแชท</a><a href="#h-brief">สรุปเช้านี้</a><a href="#h-cctv">หน้ากล้อง</a><a href="#h-hike">หน้าเดินป่า</a><a href="#h-city">กรุงเทพตอนนี้</a><a href="#h-props">หน้าทรัพย์</a><a href="#h-fresh">ข้อมูลใหม่แค่ไหน</a><a href="#h-limits">ข้อจำกัด</a>
         </nav>
 
         <section id="h-start">
@@ -630,6 +667,12 @@
           <p>เมื่อดูแผนที่เป็นลูกโลก จะเห็นอวกาศ ดาวระยิบที่เลื่อนตามมุมมอง ดาวหางผ่านเป็นระยะ และแสงเรืองรอบขอบโลก (วาดเองในเบราว์เซอร์ ไม่ใช้ภาพจากที่อื่น) ปุ่ม <b>ดาวอื่น</b> ในแถบขวาของแผนที่ หรือหมวด "ดาวดวงอื่น" ในแผนที่ฐาน เปิดดวงจันทร์ ดาวพุธ ดาวศุกร์ ดาวอังคาร ดวงจันทร์ของดาวพฤหัสบดีและดาวเสาร์ ดาวพลูโตและแครอนเป็นลูกโลกหมุนได้ (ลิงก์ เช่น <kbd>#planet=mars</kbd>) พร้อมข้อมูลขนาด แรงโน้มถ่วง และน้ำหนักของคุณบนดาวนั้น ภาพดวงจันทร์และดาวอังคารจาก OpenPlanetaryMap ดวงอื่นจาก USGS Astrogeology (ภาพจากยาน MESSENGER, Magellan, Galileo, Voyager, Cassini, New Horizons) บางดวงยังมีส่วนที่ไม่มีภาพเพราะยานถ่ายได้ไม่รอบดวง</p>
         </section>
 
+        <section id="h-city">
+          <h3>กรุงเทพตอนนี้</h3>
+          <p>เมนู <b>กรุงเทพตอนนี้</b> (มือถือ: กทม.) เปิดแผนที่กรุงเทพกลางคืนแบบสามมิติ ถนนเรืองแสง รถไฟฟ้าตามสีจริง ตึกขึ้นเป็นแท่งเมื่อซูมใกล้ แล้ววางตัวเลขสดลงบนเมือง: ฝนจากสถานีวัดฝน น้ำในคลองเทียบตลิ่ง น้ำบนถนน (สำนักการระบายน้ำ กทม.) ฝุ่น PM2.5 (กรมควบคุมมลพิษ) แม่น้ำเจ้าพระยา (ThaiWater) ความร้อนและลม (แบบจำลอง Open-Meteo) ดัชนีรถติด (Longdo Traffic) และตำแหน่งเรื่องที่ประชาชนแจ้งผ่าน Traffy Fondue (ไม่แสดงข้อความหรือรูปของผู้แจ้ง)</p>
+          <p>แท็บด้านล่างเล่าเรื่องทีละขั้น (ฝนตอนนี้ น้ำในคลอง น้ำบนถนน ลมและฝุ่น ร้อนแค่ไหน รถติด เรื่องจากประชาชน ใต้ดินกรุงเทพ ย้อนดู 24 ชม.) กดชื่อเขตหรือค้นหาเพื่อดูสรุปรายเขตและ "ดูเฉพาะเขตนี้" ทุกค่ามีเวลา ที่มา และป้าย <b>วัดจริง</b> <b>ประมาณ</b> หรือ <b>ข้อมูลเก่า</b> ไม่ใช่ระบบเตือนภัยทางการ ลิงก์ตรง เช่น <kbd>#city=rain</kbd> แรงบันดาลใจจาก Bangkok Twin แต่เขียนใหม่ทั้งหมดและดึงจากหน่วยงานต้นทาง</p>
+        </section>
+
         <section id="h-hike">
           <h3>หน้าเดินป่า</h3>
           <p>รวมยอดเขา เส้นทางเดินป่า อุทยาน น้ำตก จุดชมวิว และลานกางเต็นท์ทั่วไทยจาก OpenStreetMap (ลิงก์ <kbd>#hike</kbd>) กรองตามประเภท ภาค หรือค้นชื่อ กดรายการเพื่อดูภาพตัวอย่างจาก Wikimedia Commons (มีชื่อผู้ถ่ายและสัญญาอนุญาตทุกรูป) เรื่องราวจากวิกิพีเดีย ความสูง กราฟขึ้นลงของเส้นทาง เวลาเดินโดยประมาณ พยากรณ์อากาศ 7 วันที่ปรับตามความสูงของยอด เดือนที่ฝนน้อย เช็กลิสต์อุปกรณ์ (ติ๊กแล้วจำไว้ในเครื่อง) และระดับความน่าเชื่อถือของข้อมูล ความยากและเวลาเป็นการประเมินคร่าวๆ ตรวจสอบกับอุทยานก่อนไปเสมอ</p>
@@ -701,9 +744,9 @@
 <!-- PAGE-END -->
 
 <script src="vendor/maplibre-gl.js"></script>
-<script src="data/data.js?v=202610141617"></script>
-<script src="data/countries.js?v=202610141617"></script>
-<script src="data/th-regions.js?v=202610141617"></script>
-<script src="app.js?v=202610141617"></script>
+<script src="data/data.js?v=202610151147"></script>
+<script src="data/countries.js?v=202610151147"></script>
+<script src="data/th-regions.js?v=202610151147"></script>
+<script src="app.js?v=202610151147"></script>
 </body>
 </html>

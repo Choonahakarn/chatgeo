@@ -11,6 +11,9 @@
   news     หัวข่าวล่าสุด ไทยและโลก (RSS: Bangkok Post, BBC, DW) เก็บแค่หัวข่าว+ลิงก์ → news.json
   sats     วงโคจรดาวเทียม (CelesTrak) ทุก 12 ชม.                             → sats.json
   cables   สายเคเบิลใต้ทะเลจาก OpenStreetMap (ODbL) ทุก 7 วัน               → cables.geojson
+  bkk      กรุงเทพตอนนี้: น้ำในคลอง ฝน น้ำบนถนน (กทม.) ฝุ่น (Air4Thai) แม่น้ำเจ้าพระยา (ThaiWater)
+           เรื่องแจ้งจาก Traffy Fondue (เฉพาะตำแหน่ง สถานะ รหัสเรื่อง)          → bkk.json + bkk_hist.json (ย้อนหลัง 24 ชม.)
+  bkkbase  โครงเมืองกรุงเทพทุก 7 วัน: เขต รถไฟฟ้า สถานี สถานที่สำคัญ (OSM) สถานีสูบน้ำ ประตูระบายน้ำ จุดเสี่ยง (กทม.) → bkk_base.json
 สถานะทุกงานอยู่ใน status.json
 
 ใช้: python scripts/live_feeds.py --out DIR [--only fires,news] [--force] [--mock DIR]
@@ -37,9 +40,10 @@ UTC = timezone.utc
 UA = 'ChatGeo-live/1.0 (+https://choonahakarn.github.io/chatgeo/; github.com/Choonahakarn/chatgeo)'
 MOCK = None  # โฟลเดอร์ไฟล์จำลองสำหรับทดสอบ (ชื่อไฟล์ตามงาน)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+START = time.time()  # งานหนักเช็กเวลารวมของรอบ (workflow ให้ 20 นาที)
 
-EVERY = {'sats': 12 * 3600, 'cables': 7 * 86400}  # งานที่ไม่ต้องทำทุกรอบ (วินาที)
-RETRY_AFTER = {'cables': 6 * 3600}  # งานหนักที่พังแล้ว รอเท่านี้ก่อนลองใหม่ (ไม่ทุบเซิร์ฟเวอร์ทุก 20 นาที)
+EVERY = {'sats': 12 * 3600, 'cables': 7 * 86400, 'bkkbase': 7 * 86400}  # งานที่ไม่ต้องทำทุกรอบ (วินาที)
+RETRY_AFTER = {'cables': 6 * 3600, 'bkkbase': 3600}  # งานหนักที่พังแล้ว รอเท่านี้ก่อนลองใหม่ (ไม่ทุบเซิร์ฟเวอร์ทุก 20 นาที)
 
 
 def now_iso():
@@ -538,7 +542,705 @@ def task_cables(out):
     return {'n': len(feats), 'named': sum(1 for f in feats if f['properties']['name'])}
 
 
-TASKS = {'fires': task_fires, 'aircraft': task_aircraft, 'ships': task_ships, 'news': task_news, 'sats': task_sats, 'cables': task_cables}
+
+
+# ---------------------------------------------------------------- กรุงเทพตอนนี้ (หน้า "กรุงเทพ" ของเว็บ)
+# ลองนึกถึงพนักงานเดินตรวจเมืองที่วนเก็บตัวเลขจากหลายหน่วยงานทุก 20 นาที แล้วจดลงสมุดเล่มเดียว (bkk.json)
+# แหล่งหลักคือเว็บสำนักการระบายน้ำ กทม. (weather.bangkok.go.th) ซึ่งเบราว์เซอร์ของผู้ชมดึงตรงไม่ได้ (ไม่มี CORS)
+# ถ้า กทม. ไม่ตอบ (เช่นไม่รับเครื่องจากต่างประเทศ) จะใช้ ThaiWater (สสน.) แทนเท่าที่มี แต่ละแหล่งพังได้โดยไม่กระทบแหล่งอื่น
+# Traffy Fondue: เก็บแค่ตำแหน่ง สถานะ เวลา และรหัสเรื่อง (ไว้ทำลิงก์) ไม่เก็บข้อความหรือรูปของผู้แจ้ง
+BMA = 'https://weather.bangkok.go.th'
+BKK_BOX = (100.30, 13.48, 100.96, 13.97)  # ตะวันตก ใต้ ตะวันออก เหนือ
+TW = 'https://api-v3.thaiwater.net/api/v1/thaiwater30/public/'
+AIR4THAI = 'https://air4thai.pcd.go.th/services/getNewAQI_JSON.php'
+TRAFFY = 'https://publicapi.traffy.in.th/share/teamchadchart/search'
+BKK_HIST = 'bkk_hist.json'
+TH_TZ = timezone(timedelta(hours=7))
+FLOOD_RE = re.compile(r'น้ำท่วม|น้ำขัง|ท่วมขัง|น้ำไม่ระบาย|ระบายน้ำไม่|ระบายไม่ทัน|ท่อตัน|ท่ออุดตัน|ท่อระบายน้ำอุดตัน|รอการระบาย')
+RIVER_KEY = re.compile(r'ท้ายเขื่อนเจ้าพระยา|บางไทร|นวลฉวี|สามเสน|สะพานกรุงเทพ|ปากเกร็ด|พระนั่งเกล้า|ป้อมพระจุล|บางกระเจ้า|พระประแดง')
+
+
+def _in_box(lon, lat, pad=0.0):
+    return BKK_BOX[0] - pad <= lon <= BKK_BOX[2] + pad and BKK_BOX[1] - pad <= lat <= BKK_BOX[3] + pad
+
+
+def _f(x, nd=2):
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    if v != v or v in (float('inf'), float('-inf')):
+        return None
+    return round(v, nd)
+
+
+def _ms_net(s):
+    """'/Date(1791981600000)/' (แบบ .NET) -> มิลลิวินาที UTC"""
+    m = re.search(r'/Date\((\d+)', str(s or ''))
+    return int(m.group(1)) if m else None
+
+
+def _ms_th(s):
+    """'14/10/2569 19:40' (พ.ศ. เวลาไทย) หรือ '2026-10-14 19:40' (ค.ศ. เวลาไทย) -> มิลลิวินาที UTC"""
+    s = str(s or '').strip()
+    m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}):(\d{2})', s)
+    try:
+        if m:
+            d, mo, y, h, mi = map(int, m.groups())
+        else:
+            m = re.match(r'(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})', s)
+            if not m:
+                return None
+            y, mo, d, h, mi = map(int, m.groups())
+        if y > 2400:
+            y -= 543
+        return int(datetime(y, mo, d, h, mi, tzinfo=TH_TZ).timestamp() * 1000)
+    except ValueError:
+        return None
+
+
+def _bma(path, mock):
+    # เว็บ กทม. ให้ข้อมูลแผนที่ผ่าน POST เปล่า (แบบเดียวกับหน้าเว็บของเขา) ไม่ปลอมหัวข้อใดๆ
+    raw = get(BMA + path, data=b'', timeout=45, mock=mock, tries=2)
+    j = json.loads(raw)
+    if not isinstance(j, list):
+        raise RuntimeError('รูปแบบข้อมูล กทม. เปลี่ยน')
+    return j
+
+
+def bkk_canal():
+    rows = []
+    for x in _bma('/water/PageMap/GoogleMap', 'bma_water.json'):
+        lon, lat = _f(x.get('longitude'), 5), _f(x.get('latitude'), 5)
+        if lon is None or lat is None or not _in_box(lon, lat, 0.12):
+            continue
+        banks = [b for b in (_f(x.get('left_bank')), _f(x.get('right_bank'))) if b is not None]
+        name = re.sub(r'\s*\*+\s*$', '', str(x.get('water_shortname') or x.get('water_name') or '')).strip()
+        rows.append([str(x.get('water_code') or ''), name, lon, lat, _f(x.get('wl_in')), min(banks) if banks else None,
+                     _f(x.get('warning')), _f(x.get('critical')), str(x.get('txtStatus') or '').strip(),
+                     _ms_net(x.get('site_timestamp')) or _ms_th(x.get('site_timestampTH')),
+                     re.sub(r'^(เขต|อำเภอ)', '', str(x.get('district_name') or '').strip()), str(x.get('river_name') or '').strip(),
+                     str(x.get('water_url') or '')])
+    if len(rows) < 30:
+        raise RuntimeError('ได้จุดวัดน้ำในคลองน้อยผิดปกติ %d จุด' % len(rows))
+    return {'from': 'bma', 'cols': ['code', 'name', 'lon', 'lat', 'wl', 'bank', 'warn', 'crit', 'st', 'ms', 'dist', 'river', 'url'], 'rows': rows}
+
+
+def bkk_rain():
+    cols = ['code', 'name', 'lon', 'lat', 'r15', 'r1h', 'r3h', 'r24h', 'ms', 'dist', 'ok']
+    try:
+        rows = []
+        for x in _bma('/rain/PageMap/GetDataForUpdate', 'bma_rain.json'):
+            lon, lat = _f(x.get('longitude'), 5), _f(x.get('latitude'), 5)
+            if lon is None or lat is None or not _in_box(lon, lat, 0.12):
+                continue
+            rows.append([str(x.get('rain_code') or ''), str(x.get('rain_shortname') or x.get('rain_name') or '').strip(), lon, lat,
+                         _f(x.get('rf15min'), 1), _f(x.get('rf1hr'), 1), _f(x.get('rf3hr'), 1), _f(x.get('rf24hr'), 1),
+                         _ms_net(x.get('site_timestamp')) or _ms_th(x.get('site_timestampTH')), str(x.get('district_name') or '').strip(),
+                         1 if x.get('status') in (1, '1', True) else 0])
+        if len(rows) < 20:
+            raise RuntimeError('ได้สถานีฝนน้อยผิดปกติ %d สถานี' % len(rows))
+        return {'from': 'bma', 'cols': cols, 'rows': rows}
+    except Exception as e:  # noqa: BLE001
+        print('   bkk ฝน กทม. ไม่ตอบ (%s) ใช้ ThaiWater ฝนสะสมวันนี้แทน' % str(e)[:120], flush=True)
+    j = json.loads(get(TW + 'rain_today', timeout=90, mock='tw_rain_today.json'))
+    now, rows = time.time() * 1000, []
+    for x in j.get('data') or []:
+        st, geo = x.get('station') or {}, x.get('geocode') or {}
+        lon, lat = _f(st.get('tele_station_long'), 5), _f(st.get('tele_station_lat'), 5)
+        if lon is None or lat is None or not _in_box(lon, lat, 0.05):
+            continue
+        ms = _ms_th(x.get('rainfall_datetime'))
+        if not ms or now - ms > 36 * 3600e3:
+            continue
+        rows.append([str(st.get('tele_station_oldcode') or st.get('id') or ''), str((st.get('tele_station_name') or {}).get('th') or '').strip(), lon, lat,
+                     None, None, None, _f(x.get('rainfall_value'), 1), ms, str((geo.get('amphoe_name') or {}).get('th') or ''), 1])
+    if len(rows) < 10:
+        raise RuntimeError('ThaiWater: ได้สถานีฝนในกรุงเทพน้อยผิดปกติ %d สถานี' % len(rows))
+    return {'from': 'thaiwater', 'note': 'r24h = ฝนสะสมตั้งแต่ 07:00 วันนี้', 'cols': cols, 'rows': rows}
+
+
+def bkk_road():
+    cols = ['code', 'name', 'lon', 'lat', 'cm', 'st', 'ms', 'kind', 'url']
+    try:
+        rows = []
+        for x in _bma('/flood/PageMap/GoogleMap', 'bma_flood.json'):
+            lon, lat = _f(x.get('longitude'), 5), _f(x.get('latitude'), 5)
+            if lon is None or lat is None or not _in_box(lon, lat, 0.12):
+                continue
+            name = re.sub(r'\s*\*+\s*$', '', str(x.get('flood_short_name') or x.get('flood_name') or '')).strip()
+            rows.append([str(x.get('flood_code') or ''), name, lon, lat, _f(x.get('flood'), 0), str(x.get('chkStatustxt') or '').strip(),
+                         _ms_net(x.get('site_timestamp')) or _ms_th(x.get('site_timestatmpTH')), int(x.get('typesite') or 0), str(x.get('web_url') or '')])
+        if len(rows) < 20:
+            raise RuntimeError('ได้จุดวัดน้ำบนถนนน้อยผิดปกติ %d จุด' % len(rows))
+        return {'from': 'bma', 'cols': cols, 'rows': rows}
+    except Exception as e:  # noqa: BLE001
+        print('   bkk น้ำบนถนน กทม. ไม่ตอบ (%s) ใช้ ThaiWater แทน' % str(e)[:120], flush=True)
+    j = json.loads(get(TW + 'flood_road', timeout=60, mock='tw_flood_road.json'))
+    rows = []
+    for x in j.get('data') or []:
+        st = x.get('station') or {}
+        lon, lat = _f(st.get('floodroad_long'), 5), _f(st.get('floodroad_lat'), 5)
+        if lon is None or lat is None or not _in_box(lon, lat, 0.05):
+            continue
+        cm = _f(x.get('floodroad_value'), 0)
+        rows.append([str(st.get('floodroad_oldcode') or st.get('id') or ''), str((st.get('floodroad_name') or {}).get('th') or '').strip(), lon, lat, cm,
+                     'มีน้ำ' if cm and cm > 0 else 'ปกติ', _ms_th(x.get('floodroad_datetime')), 1, ''])
+    if len(rows) < 10:
+        raise RuntimeError('ThaiWater: ได้จุดวัดน้ำบนถนนน้อยผิดปกติ %d จุด' % len(rows))
+    return {'from': 'thaiwater', 'cols': cols, 'rows': rows}
+
+
+def bkk_air():
+    j = json.loads(get(AIR4THAI, timeout=45, mock='air4thai.json'))
+    rows = []
+    for s in j.get('stations') or []:
+        lon, lat = _f(s.get('long'), 5), _f(s.get('lat'), 5)
+        if lon is None or lat is None or not _in_box(lon, lat, 0.08):
+            continue
+        last = s.get('AQILast') or {}
+        pm = _f((last.get('PM25') or {}).get('value'), 1)
+        if pm is not None and pm < 0:
+            pm = None
+        aqi = _f((last.get('AQI') or {}).get('aqi'), 0)
+        if aqi is not None and aqi < 0:
+            aqi = None
+        rows.append([str(s.get('stationID') or ''), str(s.get('nameTH') or s.get('nameEN') or '').strip(), lon, lat, pm, aqi,
+                     _ms_th('%s %s' % (last.get('date') or '', last.get('time') or '')), str(s.get('areaTH') or '').strip()])
+    if len(rows) < 3:
+        raise RuntimeError('ได้สถานีคุณภาพอากาศในกรุงเทพน้อยผิดปกติ %d สถานี' % len(rows))
+    return {'from': 'air4thai', 'cols': ['id', 'name', 'lon', 'lat', 'pm25', 'aqi', 'ms', 'area'], 'rows': rows}
+
+
+def bkk_river():
+    """แม่น้ำเจ้าพระยาจากเหนือเขื่อนลงทะเล (ThaiWater สสน.) เฉพาะสถานีบนลำน้ำหลักและในกรุงเทพ"""
+    j = json.loads(get(TW + 'waterlevel_load', timeout=90, mock='tw_waterlevel.json'))
+    wd = j.get('waterlevel_data')
+    data = wd if isinstance(wd, list) else ((wd or {}).get('data') or [])
+    now, rows = time.time() * 1000, []
+    for x in data:
+        st, geo = x.get('station') or {}, x.get('geocode') or {}
+        basin = str(((x.get('basin') or {}).get('basin_name') or {}).get('th') or '')
+        if 'เจ้าพระยา' not in basin:
+            continue
+        name = str((st.get('tele_station_name') or {}).get('th') or '').strip()
+        lon, lat = _f(st.get('tele_station_long'), 5), _f(st.get('tele_station_lat'), 5)
+        if lon is None or lat is None or re.match(r'^(คลอง|ค\.|ปตร|ทรบ|สถานีสูบ|ประตู|ปากคลอง)', name):
+            continue
+        if not (RIVER_KEY.search(name) or _in_box(lon, lat, 0.02)):
+            continue
+        ms = _ms_th(x.get('waterlevel_datetime'))
+        if not ms or now - ms > 48 * 3600e3:
+            continue
+        rows.append([name, lon, lat, _f(x.get('waterlevel_msl')), _f(st.get('min_bank')), _f(x.get('storage_percent'), 1), ms,
+                     str((geo.get('province_name') or {}).get('th') or ''), x.get('situation_level')])
+    rows.sort(key=lambda r: -r[2])
+    if not rows:
+        raise RuntimeError('ไม่พบสถานีแม่น้ำเจ้าพระยา')
+    return {'from': 'thaiwater', 'cols': ['name', 'lon', 'lat', 'wl', 'bank', 'pct', 'ms', 'prov', 'lvl'], 'rows': rows}
+
+
+def _traffy_ts(s):
+    try:
+        return datetime.strptime(str(s)[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC).timestamp()
+    except ValueError:
+        return None
+
+
+def bkk_traffy():
+    since, t0 = time.time() - 24 * 3600, time.time()
+    by, rows, n, pages = {}, [], 0, 0
+    for page in range(6):  # เรื่องใหม่สุดก่อน หน้าละ 1,000 เรื่อง (ราว 8 ชม.) จนครบ 24 ชม.
+        if page and time.time() - t0 > 80:
+            break
+        try:
+            j = json.loads(get(TRAFFY + '?limit=1000&offset=%d' % (page * 1000), timeout=60, mock='traffy.json' if page == 0 else 'traffy_%d.json' % page, tries=2))
+        except Exception:  # noqa: BLE001
+            if page == 0:
+                raise
+            break
+        res = j.get('results') or []
+        pages += 1
+        oldest = None
+        for x in res:
+            ts = _traffy_ts(x.get('timestamp'))
+            if ts is None:
+                continue
+            oldest = ts if oldest is None else min(oldest, ts)
+            if ts < since:
+                continue
+            c = x.get('coords') or []
+            try:
+                lon, lat = round(float(c[0]), 5), round(float(c[1]), 5)
+            except (TypeError, ValueError, IndexError):
+                continue
+            if not _in_box(lon, lat, 0.03):
+                continue
+            n += 1
+            m = re.search(r'เขต\s*([^\s,]+)', str(x.get('address') or ''))
+            d = m.group(1) if m else ''
+            by[d] = by.get(d, 0) + 1
+            types = ' '.join(t for t in (x.get('problem_type_abdul') or []) if t)
+            # ข้อความผู้แจ้งใช้คัดว่าเป็นเรื่องน้ำหรือไม่เท่านั้น ไม่เก็บลงไฟล์
+            if re.search(r'น้ำท่วม|ท่อระบายน้ำ', types) or FLOOD_RE.search(str(x.get('description') or '')):
+                rows.append([str(x.get('ticket_id') or ''), lon, lat, str(x.get('state') or '')[:24], int(ts * 1000), d])
+        if not res or (oldest is not None and oldest < since):
+            break
+    if n == 0:
+        raise RuntimeError('ไม่ได้เรื่องจาก Traffy Fondue ใน 24 ชม.')
+    rows.sort(key=lambda r: -r[4])
+    return {'from': 'traffy', 'hours': 24, 'n': n, 'pages': pages, 'by': by, 'cols': ['id', 'lon', 'lat', 'state', 'ms', 'dist'], 'rows': rows[:2000]}
+
+
+def bkk_hist(out, doc):
+    """เก็บค่าย้อนหลัง 24 ชม. ทุกรอบ (ราว 20 นาที) ไว้ให้หน้าเว็บเล่นย้อนดู"""
+    p = os.path.join(out, BKK_HIST)
+    try:
+        h = json.load(open(p, encoding='utf-8'))
+    except (OSError, ValueError):
+        h = {}
+    if h.get('v') != 1 or not isinstance(h.get('ts'), list):
+        h = {'v': 1, 'ts': []}
+    keys = (('canal', 4), ('rain', 5), ('road', 4))
+    for k, _ in keys:
+        h.setdefault(k, {})
+    now = int(time.time())
+    if h['ts'] and now - h['ts'][-1] < 12 * 60:
+        return len(h['ts'])
+    cut = 0
+    while cut < len(h['ts']) and now - h['ts'][cut] > 24 * 3600 + 900:
+        cut += 1
+    h['ts'] = h['ts'][cut:]
+    for k, _ in keys:
+        for code in list(h[k]):
+            h[k][code] = h[k][code][cut:]
+    idx = len(h['ts'])
+    h['ts'].append(now)
+    for k, col in keys:
+        sec = doc.get(k) or {}
+        fresh = (doc.get('src') or {}).get(k, {}).get('ok') and sec.get('from') == 'bma'
+        vals = {}
+        if fresh:
+            for r in sec.get('rows') or []:
+                v = r[col]
+                if k == 'road' and re.search(r'ขัดข้อง', str(r[5] or '')):
+                    v = None
+                vals[r[0]] = v
+        for code in set(h[k]) | set(vals):
+            arr = h[k].setdefault(code, [])
+            arr.extend([None] * (idx - len(arr)))
+            del arr[idx:]
+            arr.append(vals.get(code))
+        for code in list(h[k]):
+            if all(v is None for v in h[k][code]):
+                del h[k][code]
+    h['t'] = now_iso()
+    write_json(out, BKK_HIST, h)
+    return len(h['ts'])
+
+
+def task_bkk(out):
+    try:
+        prev = json.load(open(os.path.join(out, 'bkk.json'), encoding='utf-8'))
+    except (OSError, ValueError):
+        prev = {}
+    doc = {'v': 1, 't': now_iso(), 'src': {}}
+    for name, fn in (('canal', bkk_canal), ('rain', bkk_rain), ('road', bkk_road), ('air', bkk_air), ('river', bkk_river), ('traffy', bkk_traffy)):
+        t0 = time.time()
+        try:
+            doc[name] = fn()
+            doc['src'][name] = {'ok': True, 'from': doc[name].get('from', ''), 'n': len(doc[name].get('rows') or []), 's': round(time.time() - t0, 1)}
+        except Exception as e:  # noqa: BLE001  แหล่งหนึ่งพังไม่กระทบแหล่งอื่น
+            doc['src'][name] = {'ok': False, 'err': str(e)[:200]}
+            print('   bkk %s ไม่สำเร็จ: %s' % (name, str(e)[:160]), flush=True)
+            if prev.get(name):  # ใช้ของรอบก่อน หน้าเว็บจะเห็นเวลาเก่าและติดป้าย "ข้อมูลเก่า" เอง
+                doc[name] = prev[name]
+                doc['src'][name]['kept'] = prev.get('t')
+    if not any(v.get('ok') for v in doc['src'].values()):
+        raise RuntimeError('ทุกแหล่งไม่ตอบ: ' + '; '.join('%s=%s' % (k, v.get('err', '')[:60]) for k, v in doc['src'].items()))
+    write_json(out, 'bkk.json', doc)
+    try:
+        nh = bkk_hist(out, doc)
+    except Exception as e:  # noqa: BLE001
+        nh = 'x'
+        print('   bkk ประวัติ 24 ชม. ไม่สำเร็จ: %s' % e, flush=True)
+    info = {k: (v.get('from', '') + ':' + str(v.get('n'))) if v.get('ok') else 'x' for k, v in doc['src'].items()}
+    info['hist'] = nh
+    return info
+
+
+# ---------------------------------------------------------------- โครงเมืองกรุงเทพ (สัปดาห์ละครั้ง)
+# เขต 50 เขต เส้นรถไฟฟ้า สถานี และสถานที่สำคัญจาก OpenStreetMap (ODbL) + สถานีสูบน้ำ ประตูระบายน้ำ จุดเสี่ยงน้ำท่วม จาก data.bangkok.go.th
+# ถามทีละส่วน ส่วนที่ได้แล้วเก็บใน bkk_base_parts.json รอบหน้าถามเฉพาะที่ยังขาด (เซิร์ฟเวอร์ Overpass ยุ่งบ่อย)
+BKK_PARTS = 'bkk_base_parts.json'
+OVP_BOX = '13.40,100.25,14.10,100.98'  # ใต้ ตะวันตก เหนือ ตะวันออก
+OVP_IN = '13.48,100.30,13.97,100.96'
+BKK_MARKS = [  # (ชื่อใน OSM แบบขึ้นต้น, ชื่อที่แสดง, ชื่ออังกฤษ, ชนิด)
+    ('วัดพระศรีรัตนศาสดาราม', 'วัดพระแก้ว', 'Wat Phra Kaew', 'temple'), ('พระบรมมหาราชวัง', 'พระบรมมหาราชวัง', 'Grand Palace', 'palace'),
+    ('วัดพระเชตุพน', 'วัดโพธิ์', 'Wat Pho', 'temple'), ('วัดอรุณราชวราราม', 'วัดอรุณฯ', 'Wat Arun', 'temple'),
+    ('วัดสระเกศ', 'ภูเขาทอง', 'Golden Mount', 'temple'), ('วัดเบญจมบพิตร', 'วัดเบญจมบพิตรฯ', 'Wat Benchamabophit', 'temple'),
+    ('วัดไตรมิตร', 'วัดไตรมิตร', 'Wat Traimit', 'temple'), ('วัดปากน้ำ', 'วัดปากน้ำ', 'Wat Paknam', 'temple'),
+    ('เสาชิงช้า', 'เสาชิงช้า', 'Giant Swing', 'monument'), ('อนุสาวรีย์ประชาธิปไตย', 'อนุสาวรีย์ประชาธิปไตย', 'Democracy Monument', 'monument'),
+    ('อนุสาวรีย์ชัยสมรภูมิ', 'อนุสาวรีย์ชัยฯ', 'Victory Monument', 'monument'), ('พระที่นั่งอนันตสมาคม', 'พระที่นั่งอนันตสมาคม', 'Ananta Samakhom', 'palace'),
+    ('สวนลุมพินี', 'สวนลุมพินี', 'Lumphini Park', 'park'), ('สวนจตุจักร', 'สวนจตุจักร', 'Chatuchak Park', 'park'),
+    ('สวนเบญจกิติ', 'สวนเบญจกิติ', 'Benjakitti Park', 'park'), ('ตลาดนัดจตุจักร', 'ตลาดนัดจตุจักร', 'Chatuchak Market', 'market'),
+    ('ไอคอนสยาม', 'ไอคอนสยาม', 'ICONSIAM', 'mall'), ('สยามพารากอน', 'สยามพารากอน', 'Siam Paragon', 'mall'),
+    ('เซ็นทรัลเวิลด์', 'เซ็นทรัลเวิลด์', 'centralwOrld', 'mall'), ('เอเชียทีค', 'เอเชียทีค', 'Asiatique', 'market'),
+    ('สถานีกลางกรุงเทพอภิวัฒน์|สถานีกลางบางซื่อ', 'สถานีกลางกรุงเทพอภิวัฒน์', 'Krung Thep Aphiwat', 'station'),
+    ('สถานีรถไฟกรุงเทพ|หัวลำโพง', 'หัวลำโพง', 'Hua Lamphong', 'station'),
+    ('ท่าอากาศยานดอนเมือง|ท่าอากาศยานนานาชาติดอนเมือง', 'สนามบินดอนเมือง', 'Don Mueang Airport', 'airport'),
+    ('ท่าอากาศยานสุวรรณภูมิ', 'สนามบินสุวรรณภูมิ', 'Suvarnabhumi Airport', 'airport'),
+    ('สะพานพระราม 8', 'สะพานพระราม 8', 'Rama VIII Bridge', 'bridge'), ('สะพานพระพุทธยอดฟ้า', 'สะพานพุทธฯ', 'Memorial Bridge', 'bridge'),
+    ('สะพานภูมิพล', 'สะพานภูมิพล', 'Bhumibol Bridge', 'bridge'),
+    ('มหาวิทยาลัยเกษตรศาสตร์', 'ม.เกษตรศาสตร์', 'Kasetsart University', 'campus'), ('จุฬาลงกรณ์มหาวิทยาลัย', 'จุฬาฯ', 'Chulalongkorn University', 'campus'),
+    ('โรงพยาบาลศิริราช', 'รพ.ศิริราช', 'Siriraj Hospital', 'hospital'), ('ศาลาว่าการกรุงเทพมหานคร', 'ศาลาว่าการ กทม.', 'Bangkok City Hall', 'gov'),
+    ('ศูนย์ราชการเฉลิมพระเกียรติ', 'ศูนย์ราชการฯ แจ้งวัฒนะ', 'Government Complex', 'gov'),
+    ('พิพิธภัณฑสถานแห่งชาติ พระนคร', 'พิพิธภัณฑ์แห่งชาติ', 'National Museum', 'museum'),
+    ('ศูนย์การประชุมแห่งชาติสิริกิติ์', 'ศูนย์ฯ สิริกิติ์', 'QSNCC', 'venue'), ('ราชมังคลากีฬาสถาน', 'ราชมังคลากีฬาสถาน', 'Rajamangala Stadium', 'stadium'),
+    ('สนามศุภชลาศัย', 'สนามศุภชลาศัย', 'Suphachalasai Stadium', 'stadium'),
+    ('ใบหยก 2|อาคารใบหยก 2|ใบหยกสกาย|ใบหยก ทาวเวอร์ 2', 'ใบหยก 2', 'Baiyoke Tower II', 'tower'),
+    ('คิง เพาเวอร์ มหานคร|คิงเพาเวอร์ มหานคร|มหานคร$', 'คิง เพาเวอร์ มหานคร', 'King Power MahaNakhon', 'tower'),
+    ('สเตท ทาวเวอร์|สเตททาวเวอร์', 'สเตท ทาวเวอร์', 'State Tower', 'tower'),
+    ('ท่าเรือกรุงเทพ', 'ท่าเรือกรุงเทพ', 'Bangkok Port', 'port'), ('ถนนเยาวราช|เยาวราช$', 'เยาวราช', 'Yaowarat', 'street'),
+]
+BMA_CKAN = 'https://data.bangkok.go.th/dataset/'
+BMA_CSV = {
+    'gate': BMA_CKAN + '83ae5639-a37f-4e19-bd37-e1c97930f39d/resource/42948cf7-0759-4719-a32f-8eeabd89b8ee/download/floodgate.csv',
+    'pump': BMA_CKAN + 'f482270f-04cf-4df1-a120-f808110a7a8a/resource/0a30a58c-213f-4aec-bf16-7dd7f61fb5fd/download/pump-station.csv',
+    'wpump': BMA_CKAN + '82cb9fcc-ddea-436a-abfa-eb5dc9fc85fc/resource/53205669-40f9-4cb6-b902-7b8fbc945919/download/water-pump-station.csv',
+    'risk': BMA_CKAN + '25bc3f04-5707-4b60-a885-5ad45aa38cd6/resource/837b7fb6-ce1f-4356-881e-6bf14eeb075f/download/flood_risk26.csv',
+}
+TRAIN_KEEP = re.compile(r'แดง|Red|Airport|แอร์พอร์ต|ARL|SRTET', re.I)
+LINE_COL = {'subway': '#3B82F6', 'light_rail': '#22C55E', 'monorail': '#EAB308', 'train': '#EF4444'}
+
+
+def _ovp(q, mock):
+    err = None
+    for u in OVERPASS_MIRRORS:
+        try:
+            raw = get(u, timeout=200, data=urllib.parse.urlencode({'data': q}).encode(), mock=mock, tries=1)
+            if raw[:1] != b'{':
+                raise RuntimeError('Overpass ตอบไม่ใช่ JSON (ยุ่ง)')
+            return json.loads(raw)
+        except Exception as e:  # noqa: BLE001
+            err = e
+            print('   bkkbase ที่ %s ไม่สำเร็จ: %s' % (u.split('/')[2], str(e)[:120]), flush=True)
+            if MOCK is not None:
+                break
+    raise err
+
+
+def _dp(pts, tol):
+    """ลดจุดเส้น (Douglas-Peucker) พิกัดองศา ปรับแกน x ตามละติจูดกรุงเทพ"""
+    if len(pts) < 4:
+        return pts
+    kx = math.cos(math.radians(13.75))
+    keep = [False] * len(pts)
+    keep[0] = keep[-1] = True
+    st = [(0, len(pts) - 1)]
+    while st:
+        a, b = st.pop()
+        ax, ay, bx, by = pts[a][0] * kx, pts[a][1], pts[b][0] * kx, pts[b][1]
+        dx, dy = bx - ax, by - ay
+        L = dx * dx + dy * dy
+        md, mi = 0.0, -1
+        for i in range(a + 1, b):
+            px, py = pts[i][0] * kx, pts[i][1]
+            t = ((px - ax) * dx + (py - ay) * dy) / L if L else 0.0
+            t = max(0.0, min(1.0, t))
+            ex, ey = ax + t * dx - px, ay + t * dy - py
+            d = ex * ex + ey * ey
+            if d > md:
+                md, mi = d, i
+        if mi > 0 and md > tol * tol:
+            keep[mi] = True
+            st.append((a, mi))
+            st.append((mi, b))
+    return [p for p, k in zip(pts, keep) if k]
+
+
+def _q5(pts):
+    return [[round(p[0], 5), round(p[1], 5)] for p in pts]
+
+
+def _rings(ways):
+    """ต่อเส้นขอบหลายเส้นให้เป็นวงปิด"""
+    ways = [w[:] for w in ways if len(w) >= 2]
+    rings = []
+    while ways:
+        ring = ways.pop(0)
+        guard = 0
+        while ring[0] != ring[-1] and guard < 5000:
+            guard += 1
+            end = ring[-1]
+            k = next((i for i, w in enumerate(ways) if w[0] == end or w[-1] == end), -1)
+            if k < 0:
+                break
+            w = ways.pop(k)
+            if w[0] != end:
+                w = w[::-1]
+            ring += w[1:]
+        if len(ring) >= 4 and ring[0] == ring[-1]:
+            rings.append(ring)
+    return rings
+
+
+def _area_km2(r):
+    kx, ky = math.cos(math.radians(13.75)) * 111.32, 110.57
+    s = 0.0
+    for i in range(len(r) - 1):
+        s += r[i][0] * kx * r[i + 1][1] * ky - r[i + 1][0] * kx * r[i][1] * ky
+    return s / 2
+
+
+def _inside(pt, ring):
+    x, y, c = pt[0], pt[1], False
+    j = len(ring) - 1
+    for i in range(len(ring)):
+        xi, yi, xj, yj = ring[i][0], ring[i][1], ring[j][0], ring[j][1]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi:
+            c = not c
+        j = i
+    return c
+
+
+def base_districts():
+    j = _ovp('[out:json][timeout:180];rel["boundary"="administrative"]["admin_level"="6"](%s);out geom;' % OVP_IN, 'ovp_districts.json')
+    out = []
+    for el in j.get('elements') or []:
+        tg = el.get('tags') or {}
+        name = str(tg.get('name') or '')
+        if not name.startswith('เขต'):  # อำเภอของจังหวัดข้างเคียงขึ้นต้นด้วย "อำเภอ"
+            continue
+        outer = [[[p['lon'], p['lat']] for p in m.get('geometry') or []] for m in el.get('members') or [] if m.get('type') == 'way' and m.get('role') != 'inner']
+        inner = [[[p['lon'], p['lat']] for p in m.get('geometry') or []] for m in el.get('members') or [] if m.get('type') == 'way' and m.get('role') == 'inner']
+        ro, ri = _rings(outer), _rings(inner)
+        if not ro:
+            continue
+        km2 = sum(abs(_area_km2(r)) for r in ro) - sum(abs(_area_km2(r)) for r in ri)
+        polys = [[_q5(_dp(r, 0.00018))] for r in ro]
+        for r in ri:
+            for poly in polys:
+                if _inside(r[0], poly[0]):
+                    poly.append(_q5(_dp(r, 0.00018)))
+                    break
+        big = max(ro, key=lambda r: abs(_area_km2(r)))
+        cx = sum(p[0] for p in big[:-1]) / (len(big) - 1)
+        cy = sum(p[1] for p in big[:-1]) / (len(big) - 1)
+        lab = tg.get('label_point')
+        out.append({'id': el.get('id'), 'th': name[3:].strip(), 'en': re.sub(r'\s*District$', '', str(tg.get('name:en') or '')).strip(),
+                    'km2': round(km2, 1), 'c': [round(cx, 4), round(cy, 4)], 'g': polys, 'lab': bool(lab)})
+    if len(out) < 40:
+        raise RuntimeError('ได้เขตไม่ครบ (%d เขต)' % len(out))
+    out.sort(key=lambda d: d['th'])
+    return out
+
+
+def base_lines():
+    j = _ovp('[out:json][timeout:180];rel["type"="route"]["route"~"^(subway|light_rail|monorail|train)$"](%s);out geom(%s);' % (OVP_BOX, OVP_BOX), 'ovp_lines.json')
+    lines = {}
+    for el in j.get('elements') or []:
+        tg = el.get('tags') or {}
+        kind = tg.get('route')
+        label = ' '.join(str(tg.get(k) or '') for k in ('name', 'name:en', 'network', 'ref', 'operator'))
+        if kind == 'train' and not TRAIN_KEEP.search(label):
+            continue  # รถไฟทางไกลที่วิ่งผ่านกรุงเทพไม่เอา
+        name = re.split(r'\s*[:：]\s*', str(tg.get('name') or ''))[0].strip()
+        en = re.split(r'\s*[:：]\s*', str(tg.get('name:en') or ''))[0].strip()
+        col = str(tg.get('colour') or '').strip() or LINE_COL.get(kind, '#9CA3AF')
+        if not re.match(r'^#[0-9A-Fa-f]{3,8}$', col):
+            col = LINE_COL.get(kind, '#9CA3AF')
+        key = (col.upper(), str(tg.get('ref') or name or en))
+        L = lines.setdefault(key, {'k': kind, 'th': name, 'en': en, 'ref': str(tg.get('ref') or ''), 'net': str(tg.get('network') or ''),
+                                   'col': col, 'ways': {}})
+        for m in el.get('members') or []:
+            if m.get('type') != 'way' or m.get('role') in ('platform', 'stop', 'stop_exit_only', 'stop_entry_only'):
+                continue
+            g = m.get('geometry') or []
+            pts = [[p['lon'], p['lat']] for p in g if p]
+            if len(pts) >= 2:
+                L['ways'][m.get('ref')] = pts
+    out = []
+    for L in lines.values():
+        if not L['ways']:
+            continue
+        geom, km = [], 0.0
+        for pts in L['ways'].values():
+            for i in range(len(pts) - 1):
+                km += _km(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1])
+            geom.append(_q5(_dp(pts, 0.00005)))
+        out.append({'k': L['k'], 'th': L['th'], 'en': L['en'], 'ref': L['ref'], 'net': L['net'], 'col': L['col'], 'km': round(km, 1), 'g': geom})
+    if len(out) < 5:
+        raise RuntimeError('ได้เส้นรถไฟฟ้าน้อยผิดปกติ %d เส้น' % len(out))
+    out.sort(key=lambda d: (d['k'], d['net'], d['th']))
+    return out
+
+
+def _km(lon1, lat1, lon2, lat2):
+    p = math.pi / 180
+    a = 0.5 - math.cos((lat2 - lat1) * p) / 2 + math.cos(lat1 * p) * math.cos(lat2 * p) * (1 - math.cos((lon2 - lon1) * p)) / 2
+    return 12742 * math.asin(math.sqrt(max(0.0, a)))
+
+
+def _center(el):
+    if 'lat' in el and 'lon' in el:
+        return el['lon'], el['lat']
+    c = el.get('center') or {}
+    if 'lat' in c:
+        return c['lon'], c['lat']
+    return None
+
+
+def base_stations():
+    j = _ovp('[out:json][timeout:120];nwr["railway"="station"](%s);out center tags;' % OVP_BOX, 'ovp_stations.json')
+    out, seen = [], set()
+    for el in j.get('elements') or []:
+        tg, c = el.get('tags') or {}, _center(el)
+        name = str(tg.get('name') or '').strip()
+        if not c or not name:
+            continue
+        kind = str(tg.get('station') or ('train' if tg.get('train') == 'yes' else 'train'))
+        key = (name, round(c[0], 3), round(c[1], 3))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append([name, str(tg.get('name:en') or ''), round(c[0], 5), round(c[1], 5), kind, str(tg.get('network') or tg.get('operator') or '')])
+    if len(out) < 50:
+        raise RuntimeError('ได้สถานีน้อยผิดปกติ %d สถานี' % len(out))
+    return out
+
+
+def base_marks():
+    pat = '|'.join(p[0] for p in BKK_MARKS)
+    q = ('[out:json][timeout:150];(nwr["name"~"^(%s)"](%s);way["building"]["height"](%s)(if: number(t["height"]) >= 220););out center tags;'
+         % (pat, OVP_IN, OVP_IN))
+    j = _ovp(q, 'ovp_marks.json')
+    out = base_marks_from(j.get('elements') or [])
+    if len(out) < 10:
+        raise RuntimeError('ได้สถานที่สำคัญน้อยผิดปกติ %d แห่ง' % len(out))
+    return out
+
+
+def base_marks_from(els):
+    """เลือกวัตถุที่ดีที่สุดของแต่ละชื่อในรายการ + ตึกสูงเกิน 220 ม. (ใช้ทั้งกับผล Overpass และไฟล์ OSM ทั้งประเทศ)"""
+    out = []
+    for pat1, disp, en, kind in BKK_MARKS:
+        rx = re.compile('^(%s)' % pat1)
+        best, bs = None, -1
+        for el in els:
+            tg = el.get('tags') or {}
+            name = str(tg.get('name') or '')
+            if not rx.search(name) or not _center(el):
+                continue
+            s = (3 if tg.get('wikidata') else 0) + (2 if name == pat1.split('|')[0] else 0) + (1 if el.get('type') != 'node' else 0) + \
+                (1 if any(k in tg for k in ('tourism', 'historic', 'building', 'aeroway', 'railway', 'leisure', 'amenity')) else 0)
+            if s > bs:
+                best, bs = el, s
+        if best:
+            c = _center(best)
+            out.append([disp, en, round(c[0], 5), round(c[1], 5), kind])
+    for el in els:  # ตึกสูงเกิน 220 ม. ที่ยังไม่อยู่ในรายการ
+        tg, c = el.get('tags') or {}, _center(el)
+        if not c or 'height' not in tg or not tg.get('name'):
+            continue
+        if any(_km(c[0], c[1], o[2], o[3]) < 0.2 for o in out):
+            continue
+        h = _f(re.sub(r'[^\d.]', '', str(tg.get('height'))), 0)
+        if h is None or h < 220:
+            continue
+        out.append([str(tg.get('name'))[:40], str(tg.get('name:en') or '')[:40], round(c[0], 5), round(c[1], 5), 'tower', h])
+    return out
+
+
+def _csv_rows(url, mock):
+    raw = get(url, timeout=60, mock=mock, tries=2).decode('utf-8-sig', 'replace')
+    return list(csv.DictReader(io.StringIO(raw)))
+
+
+def _ll(lon, lat):
+    lon, lat = _f(lon, 5), _f(lat, 5)
+    if lon is None or lat is None:
+        return None
+    if lat > 90 and lon < 90:  # บางแถวสลับคอลัมน์
+        lon, lat = lat, lon
+    return (lon, lat) if _in_box(lon, lat, 0.1) else None
+
+
+def base_infra():
+    out = {}
+    for k in ('gate', 'pump'):
+        rows = []
+        for r in _csv_rows(BMA_CSV[k], 'ckan_%s.csv' % k):
+            ll = _ll(r.get('long'), r.get('lat'))
+            if not ll:
+                continue
+            cap = _f(r.get('gate'), 1) if k == 'pump' else None
+            rows.append([re.sub(r'\s+', ' ', str(r.get('name') or '')).strip(), re.sub(r'^เขต', '', str(r.get('district') or '').strip()), ll[0], ll[1], cap])
+        out[k] = rows
+    rows = []
+    for r in _csv_rows(BMA_CSV['wpump'], 'ckan_wpump.csv'):
+        ll = _ll(r.get('COOR_X'), r.get('COOR_Y'))
+        if ll:
+            rows.append([re.sub(r'\s+', ' ', str(r.get('PUMP_NAME') or '')).strip(), str(r.get('CANAL_NAME') or '').strip(), ll[0], ll[1], _f(r.get('GP_CAPACITY'), 1)])
+    out['wpump'] = rows
+    rows = []
+    for r in _csv_rows(BMA_CSV['risk'], 'ckan_risk.csv'):
+        ll = _ll(r.get('UTM_X'), r.get('UTM_Y'))
+        if ll:
+            rows.append([str(r.get('STATION_NAME') or '').strip(), str(r.get('DISTRICT_NAME') or '').strip(), ll[0], ll[1], str(r.get('GROUP_D') or '').strip()])
+    out['risk'] = rows
+    if sum(len(v) for v in out.values()) < 100:
+        raise RuntimeError('ได้ข้อมูลโครงสร้างระบายน้ำน้อยผิดปกติ')
+    return out
+
+
+BASE_PARTS = (('districts', base_districts), ('lines', base_lines), ('stations', base_stations), ('marks', base_marks), ('infra', base_infra))
+
+
+def task_bkkbase(out):
+    pp = os.path.join(out, BKK_PARTS)
+    try:
+        parts = json.load(open(pp, encoding='utf-8'))
+        if time.time() - parts.get('ts', 0) > 3 * 86400:
+            parts = {}
+    except (OSError, ValueError):
+        parts = {}
+    parts.setdefault('ts', int(time.time()))
+    parts.setdefault('p', {})
+    if time.time() - START > 8 * 60:
+        return {'skip': 'เวลารอบนี้ไม่พอ'}
+    t0, errs = time.time(), []
+    for name, fn in BASE_PARTS:
+        if name in parts['p']:
+            continue
+        if time.time() - t0 > 6 * 60:
+            errs.append(name + ' (หมดเวลารอบนี้)')
+            continue
+        try:
+            parts['p'][name] = fn()
+            print('   bkkbase %s ได้ %d' % (name, len(parts['p'][name])), flush=True)
+        except Exception as e:  # noqa: BLE001
+            errs.append('%s: %s' % (name, str(e)[:100]))
+        time.sleep(0 if MOCK is not None else 2)
+    P = parts['p']
+    if P:  # เขียนเท่าที่มี หน้าเว็บใช้ส่วนที่ขาดจากไฟล์สำรอง (outdoor-data) ได้
+        write_json(out, 'bkk_base.json', {'v': 1, 't': now_iso(), 'from': 'overpass', 'partial': bool(errs),
+                                          'src': '© OpenStreetMap contributors (ODbL) · กรุงเทพมหานคร (data.bangkok.go.th)',
+                                          'districts': P.get('districts', []), 'lines': P.get('lines', []), 'stations': P.get('stations', []),
+                                          'marks': P.get('marks', []), 'infra': P.get('infra', {})})
+    if errs:
+        write_json(out, BKK_PARTS, parts)
+        raise RuntimeError('ยังขาด ' + ' | '.join(errs) + ' (เก็บส่วนที่ได้ไว้ รอบหน้าถามต่อ)')
+    try:
+        os.remove(pp)
+    except OSError:
+        pass
+    return {'districts': len(P['districts']), 'lines': len(P['lines']), 'stations': len(P['stations']), 'marks': len(P['marks']),
+            'infra': {k: len(v) for k, v in P['infra'].items()}}
+
+
+TASKS = {'fires': task_fires, 'bkk': task_bkk, 'aircraft': task_aircraft, 'ships': task_ships, 'news': task_news, 'sats': task_sats,
+         'cables': task_cables, 'bkkbase': task_bkkbase}
 
 
 def main():

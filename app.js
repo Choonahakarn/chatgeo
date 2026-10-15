@@ -770,6 +770,7 @@
     if (page === 'cctv') return '#cctv' + (/^(wet|src:|site:)/.test(CV.filter) ? '=' + CV.filter : '');
     if (page === 'props') return '#props';
     if (page === 'hike') return '#hike' + (HK.sel ? '=' + encodeURIComponent(HK.sel) : '');
+    if (page === 'city') return '#city';
     if (page === 'brief') return place === HOME ? '#brief' : '#brief-' + place;
     return place === HOME ? '' : '#' + place;
   }
@@ -787,6 +788,8 @@
     if (plm) return { page: 'chat', place: state.place || HOME, planet: plm[1] };
     var hm = /^hike(?:=([nwr]\d+))?$/.exec(h);
     if (hm) return { page: 'hike', place: state.place || HOME, hk: hm[1] || '' };
+    var ctm = /^city(?:=([\w-]+))?$/.exec(h);
+    if (ctm) return { page: 'city', place: state.place || HOME, city: ctm[1] || '' };
     var cm = /^cctv(?:=([\w:-]+))?$/.exec(h);
     if (cm) return { page: 'cctv', place: state.place || HOME, cv: cm[1] || 'all' };
     var sm = /^(site|twin)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/.exec(h);
@@ -807,15 +810,18 @@
     $('pagePp').hidden = page !== 'props';
     if ($('pageHike')) $('pageHike').hidden = page !== 'hike';
     if ($('navHike')) $('navHike').setAttribute('aria-current', page === 'hike' ? 'page' : 'false');
+    if ($('pageCity')) $('pageCity').hidden = page !== 'city';
+    if ($('navCity')) $('navCity').setAttribute('aria-current', page === 'city' ? 'page' : 'false');
+    if (page !== 'city' && typeof BK !== 'undefined' && BK.started) bkStop();
     $('navChat').setAttribute('aria-current', page === 'chat' ? 'page' : 'false');
     $('navBrief').setAttribute('aria-current', page === 'brief' ? 'page' : 'false');
     $('navCctv').setAttribute('aria-current', page === 'cctv' ? 'page' : 'false');
     $('navPp').setAttribute('aria-current', page === 'props' ? 'page' : 'false');
-    document.title = page === 'brief' ? 'สรุปเช้านี้ · ChatGeo' : page === 'cctv' ? 'กล้อง CCTV สด · ChatGeo' : page === 'props' ? 'ค้นทรัพย์ · ตรวจทำเลหลายแปลง · ChatGeo' : page === 'hike' ? 'เดินป่า · ยอดเขา น้ำตก เส้นทางทั่วไทย · ChatGeo' : 'ChatGeo · คุยกับโลก';
+    document.title = page === 'brief' ? 'สรุปเช้านี้ · ChatGeo' : page === 'cctv' ? 'กล้อง CCTV สด · ChatGeo' : page === 'props' ? 'ค้นทรัพย์ · ตรวจทำเลหลายแปลง · ChatGeo' : page === 'hike' ? 'เดินป่า · ยอดเขา น้ำตก เส้นทางทั่วไทย · ChatGeo' : page === 'city' ? 'กรุงเทพตอนนี้ · ฝน น้ำ ฝุ่น รถติด สด · ChatGeo' : 'ChatGeo · คุยกับโลก';
     if (page !== 'brief') stopSpeech();
     closeAllResults();
-    if (page === 'cctv' || page === 'props' || page === 'hike') {
-      if (page === 'cctv') cvStart(); else if (page === 'props') { cvStop(); renderPropsPage(); } else { cvStop(); hkStart(opts.hk); }
+    if (page === 'cctv' || page === 'props' || page === 'hike' || page === 'city') {
+      if (page === 'cctv') cvStart(); else if (page === 'props') { cvStop(); renderPropsPage(); } else if (page === 'city') { cvStop(); bkStart(opts.city); } else { cvStop(); hkStart(opts.hk); }
       if (!opts.fromHash) writeHash(true);
       return;
     }
@@ -844,6 +850,7 @@
     if (r.site && !IN_ARTIFACT) openSite(r.site.lon, r.site.lat, { tab: r.tab });
     if (r.ops) enterOps();
     if (r.planet) { if (!PL.open || PL.id !== r.planet) openPlanet(r.planet, true); } else if (PL.open) closePlanet(true);
+    if (r.page === 'city' && state.page === 'city' && r.city && BK.started) bkStart(r.city);
     if (r.page === 'hike' && state.page === 'hike') { if (r.hk && r.hk !== HK.sel) hkOpen(r.hk, true); else if (!r.hk && HK.sel) hkClose(); }
   }
   window.addEventListener('popstate', onRoute);
@@ -9519,6 +9526,1179 @@
     });
   }
 
+  /* ---------- กรุงเทพตอนนี้: เมืองจำลองที่มีชีวิต (แรงบันดาลใจจาก Bangkok Twin เขียนใหม่ทั้งหมดในสไตล์ ChatGeo) ----------
+     ลองนึกถึงห้องควบคุมของเมือง: แผนที่กลางคืนสามมิติ ถนนเรืองแสง รถไฟฟ้าตามสีจริง แล้ววางตัวเลขสดจากหน่วยงานลงบนเมือง
+     ข้อมูลสด: งาน "ข้อมูลสด" ใน GitHub Actions เก็บจาก กทม. (น้ำในคลอง ฝน น้ำบนถนน) คพ. (ฝุ่น) สสน. (แม่น้ำ) Traffy Fondue (ตำแหน่งเรื่องแจ้ง)
+     ทุก 20 นาทีไว้ใน live-data/bkk.json · โครงเมือง (เขต รถไฟฟ้า สถานี สถานที่สำคัญ) จาก OpenStreetMap สัปดาห์ละครั้ง live-data/bkk_base.json
+     เบราว์เซอร์ดึงเองได้: อากาศ/ฝุ่นแบบจำลอง (Open-Meteo) ดัชนีรถติด (Longdo Traffic) เรดาร์ฝน (RainViewer) และ ThaiWater เป็นทางสำรอง
+     ไม่ใช่ระบบเตือนภัยทางการ ทุกค่ามีเวลา ที่มา และป้ายบอกว่าเป็นค่าวัดจริง ค่าประมาณ หรือข้อมูลเก่า */
+  var BK_CENTER = [100.535, 13.752];
+  var BK_BOUNDS = [[99.95, 13.2], [101.2, 14.3]];
+  var BK_TRAFFIC = 'https://traffic.longdo.com/api/json/traffic/index';
+  var BK_TW_ROAD = 'https://api-v3.thaiwater.net/api/v1/thaiwater30/public/flood_road';
+  var BK_TRAFFY = 'https://publicapi.traffy.in.th/share/teamchadchart/search';
+  var BK_TRAFFY_LINK = 'https://share.traffy.in.th/teamchadchart/';
+  var BK_ATTR = {
+    bma: '<a href="https://weather.bangkok.go.th/" target="_blank" rel="noopener">สำนักการระบายน้ำ กทม.</a>',
+    air: '<a href="http://air4thai.pcd.go.th/" target="_blank" rel="noopener">กรมควบคุมมลพิษ (Air4Thai)</a>',
+    tw: '<a href="https://www.thaiwater.net/" target="_blank" rel="noopener">ThaiWater (สสน.)</a>',
+    traffy: '<a href="https://fondue.traffy.in.th/" target="_blank" rel="noopener">Traffy Fondue</a>',
+    om: '<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (แบบจำลอง)',
+    longdo: '<a href="https://traffic.longdo.com/" target="_blank" rel="noopener">Longdo Traffic (iTIC)</a>',
+    osm: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    ckan: '<a href="https://data.bangkok.go.th/" target="_blank" rel="noopener">data.bangkok.go.th</a>',
+    radar: '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>'
+  };
+  // ระดับสี (ไล่จากน้อยไปมาก) ใช้ทั้งแผนที่รายเขต จุดวัด และคำอธิบายสี
+  var BK_RAMP = {
+    rain: { t: 'ฝน 1 ชม.', u: 'มม.', stops: [0.1, 2.5, 10, 35, 60], cols: ['#1B2A4A', '#38BDF8', '#2563EB', '#A855F7', '#F43F5E', '#FB7185'],
+      labs: ['ไม่มีฝน', '< 2.5', '2.5–10', '10–35', '35–60', '≥ 60'] },
+    pm25: { t: 'PM2.5', u: 'µg/m³', stops: [15, 25, 37.5, 75], cols: ['#38BDF8', '#34D399', '#FACC15', '#FB923C', '#F43F5E'], labs: ['≤ 15', '15–25', '25–37.5', '37.5–75', '> 75'] },
+    canal: { t: 'คลอง', u: '', stops: [1, 2, 3], cols: ['#34D399', '#FACC15', '#FB923C', '#F43F5E'], labs: ['ปกติ', 'เฝ้าระวัง', 'ใกล้ตลิ่ง/เตือนภัย', 'ถึงตลิ่ง/วิกฤต'] },
+    heat: { t: 'ร้อน', u: '°C', stops: [27, 32, 41, 54], cols: ['#38BDF8', '#FACC15', '#FB923C', '#F43F5E', '#A21CAF'], labs: ['< 27', '27–32', '32–41', '41–54', '≥ 54'] },
+    people: { t: 'เรื่องแจ้ง', u: 'เรื่อง', stops: [1, 6, 16, 31], cols: ['#1B2A4A', '#818CF8', '#A78BFA', '#E879F9', '#F43F5E'], labs: ['0', '1–5', '6–15', '16–30', '> 30'] }
+  };
+  var BK_METRICS = ['rain', 'canal', 'pm25', 'heat', 'people'];
+  var BK_STORIES = [['ask', 'ถามกรุงเทพ'], ['rain', 'ฝนตอนนี้'], ['canal', 'น้ำในคลอง'], ['road', 'น้ำบนถนน'], ['air', 'ลมและฝุ่น'], ['heat', 'ร้อนแค่ไหน'],
+    ['traffic', 'รถติดตรงไหน'], ['people', 'เรื่องจากประชาชน'], ['under', 'ใต้ดินกรุงเทพ'], ['replay', 'ย้อนดู 24 ชม.']];
+  var BK_ICO = {
+    ask: '<path d="M4 5h16v11H8l-4 4z"/>', rain: '<path d="M7 15a4 4 0 0 1 .5-8 5 5 0 0 1 9.5 1.5A3.5 3.5 0 0 1 17 15z"/><path d="M8 18l-1 2M12 18l-1 2M16 18l-1 2"/>',
+    canal: '<path d="M3 9c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0M3 15c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0"/>', road: '<path d="M8 3l-3 18M16 3l3 18M12 5v2M12 11v2M12 17v2"/>',
+    air: '<path d="M3 8h11a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/>', heat: '<path d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/>',
+    traffic: '<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="17" r="1.6"/>',
+    people: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 4a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6"/>',
+    under: '<path d="M3 10l9-6 9 6M5 10v10h14V10"/><path d="M9 20v-5h6v5"/>', replay: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>'
+  };
+  var BK_MK = { temple: '⛩', palace: '🏛', monument: '◆', park: '🌳', market: '🛍', mall: '🛍', station: '🚉', airport: '✈', bridge: '🌉', campus: '🎓', hospital: '✚',
+    gov: '🏛', museum: '🏛', venue: '★', stadium: '🏟', tower: '▮', port: '⚓', street: '★' };
+  var BK = { map: null, ready: false, base: null, live: null, hist: null, road2: null, people2: null, wx: null, aq: null, traffic: null,
+    story: 'ask', step: 0, metric: 'rain', dist: null, only: false, d3: true, lite: false, sheet: false, legend: true,
+    lay: { bldg: true, transit: true, points: true, radar: false, people: true, infra: false, wind: false, river: false },
+    at: {}, busy: {}, err: {}, idx: null, marks: [], dmarks: [], hover: null, timer: 0, fx: null, rep: { i: -1, play: false, timer: 0 }, started: false, pop: null };
+
+  function bkNum(v, d) { return v == null || !isFinite(v) ? '–' : (+v).toLocaleString('th-TH', { maximumFractionDigits: d == null ? 1 : d, minimumFractionDigits: 0 }); }
+  function bkCol(kind, v) {
+    var R = BK_RAMP[kind];
+    if (!R || v == null || !isFinite(v)) return '#334155';
+    for (var i = 0; i < R.stops.length; i++) if (v < R.stops[i]) return R.cols[i];
+    return R.cols[R.cols.length - 1];
+  }
+  function bkClass(kind, v) {
+    var R = BK_RAMP[kind];
+    if (!R || v == null) return '';
+    for (var i = 0; i < R.stops.length; i++) if (v < R.stops[i]) return R.labs[i];
+    return R.labs[R.labs.length - 1];
+  }
+  function bkRainLabel(mm) { return mm == null ? 'ไม่มีข้อมูล' : mm < 0.1 ? 'ไม่มีฝน' : mm < 2.5 ? 'ฝนเล็กน้อย' : mm < 10 ? 'ฝนปานกลาง' : mm < 35 ? 'ฝนหนัก' : mm < 60 ? 'ฝนหนักมาก' : 'ฝนรุนแรง'; }
+  function bkPmLabel(v) { return v == null ? 'ไม่มีข้อมูล' : v <= 15 ? 'อากาศดีมาก' : v <= 25 ? 'อากาศดี' : v <= 37.5 ? 'ฝุ่นปานกลาง' : v <= 75 ? 'เริ่มมีผลต่อสุขภาพ' : 'มีผลต่อสุขภาพ'; }
+  function bkHeatLabel(v) { return v == null ? 'ไม่มีข้อมูล' : v < 27 ? 'สบาย' : v < 32 ? 'เฝ้าระวัง' : v < 41 ? 'ร้อน ระวังเพลียแดด' : v < 54 ? 'อันตราย' : 'อันตรายมาก'; }
+  function bkTrafficLabel(v) { return v == null ? 'ไม่มีข้อมูล' : v < 3 ? 'คล่องตัว' : v < 5 ? 'ปานกลาง' : v < 7 ? 'หนาแน่น' : 'ติดขัดมาก'; }
+  function bkDir(deg) { return deg == null ? '' : ['เหนือ', 'ตะวันออกเฉียงเหนือ', 'ตะวันออก', 'ตะวันออกเฉียงใต้', 'ใต้', 'ตะวันตกเฉียงใต้', 'ตะวันตก', 'ตะวันตกเฉียงเหนือ'][Math.round(deg / 45) % 8]; }
+  function bkBadge(kind) {
+    var B = { real: ['วัดจริง', 'ok'], est: ['ประมาณ', 'est'], old: ['ข้อมูลเก่า', 'old'], none: ['ไม่มีข้อมูล', 'none'], idx: ['ดัชนี', 'est'], ref: ['ข้อมูลอ้างอิง', 'est'], rep: ['ย้อนหลัง', 'est'] }[kind] || ['', ''];
+    return B[0] ? '<span class="bk-badge bk-b-' + B[1] + '">' + B[0] + '</span>' : '';
+  }
+  function bkFb(fb) { return fb == null ? '' : fb < 0 ? 'สูงกว่าตลิ่ง ' + bkNum(-fb * 100, 0) + ' ซม.' : 'ห่างตลิ่ง ' + bkNum(fb * 100, 0) + ' ซม.'; }
+  function bkOld(ms) { return BK.rep.i < 0 && (!ms || Date.now() - ms > 3 * 3600e3); }
+  function bkStale(ms, mins) { return !ms || Date.now() - ms > mins * 60e3; }
+  function bkSec(k) { return BK.live && BK.live[k] && Array.isArray(BK.live[k].rows) ? BK.live[k] : null; }
+  function bkRows(k) { var s = bkSec(k); return s ? s.rows : []; }
+  function bkMaxMs(rows, col) { var m = 0; rows.forEach(function (r) { if (r[col] > m && r[col] < Date.now() + 3600e3) m = r[col]; }); return m; }
+
+  // ---------- ข้อมูล ----------
+  function bkLoad(kind, force) {
+    if (IN_ARTIFACT || BK.busy[kind]) return Promise.resolve();
+    var age = { base: 6 * 3600e3, live: 4 * 60e3, wx: 15 * 60e3, traffic: 4 * 60e3, hist: 10 * 60e3, road2: 10 * 60e3, people2: 15 * 60e3 }[kind];
+    if (!force && BK.at[kind] && Date.now() - BK.at[kind] < age) return Promise.resolve();
+    BK.busy[kind] = true;
+    var p;
+    if (kind === 'base') p = bkLoadBase();
+    else if (kind === 'live') p = ldJSON('bkk.json').then(function (j) { if (!j || !j.src) throw new Error('bad'); BK.live = j; bkAssign(); });
+    else if (kind === 'hist') p = ldJSON('bkk_hist.json').then(function (j) { if (!j || !Array.isArray(j.ts)) throw new Error('bad'); BK.hist = j; });
+    else if (kind === 'traffic') p = getJSON(BK_TRAFFIC, 12000).then(function (j) { if (!j || j.index == null) throw new Error('bad'); BK.traffic = { v: +j.index, ms: bkTrafficMs(j.time) || Date.now() }; });
+    else if (kind === 'wx') p = bkLoadWx();
+    else if (kind === 'road2') p = getJSON(BK_TW_ROAD, 20000).then(function (j) {
+      BK.road2 = (j.data || []).map(function (x) {
+        var s = x.station || {}, cm = +x.floodroad_value || 0;
+        return [String(s.floodroad_oldcode || s.id || ''), ((s.floodroad_name || {}).th || '').trim(), +s.floodroad_long, +s.floodroad_lat, cm, cm > 0 ? 'มีน้ำ' : 'ปกติ', bkThMs(x.floodroad_datetime), 1, ''];
+      }).filter(function (r) { return isFinite(r[2]) && isFinite(r[3]); });
+      bkAssign();
+    });
+    else if (kind === 'people2') p = getJSON(BK_TRAFFY + '?limit=500', 30000).then(function (j) {
+      // สำรองเมื่อยังไม่มีไฟล์จากระบบอัตโนมัติ: ใช้แค่ตำแหน่ง สถานะ เวลา รหัสเรื่อง (ข้อความใช้คัดว่าเป็นเรื่องน้ำ ไม่แสดง)
+      var by = {}, rows = [], n = 0, since = Date.now() - 24 * 3600e3;
+      (j.results || []).forEach(function (x) {
+        var ts = Date.parse(String(x.timestamp || '').slice(0, 19).replace(' ', 'T') + 'Z'), c = x.coords || [];
+        if (!(ts > since) || !(+c[0]) || !(+c[1])) return;
+        n++;
+        var m = /เขต\s*([^\s,]+)/.exec(x.address || ''), d = m ? m[1] : '';
+        by[d] = (by[d] || 0) + 1;
+        if (/น้ำท่วม|ท่อระบายน้ำ/.test((x.problem_type_abdul || []).join(' ')) || /น้ำท่วม|น้ำขัง|ท่วมขัง|ระบายน้ำไม่|ท่อตัน|ท่ออุดตัน/.test(x.description || '')) rows.push([x.ticket_id || '', +c[0], +c[1], String(x.state || ''), ts, d]);
+      });
+      BK.people2 = { from: 'traffy', hours: 24, n: n, by: by, rows: rows, partial: true };
+      bkAssign();
+    });
+    return p.then(function () { BK.err[kind] = false; BK.at[kind] = Date.now(); }, function () { BK.err[kind] = true; BK.at[kind] = Date.now() - age + 90e3; })
+      .then(function () { BK.busy[kind] = false; bkRefresh(kind); });
+  }
+  // โครงเมือง: ไฟล์จากงานข้อมูลสด (Overpass สัปดาห์ละครั้ง) และไฟล์สำรองจากงานเดินป่า (ไฟล์ OSM ทั้งประเทศ) ส่วนไหนขาดเติมจากอีกไฟล์
+  function bkLoadBase() {
+    var d = '?d=' + Math.floor(Date.now() / 6 / 3600e3);
+    function one(u) { return getJSON(u + d, 30000).then(function (j) { return j && Array.isArray(j.districts) ? j : null; }, function () { return null; }); }
+    return one(LD_BASE + 'bkk_base.json').then(function (a) {
+      var full = a && a.districts.length >= 40 && a.lines.length && (a.marks || []).length && a.infra && Object.keys(a.infra).length;
+      return (full ? Promise.resolve(null) : one(OUTDOOR_BASE + 'bkk_base.json')).then(function (b) {
+        if (!a && !b) throw new Error('ยังไม่มีไฟล์โครงเมือง');
+        var j = a || b;
+        if (a && b) ['districts', 'lines', 'stations', 'marks'].forEach(function (k) { if (!(a[k] || []).length && (b[k] || []).length) a[k] = b[k]; });
+        if (a && b && !(a.infra && Object.keys(a.infra).length) && b.infra) a.infra = b.infra;
+        j.lines = j.lines || []; j.stations = j.stations || []; j.marks = j.marks || []; j.infra = j.infra || {};
+        BK.base = j; BK.linesDone = false; bkIndex();
+      });
+    });
+  }
+  function bkTrafficMs(t) { var n = +t; if (n > 1e12) return n; if (n > 1e9) return n * 1000; var d = Date.parse(t); return isFinite(d) ? d : 0; }
+  function bkThMs(s) { var m = /(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d)/.exec(s || ''); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 7, +m[5]) : 0; }
+  // อากาศและฝุ่นแบบจำลองรายเขต (จุดกลางแต่ละเขต ถ้ายังไม่มีเขตใช้ตาราง 3x3 คลุมกรุงเทพ)
+  function bkWxPts() {
+    if (BK.base && BK.base.districts.length) return BK.base.districts.map(function (d) { return d.c; });
+    var pts = [];
+    for (var i = 0; i < 3; i++) for (var j = 0; j < 3; j++) pts.push([100.42 + i * 0.2, 13.62 + j * 0.15]);
+    return pts;
+  }
+  function bkLoadWx() {
+    var pts = bkWxPts(), la = pts.map(function (p) { return p[1].toFixed(3); }).join(','), lo = pts.map(function (p) { return p[0].toFixed(3); }).join(',');
+    var f = getJSON('https://api.open-meteo.com/v1/forecast?latitude=' + la + '&longitude=' + lo +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,uv_index,is_day' +
+      '&hourly=precipitation,precipitation_probability&forecast_hours=6&timezone=Asia%2FBangkok', 20000);
+    var a = getJSON('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + la + '&longitude=' + lo + '&current=pm2_5,us_aqi&timezone=Asia%2FBangkok', 20000).catch(function () { return null; });
+    return Promise.all([f, a]).then(function (r) {
+      var F = Array.isArray(r[0]) ? r[0] : [r[0]], A = r[1] ? (Array.isArray(r[1]) ? r[1] : [r[1]]) : [];
+      BK.wx = { pts: pts, ms: Date.now(), byBase: !!(BK.base && BK.base.districts.length), rows: F.map(function (x, i) {
+        var c = x.current || {}, h = x.hourly || {}, aq = (A[i] || {}).current || {};
+        return { t: c.temperature_2m, feel: c.apparent_temperature, rh: c.relative_humidity_2m, pr: c.precipitation, ws: c.wind_speed_10m, wd: c.wind_direction_10m, uv: c.uv_index,
+          day: c.is_day, pm: aq.pm2_5, aqi: aq.us_aqi, next: (h.precipitation || []).slice(0, 6), prob: (h.precipitation_probability || []).slice(0, 6) };
+      }) };
+      bkAssign();
+    });
+  }
+
+  // ---------- เขตและการจัดจุดลงเขต ----------
+  function bkInRing(x, y, r) {
+    var c = false;
+    for (var i = 0, j = r.length - 1; i < r.length; j = i++) {
+      var xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-12) + xi) c = !c;
+    }
+    return c;
+  }
+  function bkInDist(d, x, y) {
+    if (x < d.bb[0] || x > d.bb[2] || y < d.bb[1] || y > d.bb[3]) return false;
+    return d.g.some(function (poly) { return bkInRing(x, y, poly[0]) && !poly.slice(1).some(function (h) { return bkInRing(x, y, h); }); });
+  }
+  function bkDistAt(x, y) {
+    var D = BK.base ? BK.base.districts : [];
+    for (var i = 0; i < D.length; i++) if (bkInDist(D[i], x, y)) return D[i];
+    return null;
+  }
+  function bkIndex() {
+    var D = BK.base.districts;
+    BK.idx = {};
+    D.forEach(function (d, i) {
+      var bb = [999, 999, -999, -999];
+      d.g.forEach(function (poly) { poly[0].forEach(function (p) { bb = [Math.min(bb[0], p[0]), Math.min(bb[1], p[1]), Math.max(bb[2], p[0]), Math.max(bb[3], p[1])]; }); });
+      d.bb = bb; d.i = i; BK.idx[d.id] = d;
+    });
+    (BK.base.stations || []).forEach(function (s) { var d = bkDistAt(s[2], s[3]); s.d = d ? d.id : null; });
+    var inf = BK.base.infra || {};
+    ['gate', 'pump', 'wpump', 'risk'].forEach(function (k) { (inf[k] || []).forEach(function (r) { var d = bkDistAt(r[2], r[3]); r.d = d ? d.id : null; }); });
+    if (BK.wx && !BK.wx.byBase) BK.at.wx = 0; // ได้เขตแล้ว ดึงอากาศรายเขตใหม่
+    bkAssign();
+  }
+  // คำนวณค่าของแต่ละเขต (ฝนสูงสุด ระดับคลองที่น่าห่วงที่สุด ฝุ่น ร้อน เรื่องแจ้ง)
+  function bkCanalLevel(r) {
+    var st = String(r[8] || ''), wl = bkV('canal', r), fb = wl != null && r[5] != null ? r[5] - wl : null;
+    if (/ขัดข้อง/.test(st) && BK.rep.i < 0) return null;
+    if (wl == null || bkOld(r[9])) return null;
+    var lv = 0;
+    if (fb != null) lv = fb <= 0 ? 3 : fb < 0.15 ? 2 : fb < 0.5 ? 1 : 0;
+    if (BK.rep.i < 0) { if (/วิกฤต/.test(st)) lv = Math.max(lv, 3); else if (/เตือน/.test(st)) lv = Math.max(lv, 2); }
+    else if (r[7] != null && wl >= r[7]) lv = Math.max(lv, 3); else if (r[6] != null && wl >= r[6]) lv = Math.max(lv, 2);
+    return lv;
+  }
+  function bkV(kind, r) {
+    // ค่าปัจจุบันหรือค่าย้อนหลังตามเวลาที่เลื่อนดู
+    var col = kind === 'canal' ? 4 : kind === 'rain' ? 5 : 4;
+    if (BK.rep.i < 0 || !BK.hist) return r[col];
+    var a = (BK.hist[kind] || {})[r[0]];
+    return a ? a[BK.rep.i] : null;
+  }
+  function bkRoadRows() {
+    var s = bkSec('road');
+    if (s && (s.from === 'bma' || !BK.road2)) return { rows: s.rows, from: s.from };
+    if (BK.road2) return { rows: BK.road2, from: 'thaiwater' };
+    return { rows: s ? s.rows : [], from: s ? s.from : '' };
+  }
+  function bkRoadWet(r) { return !/ขัดข้อง/.test(String(r[5] || '')) && !bkOld(r[6]) && (bkV('road', r) || 0) > 0; }
+  function bkPeople() { var s = bkSec('traffy'); return s || BK.people2; }
+  function bkAssign() {
+    if (!BK.base) { bkRefresh('assign'); return; }
+    var D = BK.base.districts;
+    D.forEach(function (d) { d.v = { rain: null, rainEst: false, canal: null, pm25: null, pmEst: false, heat: null, people: 0, wet: 0, nCanal: 0, nRain: 0, nRoad: 0, nAir: 0 }; });
+    function each(rows, fn) { rows.forEach(function (r) { if (r.d === undefined || r.dv !== BK.base.t) { var d = bkDistAt(r[2], r[3]); r.d = d ? d.id : null; r.dv = BK.base.t; } var dd = r.d != null && BK.idx[r.d]; if (dd) fn(dd.v, r); }); }
+    each(bkRows('rain'), function (v, r) { var x = bkV('rain', r); v.nRain++; if (x != null && !bkOld(r[8])) v.rain = Math.max(v.rain || 0, x); });
+    each(bkRows('canal'), function (v, r) { var lv = bkCanalLevel(r); v.nCanal++; if (lv != null) v.canal = Math.max(v.canal == null ? -1 : v.canal, lv); });
+    each(bkRoadRows().rows, function (v, r) { v.nRoad++; if (bkRoadWet(r)) v.wet++; });
+    each(bkRows('air'), function (v, r) { v.nAir++; if (r[4] != null && !bkOld(r[6])) v.pm25 = Math.max(v.pm25 || 0, r[4]); });
+    var P = bkPeople();
+    if (P) {
+      var byName = {};
+      D.forEach(function (d) { byName[d.th] = d; });
+      Object.keys(P.by || {}).forEach(function (k) { if (byName[k]) byName[k].v.people = P.by[k]; });
+      each(P.rows || [], function () { /* แค่ผูกเขตให้จุด */ });
+    }
+    if (BK.wx) {
+      D.forEach(function (d, i) {
+        var w = BK.wx.byBase ? BK.wx.rows[i] : bkNearestWx(d.c);
+        if (!w) return;
+        d.v.heat = w.feel;
+        if (d.v.rain == null && BK.rep.i < 0) { d.v.rain = w.pr; d.v.rainEst = true; }
+        if (d.v.pm25 == null) { d.v.pm25 = w.pm; d.v.pmEst = true; }
+      });
+    }
+    bkRefresh('assign');
+  }
+  function bkNearestWx(c) {
+    if (!BK.wx) return null;
+    var best = null, bd = 1e9;
+    BK.wx.pts.forEach(function (p, i) { var dd = Math.pow(p[0] - c[0], 2) + Math.pow(p[1] - c[1], 2); if (dd < bd) { bd = dd; best = BK.wx.rows[i]; } });
+    return best;
+  }
+  function bkCityWx() {
+    if (!BK.wx || !BK.wx.rows.length) return null;
+    var R = BK.wx.rows.filter(function (r) { return r.t != null; }), n = R.length || 1;
+    function avg(k) { var s = 0, c = 0; R.forEach(function (r) { if (r[k] != null) { s += r[k]; c++; } }); return c ? s / c : null; }
+    function mx(k) { var m = null; R.forEach(function (r) { if (r[k] != null && (m == null || r[k] > m)) m = r[k]; }); return m; }
+    var next = [0, 1, 2, 3, 4, 5].map(function (h) { var m = 0; R.forEach(function (r) { m = Math.max(m, (r.next || [])[h] || 0); }); return m; });
+    var prob = [0, 1, 2, 3, 4, 5].map(function (h) { var m = 0; R.forEach(function (r) { m = Math.max(m, (r.prob || [])[h] || 0); }); return m; });
+    var sx = 0, sy = 0;
+    R.forEach(function (r) { if (r.wd != null) { sx += Math.sin(r.wd * Math.PI / 180) * (r.ws || 1); sy += Math.cos(r.wd * Math.PI / 180) * (r.ws || 1); } });
+    return { t: avg('t'), feel: avg('feel'), feelMax: mx('feel'), rh: avg('rh'), pr: mx('pr'), ws: avg('ws'), wd: (Math.atan2(sx, sy) * 180 / Math.PI + 360) % 360, uv: mx('uv'), pm: avg('pm'),
+      pmMax: mx('pm'), day: R[0] && R[0].day, next: next, prob: prob, n: n };
+  }
+  // ---------- สรุปทั้งเมือง ----------
+  function bkSum() {
+    var S = {}, now = Date.now();
+    var rs = bkSec('rain'), rr = bkRows('rain');
+    if (rr.length) {
+      var top = null, n = 0, live = rs.from === 'bma';
+      rr.forEach(function (r) { var x = live ? bkV('rain', r) : r[7]; if (x == null || bkOld(r[8])) return; if (x >= 0.1) n++; if (!top || x > top.x) top = { r: r, x: x }; });
+      S.rain = { from: rs.from, live: live, max: top ? top.x : null, top: top && top.r, n: n, tot: rr.length, ms: bkMaxMs(rr, 8) };
+    }
+    var cr = bkRows('canal');
+    if (cr.length) {
+      var lv = [0, 0, 0, 0], bad = 0, worst = [];
+      cr.forEach(function (r) {
+        var L = bkCanalLevel(r);
+        if (L == null) { if (/ขัดข้อง/.test(String(r[8])) || bkOld(r[9])) bad++; return; }
+        lv[L]++;
+        if (L >= 1) worst.push({ r: r, L: L, fb: r[5] != null && bkV('canal', r) != null ? r[5] - bkV('canal', r) : null });
+      });
+      worst.sort(function (a, b) { return b.L - a.L || (a.fb == null ? 9 : a.fb) - (b.fb == null ? 9 : b.fb); });
+      S.canal = { lv: lv, near: lv[2] + lv[3], over: lv[3], bad: bad, tot: cr.length, worst: worst, ms: bkMaxMs(cr, 9),
+        warn: cr.filter(function (r) { return /เตือน/.test(String(r[8])); }).length, crit: cr.filter(function (r) { return /วิกฤต/.test(String(r[8])); }).length };
+    }
+    var R = bkRoadRows();
+    if (R.rows.length) {
+      var wet = R.rows.filter(bkRoadWet).sort(function (a, b) { return (bkV('road', b) || 0) - (bkV('road', a) || 0); });
+      S.road = { from: R.from, wet: wet, tot: R.rows.length, old: bkOld(bkMaxMs(R.rows, 6)), bad: R.rows.filter(function (r) { return /ขัดข้อง/.test(String(r[5])); }).length, ms: bkMaxMs(R.rows, 6) };
+    }
+    var ar = bkRows('air').filter(function (r) { return r[4] != null && !bkOld(r[6]); });
+    if (ar.length) {
+      var am = ar.reduce(function (a, b) { return b[4] > a[4] ? b : a; });
+      S.air = { max: am[4], top: am, n: ar.length, ms: bkMaxMs(ar, 6) };
+    }
+    S.wx = bkCityWx();
+    if (BK.traffic) S.traffic = BK.traffic;
+    var P = bkPeople();
+    if (P) S.people = { n: P.n || 0, flood: (P.rows || []).length, by: P.by || {}, rows: P.rows || [], partial: !!P.partial };
+    S.newest = Math.max(S.canal ? S.canal.ms : 0, S.rain && S.rain.live ? S.rain.ms : 0, S.road && S.road.from === 'bma' ? S.road.ms : 0) || 0;
+    return S;
+  }
+  function bkWhen(ms) { return ms ? 'เมื่อ ' + msTime(ms) : ''; }
+  function bkCards(S) {
+    var C = [], b;
+    if (S.rain && S.rain.live) C.push({ k: 'rain', t: 'ฝน', src: 'กทม.', lab: bkRainLabel(S.rain.max), v: bkNum(S.rain.max), u: 'มม./ชม.', ms: S.rain.ms, b: bkStale(S.rain.ms, 60) ? 'old' : 'real', col: bkCol('rain', S.rain.max) });
+    else if (S.rain) C.push({ k: 'rain', t: 'ฝน', src: 'สสน.', lab: 'ฝนสะสมวันนี้', v: bkNum(S.rain.max), u: 'มม. สูงสุด', ms: S.rain.ms, b: bkStale(S.rain.ms, 90) ? 'old' : 'real', col: bkCol('rain', S.rain.max / 6) });
+    else if (S.wx) C.push({ k: 'rain', t: 'ฝน', src: 'Open-Meteo', lab: bkRainLabel(S.wx.pr), v: bkNum(S.wx.pr), u: 'มม./ชม.', ms: BK.wx.ms, b: 'est', col: bkCol('rain', S.wx.pr) });
+    else C.push({ k: 'rain', t: 'ฝน', src: '', lab: 'ไม่มีข้อมูล', v: '–', u: '', b: 'none' });
+    if (S.canal) C.push({ k: 'canal', t: 'น้ำ', src: 'กทม.', lab: S.canal.over ? 'บางจุดถึงตลิ่ง' : S.canal.near ? 'บางจุดใกล้ตลิ่ง' : 'คลองปกติ', v: bkNum(S.canal.near, 0), u: 'จุดใกล้ตลิ่ง', ms: S.canal.ms,
+      b: bkStale(S.canal.ms, 60) ? 'old' : 'real', col: S.canal.over ? BK_RAMP.canal.cols[3] : S.canal.near ? BK_RAMP.canal.cols[2] : BK_RAMP.canal.cols[0] });
+    else if (S.road) C.push({ k: 'road', t: 'น้ำ', src: S.road.from === 'bma' ? 'กทม.' : 'สสน.', lab: S.road.old ? 'ไม่มีค่าปัจจุบัน' : S.road.wet.length ? 'ถนนมีน้ำบางจุด' : 'ถนนแห้ง', v: S.road.old ? '–' : bkNum(S.road.wet.length, 0), u: S.road.old ? '' : 'จุดถนนมีน้ำ', ms: S.road.ms,
+      b: bkStale(S.road.ms, 90) ? 'old' : 'real', col: S.road.wet.length ? '#38BDF8' : '#34D399' });
+    else C.push({ k: 'canal', t: 'น้ำ', src: '', lab: 'ไม่มีข้อมูล', v: '–', u: '', b: 'none' });
+    if (S.air) C.push({ k: 'air', t: 'อากาศ', src: 'คพ.', lab: bkPmLabel(S.air.max), v: bkNum(S.air.max, 0), u: 'µg/m³', ms: S.air.ms, b: bkStale(S.air.ms, 180) ? 'old' : 'real', col: bkCol('pm25', S.air.max) });
+    else if (S.wx && S.wx.pm != null) C.push({ k: 'air', t: 'อากาศ', src: 'Open-Meteo', lab: bkPmLabel(S.wx.pm), v: bkNum(S.wx.pm, 0), u: 'µg/m³', ms: BK.wx.ms, b: 'est', col: bkCol('pm25', S.wx.pm) });
+    else C.push({ k: 'air', t: 'อากาศ', src: '', lab: 'ไม่มีข้อมูล', v: '–', u: '', b: 'none' });
+    if (S.wx && S.wx.feel != null) C.push({ k: 'heat', t: 'ร้อน', src: 'Open-Meteo', lab: bkHeatLabel(S.wx.feel), v: bkNum(S.wx.feel, 0), u: '°C รู้สึกเหมือน', ms: BK.wx.ms, b: 'est', col: bkCol('heat', S.wx.feel) });
+    else C.push({ k: 'heat', t: 'ร้อน', src: 'Open-Meteo', lab: BK.err.wx ? 'ไม่มีข้อมูล' : 'กำลังโหลด', v: '–', u: '°C', b: 'none' });
+    if (S.traffic) { b = bkStale(S.traffic.ms, 30) ? 'old' : 'idx'; C.push({ k: 'traffic', t: 'เดินทาง', src: 'Longdo', lab: bkTrafficLabel(S.traffic.v), v: bkNum(S.traffic.v), u: '/10 ดัชนีรถติด', ms: S.traffic.ms, b: b,
+      col: S.traffic.v < 3 ? '#34D399' : S.traffic.v < 5 ? '#FACC15' : S.traffic.v < 7 ? '#FB923C' : '#F43F5E', x: S.road && S.road.wet.length ? 'ถนนมีน้ำ ' + S.road.wet.length + ' จุด' : '' }); }
+    else C.push({ k: 'traffic', t: 'เดินทาง', src: 'Longdo', lab: BK.err.traffic ? 'ไม่มีข้อมูล' : 'กำลังโหลด', v: '–', u: '', b: 'none' });
+    return C;
+  }
+  function bkRenderCards(S) {
+    var el = $('bkCards');
+    if (!el) return;
+    el.innerHTML = bkCards(S).map(function (c) {
+      return '<button type="button" class="bk-card' + (c.b === 'old' ? ' is-old' : '') + '" data-bk-story="' + c.k + '" style="--c:' + (c.col || '#475569') + '">' +
+        '<span class="bk-card-h"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (BK_ICO[c.k === 'canal' ? 'canal' : c.k] || '') + '</svg>' +
+        esc(c.t) + '<small>' + esc(c.src) + '</small></span><b class="bk-card-l">' + esc(c.lab) + '</b>' +
+        '<span class="bk-card-v"><span class="mono">' + esc(c.v) + '</span> <small>' + esc(c.u) + '</small></span>' +
+        '<span class="bk-card-f">' + (c.ms ? '<span>' + esc(msTime(c.ms)) + '</span>' : '') + bkBadge(c.b) + (c.x ? '<span class="bk-card-x">' + esc(c.x) + '</span>' : '') + '</span></button>';
+    }).join('');
+  }
+  function bkRenderTop(S) {
+    var el = $('bkStatus');
+    if (!el) return;
+    var cls = 'bk-chip bk-status', txt;
+    if (S.newest) {
+      var late = bkStale(S.newest, 60);
+      cls += late ? ' is-late' : ' is-live';
+      txt = '<i class="bk-pulse"></i>ข้อมูลล่าสุด <b>' + esc(msTime(S.newest)) + '</b> <span>(' + esc(agoText(S.newest)) + ')</span>' + (late ? ' · <em>อัปเดตล่าช้า</em>' : '');
+    } else if (BK.err.live) { cls += ' is-late'; txt = '<i class="bk-pulse"></i>ยังไม่มีข้อมูลสดจากระบบอัตโนมัติ · ใช้ข้อมูลสำรองเท่าที่มี'; }
+    else txt = '<i class="bk-pulse"></i>กำลังโหลดข้อมูลสด…';
+    el.className = cls; el.innerHTML = txt;
+    var w = bkWorry(S).length;
+    $('bkWorryN').textContent = w ? String(w) : '';
+    $('bkWorry').classList.toggle('has', !!w);
+  }
+  // จุดที่น่าห่วง: คลองถึง/ใกล้ตลิ่ง ถนนมีน้ำ ฝนหนัก
+  function bkWorry(S) {
+    var out = [];
+    if (S.canal) S.canal.worst.filter(function (w) { return w.L >= 2; }).forEach(function (w) { out.push({ k: 'canal', r: w.r, s: 10 + w.L, t: w.r[1], d: (w.L === 3 ? 'ถึงตลิ่ง' : 'ใกล้ตลิ่ง') + (w.fb != null ? ' · ' + bkFb(w.fb) : '') + ' · ' + (w.r[8] || '') }); });
+    if (S.road) S.road.wet.forEach(function (r) { out.push({ k: 'road', r: r, s: 8 + Math.min(4, (bkV('road', r) || 0) / 10), t: r[1], d: 'น้ำบนถนน ' + bkNum(bkV('road', r), 0) + ' ซม. · ' + r[5] }); });
+    if (S.rain && S.rain.live) bkRows('rain').forEach(function (r) { var x = bkV('rain', r); if (x >= 35) out.push({ k: 'rain', r: r, s: 9 + x / 30, t: r[1], d: 'ฝน ' + bkNum(x) + ' มม./ชม. · ' + bkRainLabel(x) }); });
+    out.sort(function (a, b) { return b.s - a.s; });
+    return out;
+  }
+
+  // ---------- เรื่องเล่า (แท็บล่าง) ----------
+  function bkOverview() { var m = BK.map && BK.map.getContainer().clientWidth < 700; return { center: BK_CENTER, zoom: m ? 9.9 : 10.9, pitch: BK.d3 ? 48 : 0, bearing: BK.d3 ? -14 : 0 }; }
+  function bkPt(r, z) { return { center: [r[2], r[3]], zoom: z || 14.2, pitch: BK.d3 ? 55 : 0, bearing: BK.d3 ? -20 : 0 }; }
+  function bkLink(href, t) { return href ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(t) + '</a>' : ''; }
+  function bkGo(kind, i, t) { return '<button type="button" class="bk-inl" data-bk-go="' + kind + ':' + i + '">' + esc(t) + '</button>'; }
+  function bkIdx(rows, r) { return rows.indexOf(r); }
+  function bkSteps(id, S) {
+    var st = [], x, i, wx = S.wx;
+    var tail = function (o) { st.push(o); };
+    if (id === 'ask') {
+      var L = [];
+      if (S.rain && S.rain.live) L.push(['rain', S.rain.n ? 'ฝนตกที่ <b>' + S.rain.n + '</b> จาก ' + S.rain.tot + ' สถานี หนักสุด <b>' + bkNum(S.rain.max) + '</b> มม./ชม.' : 'ยังไม่มีฝนที่สถานีวัด ' + S.rain.tot + ' สถานี']);
+      else if (wx) L.push(['rain', 'ฝนแบบจำลองตอนนี้ ' + bkNum(wx.pr) + ' มม./ชม. ' + bkBadge('est')]);
+      if (S.canal) L.push(['canal', 'น้ำในคลอง ใกล้ตลิ่ง <b>' + S.canal.near + '</b> จุด · ถึงตลิ่ง <b>' + S.canal.over + '</b> จุด จาก ' + S.canal.tot + ' จุดวัด']);
+      if (S.road && !S.road.old) L.push(['road', S.road.wet.length ? 'ถนนมีน้ำ <b>' + S.road.wet.length + '</b> จุด จาก ' + S.road.tot + ' จุดวัด' : 'ถนนที่มีจุดวัดยังไม่มีน้ำขัง']);
+      if (S.air) L.push(['air', 'ฝุ่น PM2.5 สูงสุด <b>' + bkNum(S.air.max, 0) + '</b> µg/m³ (' + bkPmLabel(S.air.max) + ')']);
+      else if (wx && wx.pm != null) L.push(['air', 'ฝุ่น PM2.5 เฉลี่ยราว ' + bkNum(wx.pm, 0) + ' µg/m³ ' + bkBadge('est')]);
+      if (wx && wx.feel != null) L.push(['heat', 'อุณหภูมิ ' + bkNum(wx.t, 0) + '°C รู้สึกเหมือน <b>' + bkNum(wx.feel, 0) + '°C</b> ความชื้น ' + bkNum(wx.rh, 0) + '%']);
+      if (S.traffic) L.push(['traffic', 'ดัชนีรถติด <b>' + bkNum(S.traffic.v) + '</b>/10 (' + bkTrafficLabel(S.traffic.v) + ')']);
+      if (S.people) L.push(['people', 'ประชาชนแจ้งเรื่อง <b>' + fmtN(S.people.n) + '</b> เรื่องใน 24 ชม. (เรื่องน้ำ ' + fmtN(S.people.flood) + ')']);
+      tail({ t: 'กรุงเทพตอนนี้เป็นยังไง', b: L.length ? '<ul class="bk-ul">' + L.map(function (l) { return '<li><button type="button" class="bk-li" data-bk-story="' + l[0] + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + BK_ICO[l[0]] + '</svg><span>' + l[1] + '</span></button></li>'; }).join('') + '</ul>' : '<p>กำลังรวบรวมข้อมูลจากหน่วยงานต่างๆ…</p>',
+        when: S.newest, badge: S.newest ? (bkStale(S.newest, 60) ? 'old' : 'real') : '', src: [BK_ATTR.bma, BK_ATTR.air, BK_ATTR.om, BK_ATTR.longdo], cam: bkOverview(), metric: BK.metric });
+      var top = BK.base ? BK.base.districts.filter(function (d) { return d.v; }).sort(function (a, b) { return bkDistScore(b) - bkDistScore(a); }).slice(0, 4) : [];
+      tail({ t: 'เลือกเขตของคุณ', b: '<p>แตะเขตบนแผนที่ หรือค้นชื่อเขต สถานที่ สถานีรถไฟฟ้า ที่ช่องค้นหา เพื่อดูน้ำ ฝน ฝุ่น เรื่องแจ้ง และโครงสร้างรับมือน้ำของเขตนั้น</p>' +
+        '<div class="bk-row"><button type="button" class="bk-btn" data-bk-near="1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>เขตที่ฉันอยู่</button></div>' +
+        (top.length ? '<p class="bk-sub">เขตที่น่าดูตอนนี้</p><div class="bk-row">' + top.map(function (d) { return '<button type="button" class="q-chip" data-bk-dist="' + d.id + '">' + esc(d.th) + '</button>'; }).join('') + '</div>' : (BK.base ? '' : '<p class="bk-sub">แผนที่เขตกำลังเตรียม (ระบบอัตโนมัติสร้างจาก OpenStreetMap สัปดาห์ละครั้ง)</p>')),
+        cam: null });
+    } else if (id === 'rain') {
+      if (S.rain && S.rain.live) {
+        tail({ t: 'ฝนรอบล่าสุด', b: '<p>' + (S.rain.n ? 'ฝนตกที่ <b>' + S.rain.n + '</b> จาก ' + S.rain.tot + ' สถานีวัดฝน หนักสุด <b>' + bkNum(S.rain.max) + ' มม./ชม.</b> (' + bkRainLabel(S.rain.max) + ')' : 'ยังไม่มีฝนที่สถานีวัดฝน ' + S.rain.tot + ' สถานีของ กทม.') + '</p>' +
+          '<p class="bk-sub">สีของเขตคือฝนที่หนักที่สุดในเขตใน 1 ชั่วโมงที่ผ่านมา</p>', when: S.rain.ms, badge: bkStale(S.rain.ms, 60) ? 'old' : 'real', src: [BK_ATTR.bma], cam: bkOverview(), metric: 'rain', show: { points: true } });
+        if (S.rain.top && S.rain.max >= 0.1) {
+          x = S.rain.top;
+          tail({ t: 'ฝนหนักที่สุดตอนนี้', b: '<p><b>' + esc(x[1]) + '</b>' + (x[9] ? ' เขต' + esc(x[9]) : '') + '</p><div class="bk-kv"><span>15 นาที<b>' + bkNum(x[4]) + '</b></span><span>1 ชม.<b>' + bkNum(x[5]) + '</b></span><span>3 ชม.<b>' + bkNum(x[6]) + '</b></span><span>24 ชม.<b>' + bkNum(x[7]) + '</b></span></div><p class="bk-sub">หน่วย มม.</p>',
+            when: x[8], badge: bkStale(x[8], 60) ? 'old' : 'real', src: [BK_ATTR.bma], cam: bkPt(x, 13.2), metric: 'rain', sel: ['rain', bkIdx(bkRows('rain'), x)] });
+        }
+      } else if (S.rain) {
+        tail({ t: 'ฝนสะสมวันนี้', b: '<p>ยังไม่ได้ข้อมูลรายชั่วโมงจาก กทม. ใช้ฝนสะสมตั้งแต่ 07:00 น. จาก ThaiWater แทน: สูงสุด <b>' + bkNum(S.rain.max) + ' มม.</b></p>', when: S.rain.ms, badge: 'real', src: [BK_ATTR.tw], cam: bkOverview(), metric: 'rain' });
+      } else tail({ t: 'ฝนตอนนี้', b: '<p>ยังไม่มีข้อมูลสถานีวัดฝน ดูฝนแบบจำลองและเรดาร์แทน</p>', cam: bkOverview(), metric: 'rain' });
+      if (wx) {
+        var mx = Math.max.apply(null, wx.next.concat([1]));
+        var hrs = wx.next.map(function (v, k) { var h = new Date(Date.now() + 7 * 3600e3 + k * 3600e3).getUTCHours(); return '<span class="bk-bar"><i style="height:' + Math.max(4, Math.round(v / mx * 44)) + 'px;background:' + bkCol('rain', v) + '"></i><b>' + bkNum(v) + '</b><small>' + ('0' + h).slice(-2) + ':00</small><em>' + bkNum(wx.prob[k], 0) + '%</em></span>'; }).join('');
+        tail({ t: 'อีก 6 ชั่วโมงข้างหน้า', b: '<p>ฝนสูงสุดที่คาดในกรุงเทพแต่ละชั่วโมง (มม.) และโอกาสเกิดฝน พร้อมเรดาร์ฝนล่าสุดบนแผนที่</p><div class="bk-bars">' + hrs + '</div>',
+          when: BK.wx.ms, badge: 'est', src: [BK_ATTR.om, BK_ATTR.radar], cam: Object.assign(bkOverview(), { zoom: bkOverview().zoom - 0.8 }), metric: 'rain', show: { radar: true } });
+      }
+    } else if (id === 'canal') {
+      if (S.canal) {
+        tail({ t: 'น้ำในคลอง รอบล่าสุด', b: '<p><b>' + S.canal.near + ' จุด</b>ใกล้ตลิ่ง (ห่างไม่ถึง 15 ซม. หรือ กทม. ให้สถานะเตือนภัย) · ถึงตลิ่ง <b>' + S.canal.over + '</b> จุด จาก ' + S.canal.tot + ' จุดวัด</p>' +
+          '<p class="bk-sub">สถานะจาก กทม.: เตือนภัย ' + S.canal.warn + ' · วิกฤต ' + S.canal.crit + ' · ขัดข้อง ' + S.canal.bad + '</p>', when: S.canal.ms, badge: bkStale(S.canal.ms, 60) ? 'old' : 'real', src: [BK_ATTR.bma], cam: bkOverview(), metric: 'canal', show: { points: true } });
+        var w = S.canal.worst[0];
+        if (w) {
+          tail({ t: 'จุดที่น่าห่วงที่สุด', b: '<p><b>' + esc(w.r[1]) + '</b>' + (w.r[10] ? ' · ' + esc(w.r[10]) : '') + '</p><div class="bk-kv"><span>ระดับน้ำ<b>' + bkNum(bkV('canal', w.r), 2) + '</b></span><span>ตลิ่ง<b>' + bkNum(w.r[5], 2) + '</b></span><span>' + (w.fb != null && w.fb < 0 ? 'สูงกว่าตลิ่ง' : 'ห่างตลิ่ง') + '<b>' + (w.fb != null ? bkNum(Math.abs(w.fb) * 100, 0) + ' ซม.' : '–') + '</b></span></div><p class="bk-sub">หน่วย ม.รทก. · สถานะ ' + esc(w.r[8] || '–') + ' ' + bkLink(w.r[12], 'ดูที่ กทม.') + '</p>' +
+            (S.canal.worst.length > 1 ? '<p class="bk-sub">จุดอื่นที่ควรดู: ' + S.canal.worst.slice(1, 5).map(function (o) { return bkGo('canal', bkRows('canal').indexOf(o.r), o.r[1]); }).join(' ') + '</p>' : ''),
+            when: w.r[9], badge: bkStale(w.r[9], 60) ? 'old' : 'real', src: [BK_ATTR.bma], cam: bkPt(w.r, 14), metric: 'canal', sel: ['canal', bkRows('canal').indexOf(w.r)] });
+        }
+      } else tail({ t: 'น้ำในคลอง', b: '<p>ยังไม่มีข้อมูลระดับน้ำในคลองจาก กทม. (ระบบอัตโนมัติจะดึงทุก 20 นาที)</p>', cam: bkOverview(), metric: 'canal' });
+      st.push(bkRiverStep(S));
+    } else if (id === 'river') {
+      st.push(bkRiverStep(S));
+    } else if (id === 'road') {
+      if (S.road) {
+        var top1 = S.road.wet[0], tw = S.road.from !== 'bma';
+        tail({ t: 'น้ำบนถนน', b: S.road.old ? '<p>จุดวัดน้ำบนถนนยังไม่มีค่าปัจจุบัน (ค่าล่าสุดเมื่อ ' + esc(msTime(S.road.ms)) + ') จึงไม่นำมานับ</p>' : '<p>' + (S.road.wet.length ? 'ถนนมีน้ำ <b>' + S.road.wet.length + ' จุด</b> จาก ' + S.road.tot + ' จุดวัด ลึกสุด <b>' + bkNum(bkV('road', top1), 0) + ' ซม.</b> ที่ ' + esc(top1[1]) : 'ยังไม่พบน้ำขังที่จุดวัดบนถนน ' + S.road.tot + ' จุด') + '</p>' +
+          (tw ? '<p class="bk-sub">ใช้ข้อมูลสำรองจาก ThaiWater ซึ่งอาจไม่ใช่ค่าปัจจุบัน</p>' : '<p class="bk-sub">เซ็นเซอร์ขัดข้อง ' + S.road.bad + ' จุด (ไม่นำมานับ)</p>'),
+          when: S.road.ms, badge: bkStale(S.road.ms, 60) ? 'old' : 'real', src: [tw ? BK_ATTR.tw : BK_ATTR.bma], cam: bkOverview(), metric: 'rain', show: { points: true } });
+        if (top1) tail({ t: 'จุดที่น้ำลึกที่สุด', b: '<p><b>' + esc(top1[1]) + '</b></p><div class="bk-kv"><span>ความลึก<b>' + bkNum(bkV('road', top1), 0) + ' ซม.</b></span><span>สถานะ<b>' + esc(top1[5]) + '</b></span></div>' +
+          (S.road.wet.length > 1 ? '<p class="bk-sub">จุดอื่น: ' + S.road.wet.slice(1, 6).map(function (r) { return bkGo('road', bkRoadRows().rows.indexOf(r), r[1]); }).join(' ') + '</p>' : '') + '<p class="bk-sub">' + bkLink(top1[8], 'ดูกล้องและกราฟที่ กทม.') + '</p>',
+          when: top1[6], badge: bkStale(top1[6], 60) ? 'old' : 'real', src: [BK_ATTR.bma], cam: bkPt(top1, 15), metric: 'rain', sel: ['road', bkRoadRows().rows.indexOf(top1)] });
+      } else tail({ t: 'น้ำบนถนน', b: '<p>กำลังโหลดจุดวัดน้ำบนถนน…</p>', cam: bkOverview() });
+      if (S.people) tail({ t: 'ประชาชนแจ้งเรื่องน้ำ', b: '<p>เรื่องน้ำท่วม น้ำขัง ท่อระบายน้ำ ที่แจ้งผ่าน Traffy Fondue ใน 24 ชม.: <b>' + fmtN(S.people.flood) + ' เรื่อง</b></p><p class="bk-sub">แสดงเฉพาะตำแหน่งและสถานะ ไม่แสดงข้อความหรือรูปของผู้แจ้ง</p>',
+        badge: 'real', src: [BK_ATTR.traffy], cam: bkOverview(), metric: 'people', show: { people: true } });
+    } else if (id === 'air') {
+      if (S.air) tail({ t: 'ฝุ่น PM2.5 รอบล่าสุด', b: '<p>สูงสุด <b>' + bkNum(S.air.max, 0) + ' µg/m³</b> (' + bkPmLabel(S.air.max) + ') ที่ ' + esc(S.air.top[1]) + '</p><p class="bk-sub">ค่าเฉลี่ยรายชั่วโมงจาก ' + S.air.n + ' สถานีในกรุงเทพและรอบๆ · เขตที่ไม่มีสถานีใช้ค่าจากแบบจำลอง</p>',
+        when: S.air.ms, badge: bkStale(S.air.ms, 180) ? 'old' : 'real', src: [BK_ATTR.air, BK_ATTR.om], cam: bkOverview(), metric: 'pm25', show: { points: true }, sel: ['air', bkRows('air').indexOf(S.air.top)] });
+      else if (wx) tail({ t: 'ฝุ่น PM2.5', b: '<p>ค่าประมาณจากแบบจำลองเฉลี่ยทั้งเมือง <b>' + bkNum(wx.pm, 0) + ' µg/m³</b> (' + bkPmLabel(wx.pm) + ') สูงสุดราว ' + bkNum(wx.pmMax, 0) + '</p>', when: BK.wx.ms, badge: 'est', src: [BK_ATTR.om], cam: bkOverview(), metric: 'pm25' });
+      if (wx) tail({ t: 'ลมพัดไปทางไหน', b: '<p>ลมพัดมาจากทิศ<b>' + bkDir(wx.wd) + '</b> ความเร็วราว <b>' + bkNum(wx.ws, 0) + ' กม./ชม.</b></p><p class="bk-sub">ลูกศรบนแผนที่ชี้ทางที่ลมพัดไป ลมแรงช่วยพัดฝุ่นให้จางลง ลมสงบฝุ่นมักสะสม</p>',
+        when: BK.wx.ms, badge: 'est', src: [BK_ATTR.om], cam: bkOverview(), metric: 'pm25', show: { wind: true } });
+    } else if (id === 'heat') {
+      if (wx && wx.feel != null) {
+        tail({ t: 'ร้อนแค่ไหนตอนนี้', b: '<p>อุณหภูมิเฉลี่ย <b>' + bkNum(wx.t, 0) + '°C</b> ความชื้น ' + bkNum(wx.rh, 0) + '% รู้สึกเหมือน <b>' + bkNum(wx.feel, 0) + '°C</b> (' + bkHeatLabel(wx.feel) + ')</p><p class="bk-sub">สีของเขตคืออุณหภูมิที่รู้สึก (ดัชนีความร้อน) จากแบบจำลอง</p>',
+          when: BK.wx.ms, badge: 'est', src: [BK_ATTR.om], cam: bkOverview(), metric: 'heat' });
+        var hot = BK.base ? BK.base.districts.filter(function (d) { return d.v && d.v.heat != null; }).sort(function (a, b) { return b.v.heat - a.v.heat; }).slice(0, 3) : [];
+        if (hot.length) tail({ t: 'เขตที่ร้อนที่สุด', b: '<ol class="bk-ol">' + hot.map(function (d) { return '<li><button type="button" class="bk-inl" data-bk-dist="' + d.id + '">' + esc(d.th) + '</button> รู้สึกเหมือน <b>' + bkNum(d.v.heat, 0) + '°C</b></li>'; }).join('') + '</ol>',
+          when: BK.wx.ms, badge: 'est', src: [BK_ATTR.om], cam: { center: hot[0].c, zoom: 12, pitch: BK.d3 ? 50 : 0, bearing: -10 }, metric: 'heat', dist: hot[0].id });
+        tail({ t: 'ดูแลตัวเอง', b: '<p>' + (wx.feel >= 41 ? 'ร้อนระดับอันตราย เลี่ยงอยู่กลางแดดนาน ดื่มน้ำบ่อยๆ สังเกตอาการเวียนหัว ตัวร้อนจัด' : wx.feel >= 32 ? 'ร้อน ดื่มน้ำบ่อยๆ พักในที่ร่ม เลี่ยงกิจกรรมหนักกลางแดดช่วงเที่ยงถึงบ่าย' : 'อากาศพอสบาย แต่อย่าลืมดื่มน้ำ') + '</p>' +
+          (wx.uv != null ? '<p class="bk-sub">ดัชนี UV สูงสุดตอนนี้ ' + bkNum(wx.uv, 0) + (wx.uv >= 8 ? ' (สูงมาก ทาครีมกันแดด)' : '') + '</p>' : ''), when: BK.wx.ms, badge: 'est', src: [BK_ATTR.om], cam: null, metric: 'heat' });
+      } else tail({ t: 'ร้อนแค่ไหน', b: '<p>' + (BK.err.wx ? 'ยังโหลดข้อมูลอากาศไม่ได้' : 'กำลังโหลดข้อมูลอากาศ…') + '</p>', cam: bkOverview(), metric: 'heat' });
+    } else if (id === 'traffic') {
+      tail({ t: 'รถติดแค่ไหน', b: S.traffic ? '<p>ดัชนีรถติดของกรุงเทพตอนนี้ <b>' + bkNum(S.traffic.v) + ' จาก 10</b> (' + bkTrafficLabel(S.traffic.v) + ')</p><p class="bk-sub">0 = คล่องตัวมาก 10 = ติดขัดหนักมาก คำนวณจากความเร็วรถจริงบนถนนสายหลัก ' + bkLink('https://traffic.longdo.com/', 'ดูแผนที่รถติดรายถนนที่ Longdo Traffic') + '</p>' : '<p>' + (BK.err.traffic ? 'ยังโหลดดัชนีรถติดไม่ได้' : 'กำลังโหลด…') + '</p>',
+        when: S.traffic && S.traffic.ms, badge: S.traffic ? (bkStale(S.traffic.ms, 30) ? 'old' : 'idx') : '', src: [BK_ATTR.longdo], cam: bkOverview(), metric: BK.metric });
+      if (S.road && S.road.wet.length) tail({ t: 'ถนนที่มีน้ำขัง', b: '<p>น้ำบนถนนทำให้รถช้าลง ตอนนี้มี <b>' + S.road.wet.length + ' จุด</b></p><p class="bk-sub">' + S.road.wet.slice(0, 6).map(function (r) { return bkGo('road', bkRoadRows().rows.indexOf(r), r[1] + ' ' + bkNum(bkV('road', r), 0) + ' ซม.'); }).join(' ') + '</p>',
+        when: S.road.ms, badge: bkStale(S.road.ms, 60) ? 'old' : 'real', src: [BK_ATTR.bma], cam: bkOverview(), show: { points: true } });
+      if (BK.base && BK.base.lines.length) {
+        var km = 0; BK.base.lines.forEach(function (l) { km += l.km || 0; });
+        tail({ t: 'เลี่ยงรถติดด้วยระบบราง', b: '<p>รถไฟฟ้าและรถไฟชานเมือง <b>' + BK.base.lines.length + ' สาย</b> รวมราว <b>' + bkNum(km, 0) + ' กม.</b> ' + fmtN((BK.base.stations || []).length) + ' สถานี (นับตามแผนที่ OpenStreetMap)</p>' +
+          '<div class="bk-row bk-lines">' + BK.base.lines.map(function (l) { return '<span class="bk-line" style="--c:' + esc(l.col) + '">' + esc(l.th || l.en || l.ref) + '</span>'; }).join('') + '</div>',
+          badge: 'ref', src: [BK_ATTR.osm], cam: Object.assign(bkOverview(), { zoom: bkOverview().zoom - 0.3 }), show: { transit: true } });
+      }
+    } else if (id === 'people') {
+      if (S.people) {
+        var D = BK.base ? BK.base.districts.slice().sort(function (a, b) { return (b.v ? b.v.people : 0) - (a.v ? a.v.people : 0); }).slice(0, 3) : [];
+        tail({ t: 'เรื่องแจ้งจากประชาชน 24 ชม.', b: '<p>ประชาชนแจ้งปัญหาผ่าน Traffy Fondue <b>' + fmtN(S.people.n) + ' เรื่อง</b>' + (S.people.partial ? ' (นับจากเรื่องล่าสุด 500 เรื่อง)' : '') + ' เป็นเรื่องน้ำท่วม น้ำขัง ท่อระบายน้ำ ' + fmtN(S.people.flood) + ' เรื่อง</p>' +
+          (D.length && D[0].v && D[0].v.people ? '<p class="bk-sub">แจ้งมากสุด: ' + D.map(function (d) { return '<button type="button" class="bk-inl" data-bk-dist="' + d.id + '">' + esc(d.th) + '</button> ' + fmtN(d.v.people); }).join(' · ') + '</p>' : ''),
+          badge: 'real', src: [BK_ATTR.traffy], cam: bkOverview(), metric: 'people', show: { people: true } });
+        var stc = {};
+        S.people.rows.forEach(function (r) { stc[r[3]] = (stc[r[3]] || 0) + 1; });
+        tail({ t: 'เรื่องน้ำ: ตามสถานะ', b: '<div class="bk-kv">' + Object.keys(stc).sort(function (a, b) { return stc[b] - stc[a]; }).slice(0, 4).map(function (k) { return '<span>' + esc(k) + '<b>' + fmtN(stc[k]) + '</b></span>'; }).join('') + '</div>' +
+          '<p class="bk-sub">จุดสีม่วงบนแผนที่คือเรื่องน้ำแต่ละเรื่อง แตะเพื่อเปิดเรื่องที่ Traffy Fondue · ไม่แสดงข้อความหรือรูปของผู้แจ้ง</p>', badge: 'real', src: [BK_ATTR.traffy], cam: null, metric: 'people', show: { people: true } });
+      } else tail({ t: 'เรื่องจากประชาชน', b: '<p>' + (BK.busy.people2 ? 'กำลังโหลดเรื่องแจ้งล่าสุด…' : 'ยังไม่มีข้อมูลเรื่องแจ้ง') + '</p>', cam: bkOverview(), metric: 'people' });
+    } else if (id === 'under') {
+      var sub = BK.base ? BK.base.lines.filter(function (l) { return l.k === 'subway'; }) : [], skm = 0;
+      sub.forEach(function (l) { skm += l.km || 0; });
+      var nSub = BK.base ? (BK.base.stations || []).filter(function (s) { return s[4] === 'subway'; }).length : 0;
+      tail({ t: 'มองทะลุพื้นดิน: รถไฟฟ้าใต้ดิน', b: sub.length ? '<p>รถไฟฟ้าใต้ดิน ' + sub.length + ' สาย ยาวราว <b>' + bkNum(skm, 0) + ' กม.</b> สถานีใต้ดิน ' + nSub + ' สถานี (บางช่วงยกระดับ)</p><p class="bk-sub">ตึกโปร่งใสลงเพื่อให้เห็นแนวรถไฟฟ้าชัดขึ้น</p>' : '<p>' + (BK.base ? 'ไม่พบเส้นรถไฟฟ้าใต้ดินในข้อมูล' : 'แผนที่เส้นรถไฟฟ้ากำลังเตรียม') + '</p>',
+        badge: 'ref', src: [BK_ATTR.osm], cam: { center: [100.545, 13.745], zoom: 12.4, pitch: BK.d3 ? 62 : 0, bearing: -28 }, ghost: true, show: { transit: true } });
+      var inf = BK.base && BK.base.infra || {}, cap = 0;
+      (inf.pump || []).concat(inf.wpump || []).forEach(function (r) { cap += r[4] || 0; });
+      tail({ t: 'สถานีสูบน้ำและประตูระบายน้ำ', b: inf.pump ? '<p>สถานีสูบน้ำ <b>' + fmtN((inf.pump || []).length + (inf.wpump || []).length) + ' แห่ง</b> สูบได้รวมราว <b>' + fmtN(Math.round(cap)) + ' ลบ.ม./วินาที</b> · ประตูระบายน้ำ <b>' + fmtN((inf.gate || []).length) + ' แห่ง</b></p>' +
+        '<div class="bk-sz"><span><i style="width:8px;height:8px"></i>10</span><span><i style="width:13px;height:13px"></i>50</span><span><i style="width:19px;height:19px"></i>150</span> ลบ.ม./วินาที</div>' : '<p>กำลังเตรียมข้อมูลโครงสร้างระบายน้ำ</p>',
+        badge: 'ref', src: [BK_ATTR.ckan], cam: bkOverview(), ghost: true, show: { infra: true } });
+      if (inf.risk && inf.risk.length) {
+        var grp = {};
+        inf.risk.forEach(function (r) { grp[r[4] || 'อื่นๆ'] = (grp[r[4] || 'อื่นๆ'] || 0) + 1; });
+        tail({ t: 'จุดเสี่ยงน้ำท่วม', b: '<p>กทม. ประกาศจุดเสี่ยงน้ำท่วม <b>' + fmtN(inf.risk.length) + ' จุด</b></p><div class="bk-kv">' + Object.keys(grp).map(function (k) { return '<span>' + esc(k) + '<b>' + grp[k] + '</b></span>'; }).join('') + '</div>',
+          badge: 'ref', src: [BK_ATTR.ckan], cam: bkOverview(), ghost: true, show: { infra: true } });
+      }
+    } else if (id === 'replay') {
+      var H = BK.hist, n = H ? H.ts.length : 0;
+      tail({ t: 'ย้อนดู 24 ชั่วโมง', b: !H ? '<p>' + (BK.err.hist ? 'ยังไม่มีประวัติย้อนหลัง (ระบบอัตโนมัติเริ่มเก็บทุก 20 นาทีหลังเปิดใช้งาน)' : 'กำลังโหลดประวัติ…') + '</p>' :
+        n < 2 ? '<p>ระบบเพิ่งเริ่มเก็บประวัติ (มี ' + n + ' รอบ) รออีกสักพักจะเลื่อนดูย้อนหลังได้</p>' :
+        '<p>เลื่อนแถบเพื่อดูฝนและน้ำในคลองย้อนหลัง หรือกดเล่น</p><div class="bk-rep"><button type="button" class="bk-btn" data-bk-play="1" aria-pressed="' + BK.rep.play + '">' + (BK.rep.play ? 'หยุด' : 'เล่น') + '</button>' +
+        '<input type="range" id="bkRepR" min="0" max="' + (n - 1) + '" value="' + (BK.rep.i < 0 ? n - 1 : BK.rep.i) + '" aria-label="เวลาย้อนหลัง"><b id="bkRepT" class="mono">' + esc(msTime(H.ts[BK.rep.i < 0 ? n - 1 : BK.rep.i] * 1000)) + '</b></div>',
+        badge: 'rep', src: [BK_ATTR.bma], cam: bkOverview(), metric: BK.metric === 'canal' ? 'canal' : 'rain', show: { points: true }, replay: true });
+    }
+    return st;
+  }
+  function bkDistScore(d) { var v = d.v || {}; return (v.canal || 0) * 3 + (v.rain || 0) / 5 + v.wet * 2 + (v.people || 0) / 10; }
+  function bkRiverStep(S) {
+    var rv = bkRows('river'), bm = bkRows('canal').filter(function (r) { return /เจ้าพระยา/.test(r[11] || ''); });
+    var list = rv.map(function (r) { return '<li><span>' + esc(r[0]) + ' <small>' + esc(r[7]) + '</small></span><b>' + (r[5] != null ? bkNum(r[5], 0) + '%' : bkNum(r[3], 2) + ' ม.') + '</b><i style="--p:' + Math.max(0, Math.min(100, r[5] || 0)) + '%"></i></li>'; }).join('');
+    var bmL = bm.slice(0, 6).map(function (r) { return bkGo('canal', bkRows('canal').indexOf(r), r[1] + ' ' + bkNum(bkV('canal', r), 2) + ' ม.'); }).join(' ');
+    var ext = null;
+    bm.forEach(function (r) { ext = ext ? [Math.min(ext[0], r[2]), Math.min(ext[1], r[3]), Math.max(ext[2], r[2]), Math.max(ext[3], r[3])] : [r[2], r[3], r[2], r[3]]; });
+    return { t: 'แม่น้ำเจ้าพระยา ต้นน้ำถึงทะเล', b: (list ? '<p class="bk-sub">ระดับน้ำเทียบความจุลำน้ำ (% ของตลิ่ง) เรียงจากเหนือลงใต้</p><ul class="bk-river">' + list + '</ul>' : '<p>ยังไม่มีข้อมูลสถานีแม่น้ำ</p>') +
+      (bmL ? '<p class="bk-sub">จุดวัดของ กทม. ริมเจ้าพระยา: ' + bmL + '</p>' : ''),
+      when: rv.length ? bkMaxMs(rv, 6) : 0, badge: rv.length ? (bkStale(bkMaxMs(rv, 6), 180) ? 'old' : 'real') : '', src: [BK_ATTR.tw, BK_ATTR.bma],
+      cam: ext ? { bounds: [[ext[0] - 0.03, ext[1] - 0.03], [ext[2] + 0.03, ext[3] + 0.03]], pitch: BK.d3 ? 45 : 0, bearing: 0 } : bkOverview(), metric: 'canal', show: { river: true, points: true } };
+  }
+  // ---------- แผนที่เมืองกลางคืน (ถนนเรืองแสงสีอำพัน น้ำสีน้ำเงินเข้ม ตึกสีครามขึ้นเป็นแท่ง) ----------
+  function bkStyle() {
+    var maj = ['match', ['get', 'class'], ['motorway', 'trunk', 'primary', 'secondary'], true, false];
+    var notTunnel = ['!=', ['get', 'brunnel'], 'tunnel'];
+    return { version: 8, glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+      sources: { omt: { type: 'vector', url: OMT_TJ, attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> ' + OSM_ATTR } },
+      layers: [
+        { id: 'bks-bg', type: 'background', paint: { 'background-color': '#060A15' } },
+        { id: 'bks-land', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['match', ['get', 'class'], ['wood', 'grass', 'farmland', 'wetland'], true, false], paint: { 'fill-color': '#0A1418', 'fill-opacity': 0.8 } },
+        { id: 'bks-park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': '#0B1C1E', 'fill-opacity': 0.9 } },
+        { id: 'bks-water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': '#0A2342' } },
+        { id: 'bks-water-edge', type: 'line', source: 'omt', 'source-layer': 'water', minzoom: 10, paint: { 'line-color': '#1D5C9A', 'line-width': 1, 'line-opacity': 0.55, 'line-blur': 1 } },
+        { id: 'bks-ww-glow', type: 'line', source: 'omt', 'source-layer': 'waterway', minzoom: 10, filter: ['match', ['get', 'class'], ['river', 'canal'], true, false],
+          paint: { 'line-color': '#1E7FD8', 'line-opacity': 0.35, 'line-blur': 3, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2, 14, 7, 17, 14] } },
+        { id: 'bks-ww', type: 'line', source: 'omt', 'source-layer': 'waterway', minzoom: 9, filter: ['match', ['get', 'class'], ['river', 'canal', 'stream', 'drain', 'ditch'], true, false],
+          paint: { 'line-color': ['match', ['get', 'class'], ['river', 'canal'], '#2E8BE6', '#1B4F86'], 'line-opacity': 0.85, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.4, 13, ['match', ['get', 'class'], ['river', 'canal'], 1.6, 0.6], 17, ['match', ['get', 'class'], ['river', 'canal'], 4, 1.4]] } },
+        { id: 'bks-runway', type: 'line', source: 'omt', 'source-layer': 'aeroway', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#1F2A44', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1, 15, 14] } },
+        { id: 'bks-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12, filter: ['all', ['match', ['get', 'class'], ['tertiary', 'minor', 'service'], true, false], notTunnel],
+          layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#6B5530', 'line-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0.35, 15, 0.7], 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.4, 16, 2.6] } },
+        { id: 'bks-road-glow', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: ['all', maj, notTunnel],
+          layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#FF9F2E', 'line-opacity': 0.24, 'line-blur': ['interpolate', ['linear'], ['zoom'], 8, 2, 16, 12],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 2, 12, 7, 16, 20] } },
+        { id: 'bks-road', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: ['all', maj, notTunnel], layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#FFD9A0', 'trunk', '#FFC877', 'primary', '#F7AE52', '#C88A3D'],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 8, ['match', ['get', 'class'], ['motorway', 'trunk'], 0.8, 0.4], 12, ['match', ['get', 'class'], ['motorway', 'trunk'], 1.8, 1.1], 16, ['match', ['get', 'class'], ['motorway', 'trunk'], 5, 3.4]] } },
+        { id: 'bks-rail', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 10, filter: ['match', ['get', 'class'], ['rail', 'transit'], true, false],
+          paint: { 'line-color': ['match', ['get', 'class'], 'transit', '#38BDF8', '#64748B'], 'line-opacity': ['match', ['get', 'brunnel'], 'tunnel', 0.25, 0.6], 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.6, 16, 2], 'line-dasharray': [3, 2] } },
+        { id: 'bks-bldg2d', type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 13, maxzoom: 14.2, paint: { 'fill-color': '#151D38', 'fill-opacity': 0.9 } },
+        { id: 'bks-bldg', type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 13.6, filter: ['!=', ['get', 'hide_3d'], true],
+          paint: { 'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 5], 0, '#18213F', 25, '#222E58', 80, '#33418A', 200, '#5A64C8'],
+            'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, ['coalesce', ['get', 'render_height'], 5]],
+            'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 13.6, 0, 14.4, ['coalesce', ['get', 'render_min_height'], 0]],
+            'fill-extrusion-opacity': 0.92, 'fill-extrusion-vertical-gradient': true } }
+      ] };
+  }
+  var BK_PT_LAYERS = ['bk-infra', 'bk-stn', 'bk-river', 'bk-people', 'bk-air', 'bk-road', 'bk-rain', 'bk-canal'];
+  function bkEnsureMap() {
+    if (BK.map) { BK.map.resize(); return; }
+    var el = $('bkMap');
+    if (!el || !window.maplibregl) return;
+    BK.lite = el.clientWidth < 700 || (navigator.hardwareConcurrency || 8) <= 4;
+    var m = el.clientWidth < 700;
+    var map = BK.map = new maplibregl.Map({ container: el, style: usingFallback ? fallbackStyle('dark') : bkStyle(), center: BK_CENTER, zoom: m ? 9.9 : 10.9, pitch: 48, bearing: -14,
+      minZoom: 8.6, maxZoom: 18, maxBounds: BK_BOUNDS, maxPitch: 70, attributionControl: { compact: true }, locale: UI_TH, fadeDuration: 0 });
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+    map.on('load', function () {
+      BK.ready = true;
+      var at = el.querySelector('.maplibregl-ctrl-attrib');
+      if (at && m) at.classList.remove('maplibregl-compact-show');
+      bkAddLayers();
+      bkRefresh('map');
+      bkApplyStep(true);
+    });
+    map.on('zoom', bkZoomCls);
+    map.on('moveend', function () { bkZoomCls(); if (BK.rep.i < 0) bkFxSet(); });
+    map.on('click', function (e) {
+      var hit = map.queryRenderedFeatures(e.point, { layers: BK_PT_LAYERS.filter(function (l) { return map.getLayer(l); }) });
+      if (hit.length) { bkPopup(hit[0].layer.id.replace('bk-', ''), hit[0].properties.i, e.lngLat); return; }
+      if (BK.pop) { BK.pop.remove(); BK.pop = null; }
+      var d = bkDistAt(e.lngLat.lng, e.lngLat.lat);
+      if (d) bkSelDist(d.id, false);
+    });
+    map.on('mousemove', function (e) {
+      if (!BK.ready) return;
+      var hit = map.queryRenderedFeatures(e.point, { layers: BK_PT_LAYERS.filter(function (l) { return map.getLayer(l); }) });
+      var d = !hit.length && bkDistAt(e.lngLat.lng, e.lngLat.lat);
+      map.getCanvas().style.cursor = hit.length || d ? 'pointer' : '';
+      var id = d ? d.id : null;
+      if (id !== BK.hover) { BK.hover = id; bkSetHover(); }
+      bkTip(d, e.point);
+    });
+    map.getCanvas().addEventListener('mouseleave', function () { BK.hover = null; bkSetHover(); bkTip(null); });
+  }
+  function bkZoomCls() {
+    if (!BK.map) return;
+    var z = BK.map.getZoom(), el = $('pageCity');
+    el.classList.toggle('bk-zl', z < 11.4);
+    el.classList.toggle('bk-zh', z >= 12.8);
+    el.classList.toggle('bk-zm', z >= 12.2);
+  }
+  function bkAddLayers() {
+    var map = BK.map, E = emptyFC();
+    ['bk-dist', 'bk-lines', 'bk-stn', 'bk-infra', 'bk-river', 'bk-people', 'bk-air', 'bk-road', 'bk-rain', 'bk-canal', 'bk-wind', 'bk-sel'].forEach(function (s) { setGeo(map, s, E); });
+    var under = map.getLayer('bks-bldg2d') ? 'bks-bldg2d' : undefined;
+    map.addLayer({ id: 'bk-dist-fill', type: 'fill', source: 'bk-dist', paint: { 'fill-color': ['coalesce', ['get', 'c'], '#334155'],
+      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 11.5, ['case', ['boolean', ['get', 'm'], false], 0.62, ['==', ['get', 'v'], null], 0.04, 0.3], 15, ['case', ['boolean', ['get', 'm'], false], 0.62, ['==', ['get', 'v'], null], 0.02, 0.07]] } }, under);
+    map.addLayer({ id: 'bk-dist-line', type: 'line', source: 'bk-dist', paint: { 'line-color': '#5B6BA8', 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 0.5, 13, 1.4], 'line-opacity': 0.55 } }, under);
+    map.addLayer({ id: 'bk-dist-hover', type: 'line', source: 'bk-dist', filter: ['==', ['get', 'id'], -1], paint: { 'line-color': '#C7D2FE', 'line-width': 2, 'line-opacity': 0.9 } });
+    map.addLayer({ id: 'bk-dist-sel-glow', type: 'line', source: 'bk-dist', filter: ['==', ['get', 'id'], -1], paint: { 'line-color': '#FDE68A', 'line-width': 9, 'line-blur': 6, 'line-opacity': 0.5 } });
+    map.addLayer({ id: 'bk-dist-sel', type: 'line', source: 'bk-dist', filter: ['==', ['get', 'id'], -1], paint: { 'line-color': '#FDE68A', 'line-width': 2.4 } });
+    map.addLayer({ id: 'bk-lines-glow', type: 'line', source: 'bk-lines', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'col'], 'line-opacity': 0.4, 'line-blur': 5, 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 4, 14, 12] } });
+    map.addLayer({ id: 'bk-lines', type: 'line', source: 'bk-lines', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'col'], 'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1.4, 14, 3.6] } });
+    map.addLayer({ id: 'bk-stn', type: 'circle', source: 'bk-stn', minzoom: 11.5, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 11.5, 2.4, 15, 5], 'circle-color': '#0B1020', 'circle-stroke-color': ['coalesce', ['get', 'col'], '#E2E8F0'], 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'bk-infra', type: 'circle', source: 'bk-infra', paint: { 'circle-radius': ['case', ['>', ['get', 'cap'], 0], ['interpolate', ['linear'], ['get', 'cap'], 0, 3, 10, 4, 50, 6.5, 150, 9.5], 3.2],
+      'circle-color': ['match', ['get', 'k'], 'gate', '#F59E0B', 'risk', '#F43F5E', '#2DD4BF'], 'circle-opacity': 0.85, 'circle-stroke-color': '#0B1020', 'circle-stroke-width': 1 } });
+    map.addLayer({ id: 'bk-river', type: 'circle', source: 'bk-river', paint: { 'circle-radius': 7, 'circle-color': ['interpolate', ['linear'], ['coalesce', ['get', 'p'], 0], 0, '#34D399', 70, '#FACC15', 90, '#FB923C', 100, '#F43F5E'], 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'bk-people', type: 'circle', source: 'bk-people', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2, 14, 4.5], 'circle-color': '#C084FC', 'circle-opacity': ['interpolate', ['linear'], ['get', 'age'], 0, 0.95, 24, 0.35], 'circle-stroke-color': '#2E1065', 'circle-stroke-width': 0.6 } });
+    map.addLayer({ id: 'bk-air', type: 'circle', source: 'bk-air', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 6, 14, 10], 'circle-color': ['get', 'c'], 'circle-stroke-color': '#0B1020', 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'bk-road', type: 'circle', source: 'bk-road', paint: { 'circle-radius': ['case', ['get', 'wet'], ['interpolate', ['linear'], ['get', 'cm'], 0, 5, 30, 10], 2.6],
+      'circle-color': ['case', ['get', 'bad'], '#475569', ['get', 'wet'], '#22D3EE', '#155E75'], 'circle-stroke-color': ['case', ['get', 'wet'], '#ECFEFF', '#0B1020'], 'circle-stroke-width': ['case', ['get', 'wet'], 1.6, 0.6] } });
+    map.addLayer({ id: 'bk-rain-glow', type: 'circle', source: 'bk-rain', filter: ['>=', ['coalesce', ['get', 'r'], 0], 0.1], paint: { 'circle-radius': ['interpolate', ['linear'], ['get', 'r'], 0, 10, 10, 22, 60, 40], 'circle-color': ['get', 'c'], 'circle-blur': 1, 'circle-opacity': 0.5 } });
+    map.addLayer({ id: 'bk-rain', type: 'circle', source: 'bk-rain', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6], 'circle-color': ['get', 'c'], 'circle-stroke-color': '#E0F2FE', 'circle-stroke-width': ['case', ['>=', ['coalesce', ['get', 'r'], 0], 0.1], 1.4, 0.5] } });
+    map.addLayer({ id: 'bk-canal-glow', type: 'circle', source: 'bk-canal', filter: ['>=', ['coalesce', ['get', 'lv'], 0], 2], paint: { 'circle-radius': 16, 'circle-color': ['get', 'c'], 'circle-blur': 1, 'circle-opacity': 0.6 } });
+    map.addLayer({ id: 'bk-canal', type: 'circle', source: 'bk-canal', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, ['case', ['>=', ['coalesce', ['get', 'lv'], 0], 2], 5, 3], 14, ['case', ['>=', ['coalesce', ['get', 'lv'], 0], 2], 9, 6]],
+      'circle-color': ['get', 'c'], 'circle-stroke-color': '#0B1020', 'circle-stroke-width': 1.2 } });
+    try {
+      var cv = document.createElement('canvas'); cv.width = cv.height = 40;
+      var g = cv.getContext('2d'); g.strokeStyle = '#E0F2FE'; g.fillStyle = '#E0F2FE'; g.lineWidth = 3.2; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(20, 34); g.lineTo(20, 10); g.stroke(); g.beginPath(); g.moveTo(20, 4); g.lineTo(12, 15); g.lineTo(28, 15); g.closePath(); g.fill();
+      map.addImage('bk-arrow', g.getImageData(0, 0, 40, 40), { pixelRatio: 2 });
+      map.addLayer({ id: 'bk-wind', type: 'symbol', source: 'bk-wind', layout: { 'icon-image': 'bk-arrow', 'icon-rotate': ['get', 'r'], 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-size': ['interpolate', ['linear'], ['get', 's'], 0, 0.6, 30, 1.4] }, paint: { 'icon-opacity': 0.85 } });
+    } catch (e) { /* เบราว์เซอร์เก่า ข้ามลูกศรลม */ }
+    map.addLayer({ id: 'bk-sel', type: 'circle', source: 'bk-sel', paint: { 'circle-radius': 16, 'circle-color': 'rgba(253,230,138,.15)', 'circle-stroke-color': '#FDE68A', 'circle-stroke-width': 2.5 } });
+  }
+  function bkSetHover() {
+    if (!BK.ready || !BK.map.getLayer('bk-dist-hover')) return;
+    BK.map.setFilter('bk-dist-hover', ['==', ['get', 'id'], BK.hover == null ? -1 : BK.hover]);
+  }
+  function bkTip(d, pt) {
+    var el = $('bkTip');
+    if (!el) return;
+    if (!d || !pt || window.matchMedia('(hover: none)').matches) { el.hidden = true; return; }
+    var R = BK_RAMP[BK.metric], v = d.v ? d.v[BK.metric] : null;
+    el.innerHTML = '<b>เขต' + esc(d.th) + '</b><span>' + esc(R.t) + ': ' + (BK.metric === 'canal' ? esc(v == null ? 'ไม่มีจุดวัด' : R.labs[v]) : bkNum(v, BK.metric === 'people' ? 0 : 1) + ' ' + esc(R.u)) +
+      ((BK.metric === 'rain' && d.v && d.v.rainEst) || (BK.metric === 'pm25' && d.v && d.v.pmEst) || BK.metric === 'heat' ? ' <em>ประมาณ</em>' : '') + '</span>';
+    el.style.transform = 'translate(' + Math.round(pt.x + 14) + 'px,' + Math.round(pt.y + 14) + 'px)';
+    el.hidden = false;
+  }
+  // ---------- ข้อมูลลงแผนที่ ----------
+  function bkFeat(x, y, p) { return { type: 'Feature', properties: p, geometry: { type: 'Point', coordinates: [x, y] } }; }
+  function bkFC(f) { return { type: 'FeatureCollection', features: f }; }
+  function bkDraw() {
+    if (!BK.ready) return;
+    var map = BK.map, L = BK.lay, step = BK.cur || {}, show = step.show || {};
+    if (BK.base) {
+      setGeo(map, 'bk-dist', bkFC(BK.base.districts.map(function (d) {
+        var v = d.v ? d.v[BK.metric] : null;
+        return { type: 'Feature', properties: { id: d.id, v: v == null ? null : v, c: bkCol(BK.metric, v), m: BK.only && BK.dist != null && d.id !== BK.dist }, geometry: { type: 'MultiPolygon', coordinates: d.g } };
+      })));
+      if (BK.only && BK.dist != null) map.setPaintProperty('bk-dist-fill', 'fill-color', ['case', ['get', 'm'], '#03050B', ['coalesce', ['get', 'c'], '#334155']]);
+      else map.setPaintProperty('bk-dist-fill', 'fill-color', ['coalesce', ['get', 'c'], '#334155']);
+      if (!BK.linesDone) {
+        setGeo(map, 'bk-lines', bkFC(BK.base.lines.map(function (l) { return { type: 'Feature', properties: { col: l.col, k: l.k, th: l.th }, geometry: { type: 'MultiLineString', coordinates: l.g } }; })));
+        var colOf = {};
+        BK.base.lines.forEach(function (l) { colOf[l.net + '|' + l.k] = l.col; });
+        setGeo(map, 'bk-stn', bkFC((BK.base.stations || []).map(function (s, i) { return bkFeat(s[2], s[3], { i: i, d: s.d == null ? -1 : s.d, col: s[4] === 'subway' ? '#60A5FA' : s[4] === 'monorail' ? '#FACC15' : s[4] === 'train' ? '#F87171' : '#86EFAC' }); })));
+        BK.linesDone = true;
+        bkMarks();
+      }
+      var inf = BK.base.infra || {}, IF = [];
+      ['pump', 'wpump', 'gate', 'risk'].forEach(function (k) { (inf[k] || []).forEach(function (r, i) { IF.push(bkFeat(r[2], r[3], { i: k + ':' + i, d: r.d == null ? -1 : r.d, k: k, cap: k === 'pump' || k === 'wpump' ? (r[4] || 0) : 0 })); }); });
+      setGeo(map, 'bk-infra', bkFC(IF));
+    }
+    var hasDist = !!BK.base;
+    vis(map, ['bk-dist-line'], hasDist);
+    vis(map, ['bk-dist-fill'], hasDist && !step.ghost);
+    var dd = function (r) { return r.d == null ? -1 : r.d; };
+    setGeo(map, 'bk-canal', bkFC(bkRows('canal').map(function (r, i) { var lv = bkCanalLevel(r); return bkFeat(r[2], r[3], { i: i, d: dd(r), lv: lv, c: lv == null ? '#475569' : BK_RAMP.canal.cols[lv] }); })));
+    var rs = bkSec('rain'), live = rs && rs.from === 'bma';
+    setGeo(map, 'bk-rain', bkFC(bkRows('rain').map(function (r, i) { var x = live ? bkV('rain', r) : (r[7] != null ? r[7] / 6 : null); return bkFeat(r[2], r[3], { i: i, d: dd(r), r: x, c: bkCol('rain', x) }); })));
+    setGeo(map, 'bk-road', bkFC(bkRoadRows().rows.map(function (r, i) { return bkFeat(r[2], r[3], { i: i, d: dd(r), cm: bkV('road', r) || 0, wet: bkRoadWet(r), bad: /ขัดข้อง/.test(String(r[5] || '')) }); })));
+    setGeo(map, 'bk-air', bkFC(bkRows('air').map(function (r, i) { return bkFeat(r[2], r[3], { i: i, d: dd(r), c: bkCol('pm25', r[4]) }); })));
+    var P = bkPeople(), now = Date.now();
+    setGeo(map, 'bk-people', bkFC(P ? (P.rows || []).map(function (r, i) { return bkFeat(r[1], r[2], { i: i, d: dd(r), age: (now - r[4]) / 3600e3 }); }) : []));
+    setGeo(map, 'bk-river', bkFC(bkRows('river').map(function (r, i) { return bkFeat(r[1], r[2], { i: i, p: r[5] }); })));
+    if (BK.wx && map.getLayer('bk-wind')) setGeo(map, 'bk-wind', bkFC(BK.wx.rows.map(function (w, i) { var p = BK.wx.pts[i]; return w.wd == null ? null : bkFeat(p[0], p[1], { r: (w.wd + 180) % 360, s: w.ws || 0 }); }).filter(Boolean)));
+    // เปิด/ปิดชั้นตามปุ่มและเรื่องเล่า
+    var pts = L.points || show.points;
+    vis(map, ['bk-canal', 'bk-canal-glow'], pts && (BK.story !== 'air' && BK.story !== 'heat' && BK.story !== 'people' && BK.story !== 'under' || show.points));
+    vis(map, ['bk-rain', 'bk-rain-glow'], pts && (BK.story === 'rain' || BK.story === 'ask' || BK.story === 'replay'));
+    vis(map, ['bk-road'], pts && (BK.story === 'road' || BK.story === 'traffic' || BK.story === 'ask' || BK.story === 'replay'));
+    vis(map, ['bk-air'], pts && (BK.story === 'air' || BK.story === 'ask'));
+    vis(map, ['bk-people'], (L.people && (BK.story === 'people' || BK.story === 'road')) || !!show.people);
+    vis(map, ['bk-infra'], L.infra || !!show.infra);
+    vis(map, ['bk-river'], L.river || !!show.river);
+    vis(map, ['bk-wind'], L.wind || !!show.wind);
+    vis(map, ['bk-lines', 'bk-lines-glow', 'bk-stn'], L.transit || !!show.transit);
+    vis(map, ['bks-rail'], (L.transit || !!show.transit) && !(BK.base && BK.base.lines.length));
+    vis(map, ['bks-bldg', 'bks-bldg2d'], L.bldg);
+    if (map.getLayer('bks-bldg')) map.setPaintProperty('bks-bldg', 'fill-extrusion-opacity', step.ghost ? 0.18 : 0.92);
+    if (map.getLayer('bk-lines')) map.setPaintProperty('bk-lines-glow', 'line-opacity', step.ghost ? 0.75 : 0.4);
+    bkRadar(L.radar || !!show.radar);
+    // ดูเฉพาะเขต: ซ่อนจุดนอกเขต
+    var only = BK.only && BK.dist != null ? ['==', ['get', 'd'], BK.dist] : null;
+    if (BK.onlyF !== String(only && BK.dist)) {
+      BK.onlyF = String(only && BK.dist);
+      var base = { 'bk-rain-glow': ['>=', ['coalesce', ['get', 'r'], 0], 0.1], 'bk-canal-glow': ['>=', ['coalesce', ['get', 'lv'], 0], 2] };
+      ['bk-canal', 'bk-canal-glow', 'bk-rain', 'bk-rain-glow', 'bk-road', 'bk-air', 'bk-people', 'bk-infra', 'bk-stn'].forEach(function (id) {
+        if (!map.getLayer(id)) return;
+        var b0 = base[id] || null;
+        map.setFilter(id, only ? (b0 ? ['all', b0, only] : only) : b0);
+      });
+    }
+    var sf = map.getSource('bk-sel');
+    if (sf) sf.setData(bkFC(BK.selPt ? [bkFeat(BK.selPt[0], BK.selPt[1], {})] : []));
+    map.setFilter('bk-dist-sel', ['==', ['get', 'id'], BK.dist == null ? -1 : BK.dist]);
+    map.setFilter('bk-dist-sel-glow', ['==', ['get', 'id'], BK.dist == null ? -1 : BK.dist]);
+  }
+  function bkRadar(on) {
+    var map = BK.map, f = RADAR.frames[RADAR.frames.length - 1];
+    if (on && !f && !RADAR.err) { loadRadar(); return; }
+    if (on && f && BK.radarT !== f.time) {
+      if (map.getLayer('bk-radar')) map.removeLayer('bk-radar');
+      if (map.getSource('bk-radar')) map.removeSource('bk-radar');
+      map.addSource('bk-radar', { type: 'raster', tiles: [RADAR.host + f.path + '/512/{z}/{x}/{y}/2/1_1.png'], tileSize: 512, maxzoom: 7, attribution: 'เรดาร์ฝน: ' + BK_ATTR.radar });
+      map.addLayer({ id: 'bk-radar', type: 'raster', source: 'bk-radar', paint: { 'raster-opacity': 0.7, 'raster-fade-duration': 0 } }, 'bk-dist-hover');
+      BK.radarT = f.time;
+    }
+    vis(map, ['bk-radar'], on && !!f);
+  }
+  // ป้ายสถานที่สำคัญและชื่อเขต (เป็น HTML เพื่อให้ตัวอักษรไทยคม)
+  function bkMarks() {
+    BK.marks.forEach(function (m) { m.remove(); });
+    BK.dmarks.forEach(function (m) { m.remove(); });
+    BK.marks = []; BK.dmarks = [];
+    if (!BK.base) return;
+    (BK.base.marks || []).forEach(function (k, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'bk-pin' + (i < 14 ? ' p1' : ''); b.setAttribute('data-bk-mark', i);
+      b.innerHTML = '<span class="bk-pin-i" aria-hidden="true">' + (BK_MK[k[4]] || '★') + '</span>' + esc(k[0]);
+      BK.marks.push(new maplibregl.Marker({ element: b, anchor: 'bottom', offset: [0, -4], pitchAlignment: 'viewport' }).setLngLat([k[2], k[3]]).addTo(BK.map));
+    });
+    BK.base.districts.forEach(function (d) {
+      var s = document.createElement('button');
+      s.type = 'button'; s.className = 'bk-dlab'; s.setAttribute('data-bk-dist', d.id); s.textContent = d.th;
+      BK.dmarks.push(new maplibregl.Marker({ element: s, anchor: 'center' }).setLngLat(d.c).addTo(BK.map));
+    });
+    bkZoomCls();
+  }
+
+  // ---------- ป๊อปอัปจุด ----------
+  function bkPopup(kind, i, ll) {
+    var r, h = '', link = '';
+    if (kind === 'canal' || kind === 'canal-glow') {
+      r = bkRows('canal')[i]; if (!r) return;
+      var wl = bkV('canal', r), fb = wl != null && r[5] != null ? r[5] - wl : null, lv = bkCanalLevel(r);
+      h = '<div class="pop-meta">น้ำในคลอง · ' + esc(r[11] || '') + '</div><div class="pop-title">' + esc(r[1]) + '</div>' +
+        '<div class="pop-stat"><span class="dot" style="background:' + (lv == null ? '#475569' : BK_RAMP.canal.cols[lv]) + '"></span>' + esc(lv == null ? (r[8] || 'ไม่มีค่า') : BK_RAMP.canal.labs[lv]) + '</div>' +
+        '<div class="pop-sub">ระดับน้ำ ' + bkNum(wl, 2) + ' ม.รทก. · ตลิ่ง ' + bkNum(r[5], 2) + (fb != null ? ' · ' + bkFb(fb) : '') + '<br>เกณฑ์เตือน ' + bkNum(r[6], 2) + ' · วิกฤต ' + bkNum(r[7], 2) + ' · สถานะ กทม. ' + esc(r[8] || '–') + '</div>';
+      link = r[12]; r = [0, 0, r[2], r[3], 0, 0, 0, 0, 0, r[9]];
+    } else if (kind === 'rain' || kind === 'rain-glow') {
+      r = bkRows('rain')[i]; if (!r) return;
+      var live = (bkSec('rain') || {}).from === 'bma';
+      h = '<div class="pop-meta">สถานีวัดฝน' + (r[9] ? ' · เขต' + esc(r[9]) : '') + '</div><div class="pop-title">' + esc(r[1]) + '</div>' +
+        (live ? '<div class="bk-kv sm"><span>15 นาที<b>' + bkNum(r[4]) + '</b></span><span>1 ชม.<b>' + bkNum(bkV('rain', r)) + '</b></span><span>3 ชม.<b>' + bkNum(r[6]) + '</b></span><span>24 ชม.<b>' + bkNum(r[7]) + '</b></span></div><div class="pop-sub">มิลลิเมตร · ' + esc(bkRainLabel(bkV('rain', r))) + '</div>'
+          : '<div class="pop-sub">ฝนสะสมวันนี้ ' + bkNum(r[7]) + ' มม.</div>');
+      r = [0, 0, r[2], r[3], 0, 0, 0, 0, 0, r[8]];
+    } else if (kind === 'road') {
+      r = bkRoadRows().rows[i]; if (!r) return;
+      h = '<div class="pop-meta">น้ำบนถนน</div><div class="pop-title">' + esc(r[1]) + '</div><div class="pop-stat"><span class="dot" style="background:' + (bkRoadWet(r) ? '#22D3EE' : '#155E75') + '"></span>' + esc(r[5] || '') +
+        (bkRoadWet(r) ? ' · ลึก ' + bkNum(bkV('road', r), 0) + ' ซม.' : '') + '</div>';
+      link = r[8]; r = [0, 0, r[2], r[3], 0, 0, 0, 0, 0, r[6]];
+    } else if (kind === 'air') {
+      r = bkRows('air')[i]; if (!r) return;
+      h = '<div class="pop-meta">คุณภาพอากาศ · คพ.</div><div class="pop-title">' + esc(r[1]) + '</div><div class="pop-stat"><span class="dot" style="background:' + bkCol('pm25', r[4]) + '"></span>PM2.5 ' + bkNum(r[4], 0) + ' µg/m³ · ' + esc(bkPmLabel(r[4])) + '</div>' +
+        '<div class="pop-sub">' + esc(r[7] || '') + '</div>';
+      link = 'http://air4thai.pcd.go.th/webV3/'; r = [0, 0, r[2], r[3], 0, 0, 0, 0, 0, r[6]];
+    } else if (kind === 'people') {
+      var P = bkPeople(); r = P && P.rows[i]; if (!r) return;
+      h = '<div class="pop-meta">เรื่องแจ้งเรื่องน้ำ · Traffy Fondue</div><div class="pop-title">' + esc(r[3] || 'ไม่ทราบสถานะ') + '</div><div class="pop-sub">' + (r[5] ? 'เขต' + esc(r[5]) + ' · ' : '') + 'แจ้งเมื่อ ' + esc(agoText(r[4])) + '<br>ไม่แสดงข้อความหรือรูปของผู้แจ้ง</div>';
+      link = r[0] ? BK_TRAFFY_LINK + encodeURIComponent(r[0]) : ''; r = null;
+    } else if (kind === 'river') {
+      r = bkRows('river')[i]; if (!r) return;
+      h = '<div class="pop-meta">แม่น้ำเจ้าพระยา · ' + esc(r[7] || '') + '</div><div class="pop-title">' + esc(r[0]) + '</div><div class="pop-sub">ระดับน้ำ ' + bkNum(r[3], 2) + ' ม.รทก. · ตลิ่งต่ำสุด ' + bkNum(r[4], 2) + (r[5] != null ? '<br>คิดเป็น ' + bkNum(r[5], 0) + '% ของความจุลำน้ำ' : '') + '</div>';
+      link = 'https://www.thaiwater.net/water/wl'; r = [0, 0, r[1], r[2], 0, 0, 0, 0, 0, r[6]];
+    } else if (kind === 'stn') {
+      r = BK.base && BK.base.stations[i]; if (!r) return;
+      h = '<div class="pop-meta">สถานี' + ({ subway: 'รถไฟฟ้าใต้ดิน', light_rail: 'รถไฟฟ้า', monorail: 'รถไฟฟ้าโมโนเรล', train: 'รถไฟ' }[r[4]] || '') + (r[5] ? ' · ' + esc(r[5]) : '') + '</div><div class="pop-title">' + esc(r[0]) + '</div>' + (r[1] ? '<div class="pop-sub">' + esc(r[1]) + '</div>' : '');
+      r = null;
+    } else if (kind === 'infra') {
+      var p = String(i).split(':'), inf = (BK.base && BK.base.infra || {})[p[0]] || [];
+      r = inf[+p[1]]; if (!r) return;
+      h = '<div class="pop-meta">' + ({ pump: 'สถานีสูบน้ำ', wpump: 'สถานีสูบน้ำ', gate: 'ประตูระบายน้ำ', risk: 'จุดเสี่ยงน้ำท่วม' }[p[0]]) + ' · กทม.</div><div class="pop-title">' + esc(r[0]) + '</div><div class="pop-sub">' +
+        (p[0] === 'risk' ? 'เขต' + esc(r[1]) + (r[4] ? ' · ' + esc(r[4]) : '') : (p[0] === 'wpump' ? esc(r[1]) : 'เขต' + esc(r[1])) + (r[4] ? ' · สูบได้ ' + bkNum(r[4]) + ' ลบ.ม./วินาที' : '')) + '</div>';
+      r = null;
+    } else return;
+    if (r && r[9]) h += '<div class="pop-sub">' + esc(bkWhen(r[9])) + ' ' + bkBadge(bkStale(r[9], kind === 'air' ? 180 : 60) ? 'old' : (BK.rep.i >= 0 ? 'rep' : 'real')) + '</div>';
+    if (link) h += '<div class="pop-acts"><a class="pop-btn" href="' + esc(link) + '" target="_blank" rel="noopener">ดูที่แหล่งข้อมูล ↗</a></div>';
+    if (BK.pop) BK.pop.remove();
+    BK.pop = new maplibregl.Popup({ className: 'cg-popup bk-pop', offset: 12, maxWidth: '290px', focusAfterOpen: false }).setLngLat(ll).setHTML(h).addTo(BK.map);
+  }
+  function bkGoPoint(kind, i) {
+    var rows = kind === 'canal' ? bkRows('canal') : kind === 'rain' ? bkRows('rain') : kind === 'road' ? bkRoadRows().rows : kind === 'air' ? bkRows('air') : [];
+    var r = rows[i];
+    if (!r || !BK.map) return;
+    BK.selPt = [r[2], r[3]];
+    bkDraw();
+    BK.map.flyTo(Object.assign(bkPt(r, 14.6), { duration: reduceMotion ? 0 : 1300 }));
+    BK.map.once('moveend', function () { bkPopup(kind, i, { lng: r[2], lat: r[3] }); });
+  }
+  // ---------- การ์ดเรื่องเล่า คำอธิบายสี แท็บ ----------
+  function bkStoryName(id) { var s = BK_STORIES.filter(function (x) { return x[0] === id; })[0]; return s ? s[1] : id === 'river' ? 'แม่น้ำเจ้าพระยา' : ''; }
+  function bkRenderTabs() {
+    var el = $('bkTabs');
+    if (!el) return;
+    el.innerHTML = BK_STORIES.map(function (s) {
+      return '<button type="button" class="bk-tab" data-bk-story="' + s[0] + '" aria-pressed="' + (BK.story === s[0]) + '"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        BK_ICO[s[0]] + '</svg>' + esc(s[1]) + '</button>';
+    }).join('');
+  }
+  function bkRenderStory(S) {
+    var el = $('bkStory');
+    if (!el) return;
+    var steps = bkSteps(BK.story, S || bkSum());
+    if (BK.step >= steps.length) BK.step = Math.max(0, steps.length - 1);
+    var s = steps[BK.step] || { t: bkStoryName(BK.story), b: '' };
+    BK.cur = s;
+    if (BK.cardOff) { el.hidden = true; $('bkStoryOpen').hidden = false; return; }
+    el.hidden = false; $('bkStoryOpen').hidden = true;
+    var src = (s.src || []).filter(Boolean);
+    el.innerHTML = '<div class="bk-sc-eb">ถามกรุงเทพ · ' + esc(BK.story === 'ask' ? 'ภาพรวมทั้งเมือง' : bkStoryName(BK.story)) + '</div>' +
+      '<div class="bk-sc-h"><h2>' + esc(s.t) + '</h2><button type="button" class="bk-x" data-bk-skip="1" aria-label="ซ่อนการ์ดเรื่องเล่า">ซ่อน <span aria-hidden="true">×</span></button></div>' +
+      '<div class="bk-sc-b">' + s.b + '</div>' +
+      ((s.when || s.badge) ? '<div class="bk-sc-m">' + (s.when ? '<span>' + esc(bkWhen(s.when)) + '</span>' : '') + bkBadge(BK.rep.i >= 0 && s.replay ? 'rep' : s.badge) + '</div>' : '') +
+      (src.length ? '<div class="bk-sc-src">ที่มา ' + src.join(' · ') + ' · ไม่ใช่ประกาศทางการ ตรวจสอบกับหน่วยงานรัฐเสมอ</div>' : '') +
+      (steps.length > 1 ? '<div class="bk-sc-nav"><span class="bk-dots" aria-hidden="true">' + steps.map(function (x, k) { return '<i' + (k === BK.step ? ' class="on"' : '') + '></i>'; }).join('') + '</span>' +
+        '<span class="bk-sc-n">ขั้นที่ ' + (BK.step + 1) + ' จาก ' + steps.length + '</span>' +
+        (BK.step > 0 ? '<button type="button" class="bk-btn ghost" data-bk-step="-1">ก่อนหน้า</button>' : '') +
+        (BK.step < steps.length - 1 ? '<button type="button" class="bk-btn" data-bk-step="1">ถัดไป <span aria-hidden="true">›</span></button>' : '') + '</div>' : '');
+    var rr = $('bkRepR');
+    if (rr) rr.addEventListener('input', function () { bkRepSet(+this.value); });
+  }
+  function bkRenderLegend() {
+    var el = $('bkLegend');
+    if (!el) return;
+    var R = BK_RAMP[BK.metric], est = BK.metric === 'heat' || (BK.metric === 'pm25' && !bkRows('air').length) || (BK.metric === 'rain' && !(bkSec('rain') && bkSec('rain').from === 'bma'));
+    var src = { rain: 'สถานีวัดฝน กทม. (เขตไม่มีสถานีใช้แบบจำลอง)', canal: 'จุดวัดน้ำในคลอง กทม. · สีตามจุดที่น่าห่วงที่สุดในเขต', pm25: 'สถานี คพ. (เขตไม่มีสถานีใช้แบบจำลอง Open-Meteo)', heat: 'อุณหภูมิที่รู้สึก (แบบจำลอง Open-Meteo)', people: 'เรื่องที่แจ้งผ่าน Traffy Fondue ใน 24 ชม.' }[BK.metric];
+    var lays = [['bldg', 'ตึก 3 มิติ'], ['transit', 'รถไฟฟ้า'], ['points', 'จุดวัด'], ['radar', 'เรดาร์ฝน'], ['people', 'เรื่องแจ้ง'], ['infra', 'สูบน้ำ · ประตูน้ำ'], ['wind', 'ลม']];
+    el.innerHTML = '<button type="button" class="bk-leg-h" data-bk-leg="1" aria-expanded="' + BK.legend + '">คำอธิบายสี <span aria-hidden="true">' + (BK.legend ? '▾' : '▸') + '</span></button>' +
+      (BK.legend ? '<div class="bk-leg-b"><p class="bk-sub">สรุปรายเขต</p><div class="bk-mets">' + BK_METRICS.map(function (k) { return '<button type="button" class="bk-met" data-bk-met="' + k + '" aria-pressed="' + (BK.metric === k) + '">' + esc(BK_RAMP[k].t) + '</button>'; }).join('') + '</div>' +
+        '<div class="bk-ramp">' + R.cols.map(function (c, i) { return '<span><i style="background:' + c + '"></i>' + esc(R.labs[i]) + '</span>'; }).join('') + '</div><p class="bk-sub">' + (R.u ? esc(R.u) + ' · ' : '') + esc(src) + (est ? ' ' + bkBadge('est') : '') + '</p>' +
+        '<div class="bk-lays">' + lays.map(function (l) { return '<button type="button" class="bk-lay" data-bk-lay="' + l[0] + '" aria-pressed="' + !!BK.lay[l[0]] + '">' + esc(l[1]) + '</button>'; }).join('') + '</div>' +
+        '<div class="bk-row"><button type="button" class="bk-btn ghost sm" data-bk-3d="1">' + (BK.d3 ? 'มุมมอง 2D' : 'มุมมอง 3D') + '</button><button type="button" class="bk-btn ghost sm" data-bk-help="1">ช่วยเหลือ · สายด่วน</button><button type="button" class="bk-btn ghost sm" data-bk-about="1">ที่มาข้อมูล</button></div></div>' : '');
+  }
+  function bkDistById(id) { return BK.idx && BK.idx[id]; }
+  function bkRenderSheet() {
+    var el = $('bkSheet');
+    if (!el) return;
+    var d = BK.dist != null && bkDistById(BK.dist);
+    if (!d || !BK.sheet) { el.hidden = true; $('pageCity').classList.remove('bk-sheet-on'); return; }
+    $('pageCity').classList.add('bk-sheet-on');
+    var v = d.v || {}, inf = (BK.base && BK.base.infra) || {};
+    var canal = bkRows('canal').filter(function (r) { return r.d === d.id; }), rain = bkRows('rain').filter(function (r) { return r.d === d.id; });
+    var road = bkRoadRows().rows.filter(function (r) { return r.d === d.id; }), air = bkRows('air').filter(function (r) { return r.d === d.id && r[4] != null && !bkOld(r[6]); });
+    var cw = canal.map(function (r) { return { r: r, L: bkCanalLevel(r), fb: r[5] != null && bkV('canal', r) != null ? r[5] - bkV('canal', r) : null }; }).filter(function (o) { return o.L != null; }).sort(function (a, b) { return b.L - a.L || (a.fb == null ? 9 : a.fb) - (b.fb == null ? 9 : b.fb); });
+    var rtop = rain.slice().sort(function (a, b) { return (bkV('rain', b) || 0) - (bkV('rain', a) || 0); })[0];
+    var cnt = function (k) { return (inf[k] || []).filter(function (r) { return r.d === d.id; }).length; };
+    var stn = BK.base ? (BK.base.stations || []).filter(function (s) { return s.d === d.id; }).length : 0;
+    var wx = BK.wx ? (BK.wx.byBase ? BK.wx.rows[d.i] : bkNearestWx(d.c)) : null;
+    var P = bkPeople(), pf = P ? (P.rows || []).filter(function (r) { return r.d === d.id; }).length : 0;
+    function sec(t, ico, body) { return '<section class="bk-sh-s"><h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + BK_ICO[ico] + '</svg>' + t + '</h3>' + body + '</section>'; }
+    var water = (cw.length ? '<p>คลอง ' + canal.length + ' จุดวัด · ' + (cw[0].L >= 2 ? '<b class="bk-warn">' + esc(BK_RAMP.canal.labs[cw[0].L]) + '</b> ' : 'ปกติ ') + bkGo('canal', bkRows('canal').indexOf(cw[0].r), cw[0].r[1]) + (cw[0].fb != null ? ' ' + bkFb(cw[0].fb) : '') + '</p>' : '<p class="bk-sub">ไม่มีจุดวัดน้ำในคลองในเขตนี้</p>') +
+      (road.length ? '<p>ถนน ' + road.length + ' จุดวัด · ' + (v.wet ? '<b class="bk-warn">มีน้ำ ' + v.wet + ' จุด</b>' : 'ไม่มีน้ำขัง') + '</p>' : '');
+    var rainH = rtop ? '<p>สูงสุด <b>' + bkNum(bkV('rain', rtop)) + ' มม./ชม.</b> ที่ ' + bkGo('rain', bkRows('rain').indexOf(rtop), rtop[1]) + ' ' + bkBadge(bkStale(rtop[8], 60) ? 'old' : 'real') + '</p>' :
+      wx ? '<p>ราว ' + bkNum(wx.pr) + ' มม./ชม. ' + bkBadge('est') + '</p>' : '<p class="bk-sub">ไม่มีข้อมูล</p>';
+    var airH = (air.length ? '<p>PM2.5 <b>' + bkNum(air[0][4], 0) + '</b> µg/m³ (' + esc(bkPmLabel(air[0][4])) + ') ' + bkBadge('real') + '</p>' : wx && wx.pm != null ? '<p>PM2.5 ราว <b>' + bkNum(wx.pm, 0) + '</b> µg/m³ (' + esc(bkPmLabel(wx.pm)) + ') ' + bkBadge('est') + '</p>' : '') +
+      (wx && wx.feel != null ? '<p>อุณหภูมิ ' + bkNum(wx.t, 0) + '°C รู้สึกเหมือน <b>' + bkNum(wx.feel, 0) + '°C</b> · ลม' + esc(bkDir(wx.wd)) + ' ' + bkNum(wx.ws, 0) + ' กม./ชม. ' + bkBadge('est') + '</p>' : '');
+    el.innerHTML = '<div class="bk-sh-h"><div><b>เขต' + esc(d.th) + '</b><span>' + esc(d.en) + ' · ' + bkNum(d.km2) + ' ตร.กม.</span></div><button type="button" class="bk-x" data-bk-close="1" aria-label="ปิด">×</button></div>' +
+      '<div class="bk-row"><button type="button" class="bk-btn' + (BK.only ? '' : ' ghost') + ' sm" data-bk-only="1" aria-pressed="' + BK.only + '">' + (BK.only ? 'ดูทั้งเมือง' : 'ดูเฉพาะเขตนี้') + '</button>' +
+      '<button type="button" class="bk-btn ghost sm" data-bk-site="1">ตรวจทำเลจุดกลางเขต</button></div>' +
+      '<div class="bk-sh-body">' + sec('น้ำ', 'canal', water) + sec('ฝน', 'rain', rainH) + sec('อากาศ', 'air', airH || '<p class="bk-sub">ไม่มีข้อมูล</p>') +
+      sec('เรื่องแจ้ง 24 ชม.', 'people', P ? '<p><b>' + fmtN(v.people || 0) + '</b> เรื่อง · เรื่องน้ำ ' + fmtN(pf) + ' เรื่อง</p>' : '<p class="bk-sub">ไม่มีข้อมูล</p>') +
+      sec('โครงสร้าง', 'under', '<div class="bk-kv sm"><span>สถานีสูบน้ำ<b>' + (cnt('pump') + cnt('wpump')) + '</b></span><span>ประตูระบายน้ำ<b>' + cnt('gate') + '</b></span><span>จุดเสี่ยงน้ำท่วม<b>' + cnt('risk') + '</b></span><span>สถานีราง<b>' + stn + '</b></span></div>') +
+      '</div><p class="bk-sh-f">ขอบเขตเขต ' + BK_ATTR.osm + ' · ค่าที่ไม่มีป้าย "วัดจริง" เป็นค่าประมาณ</p>';
+    el.hidden = false;
+  }
+  function bkRefresh() {
+    if (state.page !== 'city' || !$('pageCity')) return;
+    clearTimeout(BK.rt);
+    BK.rt = setTimeout(function () {
+      var S = bkSum();
+      bkRenderTop(S); bkRenderCards(S); bkRenderStory(S); bkRenderLegend(); bkRenderSheet();
+      bkDraw();
+      bkFxSet(S);
+    }, 30);
+  }
+  // ---------- เปลี่ยนเรื่อง/ขั้น ----------
+  function bkApplyStep(first) {
+    var s = BK.cur;
+    if (!s || !BK.ready) return;
+    if (s.metric) BK.metric = s.metric;
+    if (s.sel) { var rows = s.sel[0] === 'road' ? bkRoadRows().rows : bkRows(s.sel[0]); var r = rows[s.sel[1]]; BK.selPt = r ? [r[2], r[3]] : null; } else BK.selPt = null;
+    if (s.dist != null) BK.dist = s.dist;
+    var c = s.cam;
+    if (c && !(first && location.hash.indexOf('=d') > 0)) {
+      if (c.bounds) BK.map.fitBounds(c.bounds, { padding: bkPad(), pitch: c.pitch, bearing: c.bearing, duration: reduceMotion || first ? 0 : 1400, maxZoom: 13.5 });
+      else BK.map.flyTo(Object.assign({}, c, { padding: bkPad(), duration: reduceMotion || first ? 0 : 1500, essential: true }));
+    }
+    if (s.replay) bkLoad('hist');
+  }
+  function bkPad() {
+    var el = $('bkMap'), m = el.clientWidth < 700;
+    return m ? { top: 120, bottom: 230, left: 10, right: 10 } : { top: 90, bottom: 200, left: BK.cardOff ? 30 : 400, right: BK.sheet ? 380 : 60 };
+  }
+  function bkSetStory(id, step) {
+    if (BK.rep.i >= 0 && id !== 'replay') bkRepSet(-1);
+    BK.story = id; BK.step = step || 0; BK.cardOff = false;
+    if (id === 'people' && !bkSec('traffy')) bkLoad('people2');
+    if (id === 'road' && !(bkSec('road') && bkSec('road').from === 'bma')) bkLoad('road2');
+    if (id === 'replay') bkLoad('hist');
+    if (id === 'rain' || BK.lay.radar) loadRadar();
+    bkRenderTabs();
+    bkRenderStory();
+    bkApplyStep();
+    bkRefresh();
+    var t = document.querySelector('#bkTabs [aria-pressed="true"]');
+    if (t && t.scrollIntoView) try { t.scrollIntoView({ block: 'nearest', inline: 'center', behavior: reduceMotion ? 'auto' : 'smooth' }); } catch (e) { /* ข้าม */ }
+    bkHash();
+  }
+  function bkSelDist(id, fly) {
+    var d = bkDistById(id);
+    if (!d) return;
+    BK.dist = id; BK.sheet = true;
+    if (fly !== false || BK.only) BK.map.fitBounds([[d.bb[0], d.bb[1]], [d.bb[2], d.bb[3]]], { padding: bkPad(), pitch: BK.d3 ? 45 : 0, maxZoom: 14, duration: reduceMotion ? 0 : 1200 });
+    bkRefresh();
+    bkHash();
+  }
+  function bkHash() {
+    if (state.page !== 'city') return;
+    var h = '#city' + (BK.dist != null && BK.sheet ? '=d' + BK.dist : BK.story !== 'ask' ? '=' + BK.story : '');
+    try { if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h); } catch (e) { /* ข้าม */ }
+  }
+  // ---------- ย้อนดู 24 ชม. ----------
+  function bkRepSet(i) {
+    var H = BK.hist;
+    BK.rep.i = H && i >= 0 && i < H.ts.length - 1 ? i : -1;
+    if (BK.rep.i < 0 && BK.rep.play) bkRepPlay(false);
+    var t = $('bkRepT');
+    if (t && H) t.textContent = msTime(H.ts[BK.rep.i < 0 ? H.ts.length - 1 : BK.rep.i] * 1000) + (BK.rep.i < 0 ? ' (ล่าสุด)' : '');
+    bkAssign();
+  }
+  function bkRepPlay(on) {
+    BK.rep.play = on;
+    clearInterval(BK.rep.timer);
+    if (on && BK.hist) {
+      if (BK.rep.i < 0) BK.rep.i = 0;
+      BK.rep.timer = setInterval(function () {
+        if (state.page !== 'city' || !BK.hist) return bkRepPlay(false);
+        var n = BK.hist.ts.length, i = BK.rep.i + 1;
+        if (i >= n - 1) { bkRepSet(-1); bkRepPlay(false); bkRenderStory(); return; }
+        bkRepSet(i);
+        var r = $('bkRepR'); if (r) r.value = String(i);
+      }, 700);
+    }
+    var b = document.querySelector('[data-bk-play]');
+    if (b) { b.textContent = on ? 'หยุด' : 'เล่น'; b.setAttribute('aria-pressed', String(on)); }
+  }
+  // ---------- ฝนตกบนจอ (ตามฝนจริงที่สถานีวัด ไม่ตกถ้าไม่มีฝน) ----------
+  function bkFxSet(S) {
+    var cv = $('bkFx');
+    if (!cv || !BK.map) return;
+    S = S || bkSum();
+    var mm = 0;
+    if (S.rain && S.rain.live) {
+      // ฝนในจอ: ค่าเฉลี่ยของสถานีที่มองเห็น
+      var b = BK.map.getBounds(), s = 0, n = 0;
+      bkRows('rain').forEach(function (r) { if (b.contains([r[2], r[3]])) { s += bkV('rain', r) || 0; n++; } });
+      mm = n ? s / n : S.rain.max / 3;
+    } else if (S.wx) mm = S.wx.pr || 0;
+    var on = mm >= 0.2 && !reduceMotion && !document.hidden && state.page === 'city';
+    BK.fxMM = mm; BK.fxWind = S.wx ? S.wx.wd : 0;
+    cv.hidden = !on;
+    if (on && !BK.fx) bkFxStart();
+    if (!on && BK.fx) { cancelAnimationFrame(BK.fx.raf); BK.fx = null; }
+  }
+  function bkFxStart() {
+    var cv = $('bkFx'), g = cv.getContext('2d');
+    var F = BK.fx = { drops: [], raf: 0, last: 0 };
+    function size() { var r = cv.parentNode.getBoundingClientRect(); cv.width = Math.round(r.width); cv.height = Math.round(r.height); }
+    size();
+    function tick(t) {
+      if (BK.fx !== F) return;
+      F.raf = requestAnimationFrame(tick);
+      if (t - F.last < 33) return;
+      F.last = t;
+      if (cv.width !== Math.round(cv.parentNode.clientWidth)) size();
+      var want = Math.min(BK.lite ? 160 : 420, Math.round(30 + BK.fxMM * 14)), W = cv.width, Hh = cv.height;
+      while (F.drops.length < want) F.drops.push({ x: Math.random() * W, y: Math.random() * Hh, v: 9 + Math.random() * 9, l: 8 + Math.random() * 12 });
+      F.drops.length = want;
+      var dx = Math.sin(((BK.fxWind || 0) + 180) * Math.PI / 180) * 0.25 - (BK.map ? BK.map.getBearing() / 400 : 0);
+      g.clearRect(0, 0, W, Hh);
+      g.strokeStyle = 'rgba(186,230,253,0.42)'; g.lineWidth = 1;
+      g.beginPath();
+      F.drops.forEach(function (d) {
+        g.moveTo(d.x, d.y); g.lineTo(d.x + dx * d.l, d.y + d.l);
+        d.y += d.v; d.x += dx * d.v;
+        if (d.y > Hh) { d.y = -d.l; d.x = Math.random() * W; }
+        if (d.x < 0) d.x += W; else if (d.x > W) d.x -= W;
+      });
+      g.stroke();
+    }
+    F.raf = requestAnimationFrame(tick);
+  }
+  // ---------- ค้นหา ----------
+  function bkSearch(q) {
+    q = (q || '').trim().toLowerCase();
+    var out = [];
+    if (!q) return out;
+    function hit(s) { return s && String(s).toLowerCase().indexOf(q) >= 0; }
+    if (BK.base) {
+      BK.base.districts.forEach(function (d) { if (hit(d.th) || hit('เขต' + d.th) || hit(d.en)) out.push({ k: 'd', id: d.id, t: 'เขต' + d.th, s: d.en }); });
+      (BK.base.marks || []).forEach(function (m, i) { if (hit(m[0]) || hit(m[1])) out.push({ k: 'm', i: i, t: m[0], s: m[1] || 'สถานที่สำคัญ' }); });
+      (BK.base.stations || []).forEach(function (s, i) { if (hit(s[0]) || hit(s[1])) out.push({ k: 's', i: i, t: s[0], s: 'สถานี' + (s[5] ? ' · ' + s[5] : '') }); });
+    }
+    bkRows('canal').forEach(function (r, i) { if (hit(r[1]) || hit(r[11])) out.push({ k: 'canal', i: i, t: r[1], s: 'จุดวัดน้ำในคลอง' }); });
+    bkRoadRows().rows.forEach(function (r, i) { if (hit(r[1])) out.push({ k: 'road', i: i, t: r[1], s: 'จุดวัดน้ำบนถนน' }); });
+    bkRows('rain').forEach(function (r, i) { if (hit(r[1])) out.push({ k: 'rain', i: i, t: r[1], s: 'สถานีวัดฝน' }); });
+    return out.slice(0, 10);
+  }
+  function bkRenderRes() {
+    var el = $('bkRes'), R = bkSearch($('bkQ').value);
+    BK.res = R;
+    el.hidden = !$('bkQ').value.trim();
+    el.innerHTML = R.length ? R.map(function (o, k) { return '<button type="button" class="bk-res" data-bk-res="' + k + '"><b>' + esc(o.t) + '</b><small>' + esc(o.s) + '</small></button>'; }).join('') :
+      '<p class="bk-sub">' + (BK.base ? 'ไม่พบ ลองพิมพ์ชื่อเขต สถานีรถไฟฟ้า หรือสถานที่' : 'กำลังเตรียมรายชื่อเขตและสถานที่…') + '</p>';
+  }
+  function bkPickRes(o) {
+    $('bkRes').hidden = true; $('bkQ').value = '';
+    if (!o) return;
+    if (o.k === 'd') { bkSelDist(o.id); return; }
+    if (o.k === 'm' || o.k === 's') {
+      var r = o.k === 'm' ? BK.base.marks[o.i] : BK.base.stations[o.i];
+      BK.selPt = [r[2], r[3]]; bkDraw();
+      BK.map.flyTo({ center: [r[2], r[3]], zoom: 15.2, pitch: BK.d3 ? 58 : 0, bearing: -20, padding: bkPad(), duration: reduceMotion ? 0 : 1400 });
+      if (o.k === 's') BK.map.once('moveend', function () { bkPopup('stn', o.i, { lng: r[2], lat: r[3] }); });
+      return;
+    }
+    bkGoPoint(o.k, o.i);
+  }
+  // ---------- ปุ่มและเหตุการณ์ ----------
+  function bkNear() {
+    if (!navigator.geolocation) { toast('เบราว์เซอร์นี้หาตำแหน่งไม่ได้'); return; }
+    toast('กำลังหาตำแหน่งของคุณ…');
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      var x = pos.coords.longitude, y = pos.coords.latitude, d = bkDistAt(x, y);
+      if (d) { bkSelDist(d.id); toast('คุณอยู่ในเขต' + d.th); }
+      else toast('ตำแหน่งของคุณอยู่นอกกรุงเทพ');
+    }, function () { toast('หาตำแหน่งไม่ได้ ลองอนุญาตตำแหน่งในเบราว์เซอร์'); }, { timeout: 12000, maximumAge: 300000 });
+  }
+  function bkModal(kind) {
+    var el = $('bkModal');
+    if (!kind) { el.hidden = true; return; }
+    var h;
+    if (kind === 'intro') h = '<h2>กรุงเทพตอนนี้ <span class="cv-tag">ทดลอง</span></h2><p>รวมตัวเลขสดจากหน่วยงานรัฐและแหล่งข้อมูลเปิด วางลงบนแผนที่เมืองสามมิติ ดูได้ว่าฝนตกที่ไหน น้ำในคลองใกล้ตลิ่งแค่ไหน ถนนไหนมีน้ำ ฝุ่น ความร้อน รถติด และเรื่องที่ประชาชนแจ้ง</p>' +
+      '<ul class="bk-ul plain"><li>ไม่ใช่เว็บไซต์ทางการ และไม่ใช่ระบบเตือนภัย</li><li>ทุกค่ามีเวลา ที่มา และป้ายบอกว่าเป็น <b>วัดจริง</b> <b>ประมาณ</b> (แบบจำลอง) หรือ <b>ข้อมูลเก่า</b></li><li>เหตุฉุกเฉินโทร กทม. 1555 · ปภ. 1784 · เจ็บป่วยฉุกเฉิน 1669</li></ul>' +
+      '<div class="bk-row"><button type="button" class="bk-btn" data-bk-modal-x="intro">เข้าใจแล้ว เริ่มดูเมือง</button></div>';
+    else if (kind === 'help') h = '<h2>ช่วยเหลือ · สายด่วน</h2><div class="bk-hot">' + [['1555', 'กรุงเทพมหานคร', 'น้ำท่วม ร้องเรียน เรื่องเมือง'], ['1784', 'ป้องกันและบรรเทาสาธารณภัย', 'ภัยพิบัติ'], ['1669', 'เจ็บป่วยฉุกเฉิน', 'สพฉ.'], ['199', 'ดับเพลิง กู้ภัย', ''], ['191', 'เหตุด่วนเหตุร้าย', 'ตำรวจ']].map(function (x) {
+      return '<a class="bk-hot-i" href="tel:' + x[0] + '"><b class="mono">' + x[0] + '</b><span>' + esc(x[1]) + (x[2] ? '<small>' + esc(x[2]) + '</small>' : '') + '</span></a>'; }).join('') + '</div>' +
+      '<p class="bk-sub">แจ้งปัญหาเมือง (ท่อตัน น้ำขัง ไฟดับ) ได้ที่ ' + bkLink('https://fondue.traffy.in.th/', 'Traffy Fondue') + ' · ระดับน้ำทางการ ' + bkLink('https://weather.bangkok.go.th/water/', 'สำนักการระบายน้ำ กทม.') + '</p><div class="bk-row"><button type="button" class="bk-btn ghost" data-bk-modal-x="1">ปิด</button></div>';
+    else h = '<h2>ที่มาข้อมูล</h2><ul class="bk-ul plain">' +
+      '<li><b>น้ำในคลอง ฝน น้ำบนถนน</b> · ' + BK_ATTR.bma + ' (ระบบอัตโนมัติของ ChatGeo ดึงทุก 20 นาที)</li>' +
+      '<li><b>PM2.5</b> · ' + BK_ATTR.air + '</li><li><b>แม่น้ำเจ้าพระยา</b> · ' + BK_ATTR.tw + ' (CC BY-NC)</li>' +
+      '<li><b>เรื่องแจ้งจากประชาชน</b> · ' + BK_ATTR.traffy + ' (เฉพาะตำแหน่ง สถานะ เวลา ไม่แสดงข้อความหรือรูป)</li>' +
+      '<li><b>อากาศ ความร้อน ลม ฝุ่นแบบจำลอง</b> · ' + BK_ATTR.om + '</li><li><b>ดัชนีรถติด</b> · ' + BK_ATTR.longdo + '</li><li><b>เรดาร์ฝน</b> · ' + BK_ATTR.radar + '</li>' +
+      '<li><b>เขต รถไฟฟ้า สถานี สถานที่ ถนน ตึก</b> · ' + BK_ATTR.osm + ' contributors (ODbL) ผ่าน OpenFreeMap</li><li><b>สถานีสูบน้ำ ประตูระบายน้ำ จุดเสี่ยง</b> · ' + BK_ATTR.ckan + '</li></ul>' +
+      '<p class="bk-sub">แรงบันดาลใจจาก Bangkok Twin แต่เขียนใหม่ทั้งหมดและดึงจากแหล่งต้นทางโดยตรง' + (BK.live ? ' · ข้อมูลสดอัปเดต ' + esc(msTime(isoMs(BK.live.t))) : '') + (BK.base ? ' · โครงเมืองอัปเดต ' + esc(msTime(isoMs(BK.base.t))) : '') + '</p>' +
+      '<div class="bk-row"><button type="button" class="bk-btn ghost" data-bk-modal-x="1">ปิด</button></div>';
+    el.querySelector('.bk-modal-c').innerHTML = h;
+    el.hidden = false;
+    var b = el.querySelector('button'); if (b) b.focus();
+  }
+  if ($('pageCity')) {
+    $('pageCity').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-bk-story],[data-bk-step],[data-bk-skip],[data-bk-met],[data-bk-lay],[data-bk-leg],[data-bk-3d],[data-bk-help],[data-bk-about],[data-bk-dist],[data-bk-close],[data-bk-only],[data-bk-site],[data-bk-go],[data-bk-near],[data-bk-play],[data-bk-res],[data-bk-mark],[data-bk-modal-x],#bkStoryOpen,#bkWorry,#bkRiverBtn,#bkShare,#bkModal');
+      if (!t) return;
+      if (t.id === 'bkModal') { if (e.target === t) bkModal(null); return; }
+      if (t.id === 'bkStoryOpen') { BK.cardOff = false; bkRenderStory(); return; }
+      if (t.id === 'bkWorry') { bkWorryList(); return; }
+      if (t.id === 'bkRiverBtn') { bkSetStory('river'); return; }
+      if (t.id === 'bkShare') { bkShare(); return; }
+      if (t.hasAttribute('data-bk-story')) { bkSetStory(t.getAttribute('data-bk-story')); return; }
+      if (t.hasAttribute('data-bk-step')) { BK.step = Math.max(0, BK.step + (+t.getAttribute('data-bk-step'))); bkRenderStory(); bkApplyStep(); bkRefresh(); return; }
+      if (t.hasAttribute('data-bk-skip')) { BK.cardOff = true; bkRenderStory(); return; }
+      if (t.hasAttribute('data-bk-met')) { BK.metric = t.getAttribute('data-bk-met'); bkRefresh(); return; }
+      if (t.hasAttribute('data-bk-lay')) { var k = t.getAttribute('data-bk-lay'); BK.lay[k] = !BK.lay[k]; if (k === 'radar' && BK.lay.radar) loadRadar(); if (k === 'people' && BK.lay.people && !bkPeople()) bkLoad('people2'); bkRefresh(); return; }
+      if (t.hasAttribute('data-bk-leg')) { BK.legend = !BK.legend; bkRenderLegend(); return; }
+      if (t.hasAttribute('data-bk-3d')) { BK.d3 = !BK.d3; BK.lay.bldg = BK.d3; BK.map.easeTo({ pitch: BK.d3 ? 50 : 0, bearing: BK.d3 ? -14 : 0, duration: reduceMotion ? 0 : 800 }); bkRefresh(); return; }
+      if (t.hasAttribute('data-bk-help')) { bkModal('help'); return; }
+      if (t.hasAttribute('data-bk-about')) { bkModal('about'); return; }
+      if (t.hasAttribute('data-bk-modal-x')) { if (t.getAttribute('data-bk-modal-x') === 'intro') { try { localStorage.setItem('cg-bk-intro', '1'); } catch (x) { /* ข้าม */ } } bkModal(null); return; }
+      if (t.hasAttribute('data-bk-dist')) { bkSelDist(+t.getAttribute('data-bk-dist')); return; }
+      if (t.hasAttribute('data-bk-close')) { BK.sheet = false; BK.only = false; BK.dist = null; bkRefresh(); bkHash(); return; }
+      if (t.hasAttribute('data-bk-only')) { BK.only = !BK.only; if (BK.only) bkSelDist(BK.dist); else { BK.map.flyTo(Object.assign(bkOverview(), { padding: bkPad(), duration: reduceMotion ? 0 : 1000 })); bkRefresh(); } return; }
+      if (t.hasAttribute('data-bk-site')) { var d = bkDistById(BK.dist); if (d) { setPage('chat'); setTimeout(function () { openSite(d.c[0], d.c[1], { tab: 'risk', name: 'เขต' + d.th }); }, 300); } return; }
+      if (t.hasAttribute('data-bk-go')) { var g = t.getAttribute('data-bk-go').split(':'); bkGoPoint(g[0], +g[1]); return; }
+      if (t.hasAttribute('data-bk-near')) { bkNear(); return; }
+      if (t.hasAttribute('data-bk-play')) { if (!BK.hist) return; bkRepPlay(!BK.rep.play); return; }
+      if (t.hasAttribute('data-bk-res')) { bkPickRes(BK.res && BK.res[+t.getAttribute('data-bk-res')]); return; }
+      if (t.hasAttribute('data-bk-mark')) { var mk = BK.base.marks[+t.getAttribute('data-bk-mark')]; if (mk) BK.map.flyTo({ center: [mk[2], mk[3]], zoom: Math.max(BK.map.getZoom(), 15.4), pitch: BK.d3 ? 60 : 0, padding: bkPad(), duration: reduceMotion ? 0 : 1200 }); }
+    });
+    $('bkQ').addEventListener('input', bkRenderRes);
+    $('bkQ').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); bkRenderRes(); bkPickRes(BK.res && BK.res[0]); }
+      if (e.key === 'Escape') { $('bkRes').hidden = true; this.blur(); }
+    });
+    $('bkQ').addEventListener('blur', function () { setTimeout(function () { if (!document.activeElement || !document.activeElement.closest('#bkRes')) $('bkRes').hidden = true; }, 200); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || state.page !== 'city') return;
+      if (!$('bkModal').hidden) { bkModal(null); return; }
+      if (!$('bkWorryPop').hidden) { $('bkWorryPop').hidden = true; return; }
+      if (BK.sheet) { BK.sheet = false; BK.only = false; BK.dist = null; bkRefresh(); bkHash(); }
+    });
+    $('bkWorryPop').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-bk-w]');
+      if (!b) return;
+      var o = BK.wl[+b.getAttribute('data-bk-w')];
+      this.hidden = true;
+      if (o) bkGoPoint(o.k, (o.k === 'road' ? bkRoadRows().rows : bkRows(o.k)).indexOf(o.r));
+    });
+    document.addEventListener('visibilitychange', function () { if (state.page === 'city') { if (document.hidden) bkStop(true); else bkStart(); } });
+  }
+  function bkWorryList() {
+    var el = $('bkWorryPop'), W = BK.wl = bkWorry(bkSum()).slice(0, 10);
+    if (!el.hidden) { el.hidden = true; return; }
+    el.innerHTML = '<p class="bk-sub">จุดวัดน่าห่วงตอนนี้ (คลองใกล้/ถึงตลิ่ง ถนนมีน้ำ ฝนหนัก)</p>' + (W.length ? W.map(function (o, k) {
+      return '<button type="button" class="bk-res" data-bk-w="' + k + '"><b>' + esc(o.t) + '</b><small>' + esc(o.d) + '</small></button>'; }).join('') : '<p>ตอนนี้ยังไม่มีจุดวัดที่น่าห่วง</p>');
+    el.hidden = false;
+  }
+  function bkShare() {
+    var url = location.origin + location.pathname + location.hash;
+    function ok() { toast('คัดลอกลิงก์มุมนี้แล้ว'); }
+    if (navigator.share && window.matchMedia('(hover: none)').matches) { navigator.share({ title: 'กรุงเทพตอนนี้ · ChatGeo', url: url }).catch(function () { /* ผู้ใช้ยกเลิก */ }); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, function () { toast(url); });
+    else toast(url);
+  }
+  // ---------- เปิด/ปิดหน้า ----------
+  function bkStart(arg) {
+    if (!$('pageCity')) return;
+    if (IN_ARTIFACT) { $('bkStory').hidden = false; $('bkStory').innerHTML = '<p>หน้ากรุงเทพตอนนี้ใช้ได้บนเว็บจริง (choonahakarn.github.io/chatgeo)</p>'; return; }
+    if (arg) {
+      var m = /^d(\d+)$/.exec(arg);
+      if (m) { BK.pendDist = +m[1]; BK.sheet = true; }
+      else if (BK_STORIES.some(function (s) { return s[0] === arg; }) || arg === 'river') { BK.story = arg; BK.step = 0; }
+    }
+    if (!BK.started && $('pageCity').clientWidth < 700) BK.legend = false;
+    bkEnsureMap();
+    bkRenderTabs();
+    bkRefresh();
+    bkLoad('base').then(function () {
+      if (BK.pendDist != null && bkDistById(BK.pendDist)) { var id = BK.pendDist; BK.pendDist = null; if (BK.ready) bkSelDist(id); else BK.map.once('load', function () { bkSelDist(id); }); }
+      bkLoad('wx');
+    });
+    bkLoad('live').then(function () { if ((BK.live || BK.err.live) && (!bkSec('road') || (bkSec('road').from !== 'bma' && bkStale(bkMaxMs(bkRows('road'), 6), 120)))) bkLoad('road2'); });
+    bkLoad('traffic');
+    if (!BK.base) bkLoad('wx');
+    if (BK.story === 'replay') bkLoad('hist');
+    clearInterval(BK.timer);
+    BK.timer = setInterval(function () {
+      if (document.hidden || state.page !== 'city') return;
+      bkLoad('live'); bkLoad('traffic'); bkLoad('wx');
+      if (BK.lay.radar || BK.story === 'rain') loadRadar();
+      bkRenderTop(bkSum());
+    }, 60e3);
+    var seen = false;
+    try { seen = localStorage.getItem('cg-bk-intro') === '1'; } catch (e) { /* ข้าม */ }
+    if (!seen && !BK.started) setTimeout(function () { if (state.page === 'city') bkModal('intro'); }, 600);
+    BK.started = true;
+    bkHash();
+  }
+  function bkStop(keepTimer) {
+    if (!keepTimer) clearInterval(BK.timer);
+    if (BK.fx) { cancelAnimationFrame(BK.fx.raf); BK.fx = null; }
+    if ($('bkFx')) $('bkFx').hidden = true;
+    if (BK.rep.play) bkRepPlay(false);
+  }
+  window.cgBkk = function () { return { ready: BK.ready, base: !!BK.base, live: !!BK.live, story: BK.story, step: BK.step, metric: BK.metric, dist: BK.dist, only: BK.only, rep: BK.rep.i, fx: !!BK.fx, fxMM: BK.fxMM, err: BK.err,
+    wx: !!BK.wx, traffic: BK.traffic, marks: BK.marks.length, dmarks: BK.dmarks.length, cards: $('bkCards') ? $('bkCards').innerText : '', pitch: BK.map && BK.map.getPitch(), zoom: BK.map && BK.map.getZoom() }; };
+
   /* ---------- เริ่ม ---------- */
   renderMeta();
   setAskHint();
@@ -9534,7 +10714,7 @@
   // เปิดเว็บครั้งแรก (ไม่มีลิงก์เฉพาะ) เห็นลูกโลกเต็มใบก่อน ซูมเข้าเองได้ หรือกดชื่อพื้นที่ด้านบนเพื่อบินไป
   var intro = start.page === 'chat' && !location.hash && !IN_ARTIFACT;
   if (intro) { state.globe = true; $('btnGlobe').setAttribute('aria-pressed', 'true'); $('globeText').textContent = 'แผนที่แบน'; }
-  setPage(start.page, { fromHash: true, intro: intro, hk: start.hk });
+  setPage(start.page, { fromHash: true, intro: intro, hk: start.hk, city: start.city });
   renderBaseChips();
   connectRuntime();
   renderDataChips();

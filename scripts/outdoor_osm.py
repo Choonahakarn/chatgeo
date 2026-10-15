@@ -16,6 +16,7 @@
 เขียน
   OUT/outdoor.json    จุดทั้งหมด (ไฟล์เล็ก หน้าเว็บโหลดเมื่อเปิดชั้นข้อมูล)
   OUT/trails.geojson  เส้นทาง (หน้าเว็บโหลดเมื่อซูมเข้า)
+  OUT/bkk_base.json   โครงเมืองกรุงเทพสำหรับหน้า "กรุงเทพตอนนี้" (scripts/bkk_osm.py)
 
 ข้อมูล © OpenStreetMap contributors (ODbL) ผลที่ได้ใช้สัญญาอนุญาต ODbL เช่นเดียวกัน
 
@@ -428,6 +429,13 @@ def main():
     if not os.path.exists(a.pbf):
         sys.exit('ไม่พบไฟล์ ' + a.pbf)
     run(a.pbf, a.th, a.out, bbox=(97.0, 5.3, 106.0, 20.7), photos=not a.no_photos, photo_budget=a.photo_budget)
+    # โครงเมืองกรุงเทพ (เขต รถไฟฟ้า สถานี สถานที่) สำหรับหน้า "กรุงเทพตอนนี้" ใช้ไฟล์ OSM เดียวกัน พังก็ไม่กระทบข้อมูลเดินป่า
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import bkk_osm
+        bkk_osm.build(a.pbf, a.out)
+    except Exception as e:  # noqa: BLE001
+        print('โครงเมืองกรุงเทพไม่สำเร็จ: %s' % e, flush=True)
 
 
 if __name__ == '__main__':
